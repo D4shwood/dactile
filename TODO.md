@@ -11,7 +11,7 @@ Each milestone ends with a demo.
      - scenes numbered from 1 in every act
      - plain parentheses, with `\ic{}` for inline directions
    - the example play, which CI compiles in both modes
-2. **M1 source and cast.**
+2. ~~**M1 source and cast.**~~ Done; `dactile cast <play>` shows what is read.
    - Read a play into preamble, body and tail.
    - Read and write every character declaration.
    - Write the file back byte for byte.
