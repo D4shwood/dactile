@@ -1,0 +1,12 @@
+/target
+
+# LaTeX build files
+*.aux
+*.log
+*.pdf
+*.out
+*.toc
+*.synctex.gz
+
+# Dactile's own files next to a play
+*.dactile-lock

@@ -1,0 +1,451 @@
+% tiyatro-core.sty — characters, lines, scenes, acts and the cast table.
+% Part of Dactile (https://github.com/D4shwood/dactile).
+% Copyright (C) 2026 D4shwood. GPL-3.0-or-later; see tiyatro.cls and LICENSE.
+%
+% What a play writes:
+%
+%   \karakter*[Full name][Description]{SCRIPT NAME}{alias}   in the cast table
+%   \karakter[Description]{SCRIPT NAME}{alias}               full name = script name
+%   \karakter{SCRIPT NAME}{alias}                            not in the cast table
+%   \gizlikarakter{SCRIPT NAME}{alias}                       not in the cast table
+%   \karaktergrubu[Description]{ \gkarakter*[Full name]{SCRIPT NAME}{alias} ... }
+%   \setinlinename{alias}{Name}                              the name used inside a line
+%
+% Each alias gives three commands:
+%
+%   \alias Text up to the end of the line.        a line of dialogue
+%   \alias inside a line                          the character's name ("Maria")
+%   \aliasdo\otherdo Text up to the end of line.  a direction: (Maria, Ozan Text)
+%   \aliasfont                                    the font of the character's name
+%
+% A line of dialogue or a direction ends where the source line ends, so a "%" at
+% the end of such a line joins the next line to it. Inside a line, _word_ is
+% underlined and \ic{text} is an inline direction.
+%
+%   \action{...}  \stagedir{...}  \middir{...}  \beat
+%   \perde[Title]  \sahne[Place — Time][manual number]  \kisiler
+%
+% In draft mode every line of dialogue and every direction gets one number in
+% the margin, so a rehearsal can say "line 112". Dactile shows the same numbers.
+
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesExplPackage{tiyatro-core}{2026-10-25}{1.0.0}{Dactile: characters, lines, scenes, acts}
+\RequirePackage{xspace}
+
+\msg_new:nnn { tiyatro } { redefined }
+  { The~alias~'#1'~replaces~an~existing~command~\iow_char:N\\#1. }
+
+% ------------------------------------------------------------------ state
+
+\bool_new:N \l__tiy_line_bool        % inside a line of dialogue or a direction
+\bool_new:N \l__tiy_do_bool          % collecting a chain of \xdo commands
+\tl_new:N \l__tiy_close_tl           % what ends the current line: "" or ")"
+\seq_new:N \l__tiy_do_seq            % names collected by the chain
+\tl_new:N \g__tiy_do_tl              % every \xdo command, to recognise a chain
+\seq_new:N \g__tiy_cast_seq          % cast table rows: {c}{alias} or {g}{group}
+\seq_new:N \g__tiy_cover_seq         % aliases of starred characters
+\seq_new:N \g__tiy_heard_seq         % aliases in the current scene, first seen first
+\tl_new:N \g__tiy_scene_tl           % "I-2": the current scene, for the .aux file
+\int_new:N \g__tiy_group_int
+\int_new:N \g__tiy_number_int
+\dim_new:N \g__tiy_widest_dim
+\dim_new:N \g__tiy_cap_dim
+
+% The name column of the dialogue: the widest script name, at most
+% \setmaxnamewidth (default: 22% of the text width). Set at \begin{document}.
+\newlength \maxcharlength
+\NewDocumentCommand \setmaxnamewidth { m } { \dim_gset:Nn \g__tiy_cap_dim {#1} }
+
+% ------------------------------------------------------------------ characters
+
+\NewDocumentCommand \karakter { s o o m m }
+  {
+    \IfNoValueTF {#2}
+      { \__tiy_declare:nnnnnn { plain } {#1} { } { } {#4} {#5} }
+      {
+        \IfNoValueTF {#3}
+          { \__tiy_declare:nnnnnn { cast } {#1} { } {#2} {#4} {#5} }
+          { \__tiy_declare:nnnnnn { cast } {#1} {#2} {#3} {#4} {#5} }
+      }
+  }
+
+\NewDocumentCommand \gizlikarakter { m m }
+  { \__tiy_declare:nnnnnn { plain } { \BooleanFalse } { } { } {#1} {#2} }
+
+\NewDocumentCommand \karaktergrubu { O{} +m }
+  {
+    \int_gincr:N \g__tiy_group_int
+    \tl_gset:cn { g__tiy_group_ \int_use:N \g__tiy_group_int _desc_tl } {#1}
+    \seq_gclear_new:c { g__tiy_group_ \int_use:N \g__tiy_group_int _seq }
+    #2
+    \seq_gput_right:Ne \g__tiy_cast_seq { { g } { \int_use:N \g__tiy_group_int } }
+  }
+
+\NewDocumentCommand \gkarakter { s o m m }
+  {
+    \IfNoValueTF {#2}
+      { \__tiy_declare:nnnnnn { group } {#1} { } { } {#3} {#4} }
+      { \__tiy_declare:nnnnnn { group } {#1} {#2} { } {#3} {#4} }
+  }
+
+\NewCommandCopy \chargroup \karaktergrubu
+\NewCommandCopy \gcharacter \gkarakter
+
+\NewDocumentCommand \setinlinename { m m }
+  { \tl_gset:cn { g__tiy_inline_#1_tl } {#2} }
+
+% #1 kind (cast, group, plain), #2 starred (\BooleanTrue/False), #3 full name,
+% #4 description, #5 script name, #6 alias.
+\cs_new_protected:Npn \__tiy_declare:nnnnnn #1#2#3#4#5#6
+  {
+    \tl_if_exist:cF { g__tiy_script_#6_tl }
+      { \cs_if_exist:cT {#6} { \msg_warning:nnn { tiyatro } { redefined } {#6} } }
+    \tl_gset:cn { g__tiy_script_#6_tl } {#5}
+    \tl_if_blank:nTF {#3}
+      { \tl_gset:cn { g__tiy_full_#6_tl } {#5} }
+      { \tl_gset:cn { g__tiy_full_#6_tl } {#3} }
+    \tl_gset:cn { g__tiy_desc_#6_tl } {#4}
+    \IfBooleanTF {#2}
+      { \tl_gset:cn { g__tiy_star_#6_tl } { 1 } }
+      { \tl_gset:cn { g__tiy_star_#6_tl } { 0 } }
+    \str_case:nn {#1}
+      {
+        { cast } { \seq_gput_right:Nn \g__tiy_cast_seq { { c } {#6} } }
+        { group }
+          { \seq_gput_right:cn { g__tiy_group_ \int_use:N \g__tiy_group_int _seq } {#6} }
+      }
+    \bool_lazy_and:nnT { \IfBooleanTF {#2} { \c_true_bool } { \c_false_bool } }
+      { ! \str_if_eq_p:nn {#1} { plain } }
+      { \seq_gput_right:Nn \g__tiy_cover_seq {#6} }
+    % Group members are listed in the cast table only; they don't widen the column.
+    \str_if_eq:nnF {#1} { group }
+      {
+        \hbox_set:Nn \l_tmpa_box { \__tiy_namefont:n {#6} #5 \space }
+        \dim_gset:Nn \g__tiy_widest_dim
+          { \dim_max:nn { \g__tiy_widest_dim } { \box_wd:N \l_tmpa_box } }
+      }
+    \cs_gset_protected:cpn {#6} { \__tiy_who:n {#6} }
+    \cs_gset_protected:cpn {#6do} { \__tiy_do:n {#6} }
+    \cs_gset_protected:cpn {#6font} { \__tiy_namefont:n {#6} }
+    \tl_gput_right:Ne \g__tiy_do_tl { \exp_not:c {#6do} }
+  }
+
+\cs_new_protected:Npn \__tiy_namefont:n #1
+  { \str_if_eq:eeTF { \tl_use:c { g__tiy_star_#1_tl } } { 1 } { \starfont } { \namefont } }
+
+% "MARİA" -> "Maria", with Turkish casing (İ/i, I/ı); \setinlinename wins.
+\cs_new:Npn \__tiy_inline:n #1
+  {
+    \tl_if_exist:cTF { g__tiy_inline_#1_tl }
+      { \tl_use:c { g__tiy_inline_#1_tl } }
+      {
+        \text_titlecase_first:nn { tr }
+          { \text_lowercase:nn { tr } { \tl_use:c { g__tiy_script_#1_tl } } }
+      }
+  }
+
+\AtBeginDocument
+  {
+    \dim_compare:nNnT { \g__tiy_cap_dim } = { 0pt }
+      { \dim_gset:Nn \g__tiy_cap_dim { 0.22 \textwidth } }
+    \setlength \maxcharlength { \dim_min:nn { \g__tiy_widest_dim } { \g__tiy_cap_dim } }
+  }
+
+% ------------------------------------------------------------------ lines
+
+% A line of dialogue and a direction both run to the end of the source line:
+% the end of line and "_" become active while one is open.
+\ExplSyntaxOff
+\begingroup
+\catcode`\^^M=\active%
+\catcode`\_=\active%
+\gdef\tiy@obey{\catcode`\^^M=\active\let^^M\tiy@eol\catcode`\_=\active\let_\tiy@underline}%
+\gdef\tiy@underline#1_{\underline{#1}}%
+\endgroup
+\ExplSyntaxOn
+
+\cs_new_protected:Npn \tiy@eol { \l__tiy_close_tl \par \group_end: }
+
+% The alias outside a line starts dialogue; inside one it is a name.
+\cs_new_protected:Npn \__tiy_who:n #1
+  {
+    \bool_if:NTF \l__tiy_line_bool
+      { \__tiy_inline:n {#1} \xspace }
+      { \__tiy_speak:n {#1} }
+  }
+
+\cs_new_protected:Npn \__tiy_speak:n #1
+  {
+    \par
+    \__tiy_heard:n {#1}
+    \group_begin:
+    \bool_set_true:N \l__tiy_line_bool
+    \tl_clear:N \l__tiy_close_tl
+    % The name hangs in a column of its own; long names wrap inside it.
+    \skip_set:Nn \leftskip { \maxcharlength }
+    \dim_set:Nn \parindent { - \maxcharlength }
+    \leavevmode
+    \__tiy_number:
+    \parbox [ t ] { \maxcharlength }
+      { \raggedright \__tiy_namefont:n {#1} \tl_use:c { g__tiy_script_#1_tl } }
+    \tiy@obey
+  }
+
+% \aliasdo collects names while the next token is another \xdo, then the rest
+% of the line is the direction: (Maria, Ozan Girerler.)
+\cs_new_protected:Npn \__tiy_do:n #1
+  {
+    \bool_if:NF \l__tiy_do_bool
+      {
+        \par
+        \group_begin:
+        \bool_set_true:N \l__tiy_do_bool
+        \bool_set_true:N \l__tiy_line_bool
+        \seq_clear:N \l__tiy_do_seq
+        \tiy@obey
+      }
+    \__tiy_heard:n {#1}
+    \seq_put_right:Nn \l__tiy_do_seq { \__tiy_inline:n {#1} }
+    \peek_catcode:NTF \scan_stop: { \__tiy_do_next:N } { \__tiy_do_start: }
+  }
+
+\cs_new_protected:Npn \__tiy_do_next:N #1
+  { \tl_if_in:NnTF \g__tiy_do_tl {#1} {#1} { \__tiy_do_start: #1 } }
+
+\cs_new_protected:Npn \__tiy_do_start:
+  {
+    \bool_set_false:N \l__tiy_do_bool
+    \tl_set:Nn \l__tiy_close_tl { ) }
+    \group_insert_after:N \__tiy_after_direction:
+    \skip_vertical:n { 0.5ex }
+    \skip_zero:N \leftskip
+    \dim_zero:N \parindent
+    \noindent
+    \__tiy_number:
+    \actionfont ( \seq_use:Nn \l__tiy_do_seq { ,~ } \c_space_tl
+  }
+
+\cs_new_protected:Npn \__tiy_after_direction: { \skip_vertical:n { 0.5ex } }
+
+\NewDocumentCommand \action { +m }
+  {
+    \par
+    \skip_vertical:n { 0.5ex }
+    \group_begin:
+    \skip_zero:N \leftskip
+    \dim_zero:N \parindent
+    \noindent
+    \__tiy_number:
+    \actionfont (#1) \par
+    \group_end:
+    \skip_vertical:n { 0.5ex }
+  }
+
+\NewDocumentCommand \stagedir { +m }
+  { \__tiy_block:n { \centering \stagedirfont #1 } }
+
+\NewDocumentCommand \middir { +m }
+  { \__tiy_block:n { \raggedleft \itshape #1 } }
+
+\cs_new_protected:Npn \__tiy_block:n #1
+  {
+    \par
+    \skip_vertical:n { 1.5ex }
+    \noindent
+    \__tiy_number:
+    \parbox [ t ] { \linewidth } {#1}
+    \par
+    \skip_vertical:n { 1.5ex }
+  }
+
+\NewDocumentCommand \ic { m } { { \actionfont (#1) } }
+\NewDocumentCommand \beat { } { \ic { \beattext } }
+
+% One number per line of dialogue or direction, in the margin, draft only.
+\cs_new_protected:Npn \__tiy_number:
+  {
+    \iftiyatrodraft
+      \int_gincr:N \g__tiy_number_int
+      \llap { \linenumberfont \int_use:N \g__tiy_number_int \hspace { \linenumbersep } }
+    \fi
+  }
+
+% ------------------------------------------------------------------ scenes and acts
+
+\newcounter { actcounter }
+\newcounter { scenecounter } [ actcounter ]
+\cs_new:Npn \theact { \Roman { actcounter } }
+\cs_new:Npn \thescene { \arabic { scenecounter } }
+
+\cs_new_protected:Npn \__tiy_heard:n #1
+  { \seq_if_in:NnF \g__tiy_heard_seq {#1} { \seq_gput_right:Nn \g__tiy_heard_seq {#1} } }
+
+% Who was in each scene is only known at its end, so it goes to the .aux file
+% and the heading shows it from the second run on.
+\cs_new_protected:Npn \tiyatrocast #1#2 { \tl_gset:cn { g__tiy_cast_#1_tl } {#2} }
+
+\cs_new_protected:Npn \__tiy_scene_end:
+  {
+    \bool_lazy_or:nnF { \tl_if_empty_p:N \g__tiy_scene_tl } { \seq_if_empty_p:N \g__tiy_heard_seq }
+      {
+        \iow_now:Ne \@auxout
+          {
+            \token_to_str:N \tiyatrocast
+              { \g__tiy_scene_tl } { \seq_use:Nn \g__tiy_heard_seq { , } }
+          }
+      }
+    \seq_gclear:N \g__tiy_heard_seq
+    \tl_gclear:N \g__tiy_scene_tl
+  }
+
+\cs_generate_variant:Nn \seq_set_from_clist:Nn { Nv }
+\cs_new_protected:Npn \__tiy_scene_cast:n #1
+  {
+    \tl_if_exist:cT { g__tiy_cast_#1_tl }
+      {
+        \seq_set_from_clist:Nv \l_tmpa_seq { g__tiy_cast_#1_tl }
+        \seq_set_map:NNn \l_tmpb_seq \l_tmpa_seq { \__tiy_cast_name:n {##1} }
+        \seq_use:Nn \l_tmpb_seq { ,~ }
+      }
+  }
+\cs_generate_variant:Nn \__tiy_scene_cast:n { V }
+
+\cs_new_protected:Npn \__tiy_cast_name:n #1
+  {
+    \tl_if_exist:cT { g__tiy_script_#1_tl }
+      { { \__tiy_namefont:n {#1} \tl_use:c { g__tiy_script_#1_tl } } }
+  }
+
+\NewDocumentCommand \sahne { O{} O{} }
+  {
+    \__tiy_scene_end:
+    \stepcounter { scenecounter }
+    \tl_gset:Ne \g__tiy_scene_tl { \theact - \thescene }
+    \skip_vertical:n { \baselineskip }
+    \tl_if_blank:nTF {#2}
+      { \__tiy_scene_title:ne {#1} { \thescene } }
+      { \__tiy_scene_title:nn {#1} {#2} }
+    \setlength \parskip { 0.5 \baselineskip }
+  }
+\NewCommandCopy \scene \sahne
+
+\cs_new_protected:Npn \__tiy_scene_title:nn #1#2
+  {
+    \tl_if_blank:nTF {#1}
+      { \addcontentsline { toc } { section } { \scenetitlename \space #2 } }
+      { \addcontentsline { toc } { section } { \scenetitlename \space #2 \sceneseparator #1 } }
+    \vspace* { \beforesceneskip }
+    \group_begin:
+    \centering
+    { \scenetitlefont \scenetitlename \space #2 \tl_if_blank:nF {#1} { \sceneseparator #1 } }
+    \par \nobreak
+    { \scenecastfont \__tiy_scene_cast:V \g__tiy_scene_tl }
+    \par \nobreak
+    \skip_vertical:n { \aftersceneskip }
+    \group_end:
+  }
+\cs_generate_variant:Nn \__tiy_scene_title:nn { ne }
+
+\cs_new_protected:Npn \__tiy_curtain:n #1
+  {
+    \par \nopagebreak
+    \skip_vertical:n { 1.6ex plus 0.5ex minus 1ex }
+    \nopagebreak
+    { \centering \textsc {#1} \par }
+  }
+
+\NewDocumentCommand \perde { O{} }
+  {
+    \__tiy_scene_end:
+    \int_compare:nNnT { \value { actcounter } } > { 0 }
+      { \__tiy_curtain:n { \curtainlocalizedtext } }
+    \clearpage
+    \refstepcounter { actcounter }
+    \tl_if_blank:nTF {#1}
+      { \addcontentsline { toc } { chapter } { \acttitlename \space \theact } }
+      { \addcontentsline { toc } { chapter } { \acttitlename \space \theact \actseparator #1 } }
+    \vspace* { \beforeactskip }
+    \group_begin:
+    \dim_zero:N \parindent
+    \setlength \parskip { 0.25 \baselineskip }
+    \centering \acttitlefont \acttitlename \space \theact
+    \tl_if_blank:nF {#1} { \actseparator \par \nobreak #1 }
+    \par \nobreak
+    \skip_vertical:n { \afteractskip }
+    \group_end:
+  }
+\NewCommandCopy \act \perde
+
+\AtEndDocument
+  {
+    \__tiy_scene_end:
+    \__tiy_curtain:n { \curtainlocalizedtext }
+    \__tiy_curtain:n { \scriptendlocalizedtext }
+  }
+
+% ------------------------------------------------------------------ cast table
+
+\NewDocumentCommand \kisiler { }
+  {
+    \clearpage
+    \thispagestyle { empty }
+    \vspace* { \beforecasttitleskip }
+    { \centering \casttitlefont \casttitlename \par }
+    \par \nobreak
+    \skip_vertical:n { \aftercasttitleskip }
+    \begin { list } { }
+      {
+        \setlength \leftmargin { \castpageleftmargin }
+        \setlength \rightmargin { \castpagerightmargin }
+        \castlistoptions
+      }
+    \seq_map_inline:Nn \g__tiy_cast_seq { \__tiy_cast_row:nn ##1 }
+    \end { list }
+  }
+
+\cs_new_protected:Npn \__tiy_cast_row:nn #1#2
+  {
+    \item
+    \begin { tabular }
+      { p { \castnamewidth } p { \dim_eval:n { \linewidth - \castnamewidth - 4 \tabcolsep } } }
+    \str_if_eq:nnTF {#1} { c }
+      { \__tiy_cast_full:n {#2} \strut & \tl_use:c { g__tiy_desc_#2_tl } \strut }
+      { \__tiy_group_names:n {#2} & \tl_use:c { g__tiy_group_#2_desc_tl } \strut }
+    \end { tabular }
+  }
+
+\cs_new_protected:Npn \__tiy_cast_full:n #1
+  {
+    \str_if_eq:eeTF { \tl_use:c { g__tiy_star_#1_tl } } { 1 }
+      { { \caststarfont \tl_use:c { g__tiy_full_#1_tl } } }
+      { { \castfont \tl_use:c { g__tiy_full_#1_tl } } }
+  }
+
+% A group's names stacked, with a brace pointing at its description.
+\cs_new_protected:Npn \__tiy_group_names:n #1
+  {
+    \seq_set_eq:Nc \l_tmpa_seq { g__tiy_group_#1_seq }
+    \seq_set_map:NNn \l_tmpb_seq \l_tmpa_seq { \__tiy_cast_full:n {##1} }
+    \ensuremath
+      {
+        \left .
+        \vcenter
+          {
+            \hbox:n
+              {
+                \begin { tabular } { @{} l @{} }
+                \seq_use:Nn \l_tmpb_seq { \\ }
+                \end { tabular }
+              }
+          }
+        \right \}
+      }
+  }
+
+% Starred characters, for the cover of the final copy.
+\cs_new_protected:Npn \tiy@starred
+  {
+    \seq_set_map:NNn \l_tmpa_seq \g__tiy_cover_seq { \tl_use:c { g__tiy_full_##1_tl } }
+    \seq_use:Nn \l_tmpa_seq { \par }
+  }
+\cs_new:Npn \tiy@ifstarred #1 { \seq_if_empty:NF \g__tiy_cover_seq {#1} }

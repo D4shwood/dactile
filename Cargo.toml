@@ -1,0 +1,27 @@
+[package]
+name = "dactile"
+version = "0.1.0-dev"
+edition = "2024"
+description = "Dactile — Dynamic Stagewright: write stage plays with live tiyatro.cls macros"
+repository = "https://github.com/D4shwood/dactile"
+license = "GPL-3.0-or-later"
+readme = "README.md"
+
+[lib]
+name = "dactile"
+path = "src/lib.rs"
+
+[[bin]]
+name = "dactile"
+path = "src/main.rs"
+required-features = ["app"]
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4.6", features = ["derive"], optional = true }
+
+[features]
+default = ["app"]
+# Everything beyond the play model: the terminal interface. The core alone
+# (reading and writing plays) builds with `default-features = false`.
+app = ["dep:clap"]

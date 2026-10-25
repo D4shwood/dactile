@@ -1,0 +1,155 @@
+% tiyatro-theme.sty — page, fonts, words and the cover of a tiyatro play.
+% Part of Dactile (https://github.com/D4shwood/dactile).
+% Copyright (C) 2026 D4shwood. GPL-3.0-or-later; see tiyatro.cls and LICENSE.
+%
+% Draft: a sans font for reading on screen, 1.5 spacing, numbered lines, and
+% "TASLAK 0.1" on the cover. Final: a serif font, single spacing, the starred
+% characters on the cover.
+
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesExplPackage{tiyatro-theme}{2026-10-25}{1.0.0}{Dactile: page, fonts, cover}
+\RequirePackage{fontspec}
+\RequirePackage{setspace}
+\RequirePackage{geometry}
+
+\geometry{a4paper, top=2.5cm, bottom=2.5cm, left=3cm, right=3cm}
+\setlength \parindent { 0pt }
+
+% ------------------------------------------------------------------ fonts
+
+% The first of the fonts that is installed. No babel: Turkish works through
+% fontspec, and babel's Turkish shorthands clash with it.
+\cs_new_protected:Npn \__tiy_main_font:n #1
+  { \clist_map_inline:nn {#1} { \IfFontExistsTF {##1} { \setmainfont {##1} \clist_map_break: } { } } }
+
+\iftiyatrodraft
+  \__tiy_main_font:n { Aptos, Calibri, Carlito, TeX~Gyre~Heros, Liberation~Sans, DejaVu~Sans }
+  \onehalfspacing
+\else
+  \__tiy_main_font:n { Times~New~Roman, TeX~Gyre~Termes, Liberation~Serif, DejaVu~Serif }
+  \singlespacing
+\fi
+
+% Line numbers use the mono font.
+\cs_new_protected:Npn \__tiy_mono_font:n #1
+  { \clist_map_inline:nn {#1} { \IfFontExistsTF {##1} { \setmonofont {##1} \clist_map_break: } { } } }
+\__tiy_mono_font:n { Latin~Modern~Mono, DejaVu~Sans~Mono, Liberation~Mono }
+
+% Small caps in Turkish: İ stays dotted.
+\newcommand \tiyturkish { \addfontfeature { Language = Turkish } }
+\newcommand \namefont { \tiyturkish \scshape }
+\newcommand \starfont { \tiyturkish \bfseries \scshape }
+\newcommand \actionfont { \itshape }
+\newcommand \stagedirfont { \normalfont }
+\newcommand \castfont { \tiyturkish \scshape }
+\newcommand \caststarfont { \tiyturkish \bfseries \scshape \large }
+\newcommand \casttitlefont { \tiyturkish \scshape \Large }
+\newcommand \scenecastfont { \tiyturkish \scshape \small }
+\newcommand \scenetitlefont { \tiyturkish \scshape \large }
+\newcommand \acttitlefont { \tiyturkish \scshape \Large }
+\newcommand \linenumberfont { \normalfont \tiny \ttfamily }
+
+% ------------------------------------------------------------------ spacing
+
+\newlength \beforesceneskip  \setlength \beforesceneskip { 0pt }
+\newlength \aftersceneskip   \setlength \aftersceneskip { \baselineskip }
+\newlength \beforeactskip    \setlength \beforeactskip { \baselineskip }
+\newlength \afteractskip     \setlength \afteractskip { \baselineskip }
+\newlength \linenumbersep    \setlength \linenumbersep { 8pt }
+
+\newlength \beforecasttitleskip  \setlength \beforecasttitleskip { 0pt }
+\newlength \aftercasttitleskip   \setlength \aftercasttitleskip { 1cm }
+\newlength \castpageleftmargin   \setlength \castpageleftmargin { 1.5cm }
+\newlength \castpagerightmargin  \setlength \castpagerightmargin { 0pt }
+\newlength \castnamewidth        \setlength \castnamewidth { 0.33 \linewidth }
+\newcommand \castlistoptions
+  {
+    \setlength \itemsep { 0pt }
+    \setlength \itemindent { 0pt }
+    \setlength \topsep { 0pt }
+    \setlength \parsep { 10pt }
+    \setlength \listparindent { 0pt }
+  }
+
+% ------------------------------------------------------------------ words
+
+\newcommand \casttitlename { KİŞİLER }
+\newcommand \acttitlename { Perde }
+\newcommand \scenetitlename { Sahne }
+\newcommand \curtainlocalizedtext { Perde~Sonu }
+\newcommand \scriptendlocalizedtext { Son }
+\newcommand \draftlocalizedtext { TASLAK }
+\newcommand \beattext { Sus. }
+\newcommand \actseparator { : \space }
+\newcommand \sceneseparator { \space -- \space }
+
+% ------------------------------------------------------------------ other languages
+
+% \ru{...} needs a font with Cyrillic; the others print as they are.
+% \yenidil{jp}{Noto Serif CJK JP} adds \jp{...} in that font.
+\cs_new_protected:Npn \__tiy_language:nn #1#2
+  {
+    \cs_gset_protected:cpn {#1} ##1 { { \use:c { __tiy_lang_#1_font: } ##1 } }
+    \cs_gset_protected:cpn { __tiy_lang_#1_font: } { }
+    \clist_map_inline:nn {#2}
+      {
+        \IfFontExistsTF {####1}
+          { \newfontfamily \l_tmpa_tl {####1} \cs_gset_eq:cN { __tiy_lang_#1_font: } \l_tmpa_tl \clist_map_break: }
+          { }
+      }
+  }
+\AtBeginDocument { \__tiy_language:nn { ru } { Times~New~Roman, Liberation~Serif, DejaVu~Serif } }
+\NewDocumentCommand \en { m } {#1}
+\NewDocumentCommand \de { m } {#1}
+\NewDocumentCommand \fr { m } {#1}
+\NewDocumentCommand \el { m } {#1}
+\NewDocumentCommand \yenidil { m m } { \__tiy_language:nn {#1} {#2} }
+
+% \fontyukle{kapak}{Bebas Neue} gives \kapak{...} in that font (a font name or
+% a file next to the play).
+\NewDocumentCommand \fontyukle { m m }
+  {
+    \newfontfamily \l_tmpa_tl {#2}
+    \cs_gset_eq:cN { __tiy_font_#1: } \l_tmpa_tl
+    \cs_gset_protected:cpn {#1} ##1 { { \use:c { __tiy_font_#1: } ##1 } }
+  }
+
+% ------------------------------------------------------------------ cover
+
+\NewDocumentCommand \draft { m } { \tl_gset:Nn \g__tiy_draft_tl {#1} }
+\NewDocumentCommand \copyrightnotice { m } { \tl_gset:Nn \g__tiy_copyright_tl {#1} }
+\NewDocumentCommand \address { m } { \tl_gset:Nn \g__tiy_address_tl {#1} }
+\NewDocumentCommand \telephone { m } { \tl_gset:Nn \g__tiy_telephone_tl {#1} }
+\NewDocumentCommand \email { m } { \tl_gset:Nn \g__tiy_email_tl {#1} }
+\tl_new:N \g__tiy_draft_tl
+\tl_new:N \g__tiy_copyright_tl
+\tl_new:N \g__tiy_address_tl
+\tl_new:N \g__tiy_telephone_tl
+\tl_new:N \g__tiy_email_tl
+
+\cs_new_protected:Npn \__tiy_cover_line:Nn #1#2
+  { \tl_if_empty:NF #1 { #2 #1 \par } }
+
+\RenewDocumentCommand \maketitle { }
+  {
+    \begin { titlepage }
+    \vspace* { \fill }
+    { \centering \Huge \tiyturkish \scshape \@title \par }
+    \vspace { 0.5cm }
+    { \centering \Large \@author \par }
+    \iftiyatrodraft
+      \vspace { 0.5cm }
+      { \centering \small \draftlocalizedtext \tl_if_empty:NF \g__tiy_draft_tl { \space \g__tiy_draft_tl } \par }
+    \else
+      \tiy@ifstarred { \vfill { \centering \Large \bfseries \tiy@starred \par } }
+    \fi
+    \vfill
+    \begin { flushright }
+    \small
+    \__tiy_cover_line:Nn \g__tiy_copyright_tl { \copyright \space }
+    \__tiy_cover_line:Nn \g__tiy_address_tl { }
+    \__tiy_cover_line:Nn \g__tiy_telephone_tl { }
+    \__tiy_cover_line:Nn \g__tiy_email_tl { }
+    \end { flushright }
+    \end { titlepage }
+  }

@@ -1,0 +1,66 @@
+% Örnek oyun — Dactile ile yazılmış, tamamen uydurma bir metin.
+% Derleme: xelatex ornek-oyun.tex (iki kez; sahne kişi listeleri ikinci geçişte gelir)
+
+\documentclass[draft]{tiyatro}
+
+\title{Kar Masalı}
+\author{Örnek Yazar}
+\draft{0.1}
+\copyrightnotice{2026 Örnek Yazar}
+\address{İstanbul}
+\email{ornek@example.com}
+
+\karakter*[Selin][Köy öğretmeni]{SELİN}{se}
+\karakter[Ozan Usta][Değirmenci, Selin'in amcası]{OZAN}{oz}
+\karakter[Yaşlı bir yolcu]{İHTİYAR}{ih}
+\karaktergrubu[Köylüler]{
+	\gkarakter[Birinci Kadın]{KADIN}{ka}
+	\gkarakter{ÇOBAN}{co}
+}
+\gizlikarakter{HERKES}{hep}
+\setinlinename{oz}{Ozan Usta}
+
+\begin{document}
+
+\maketitle
+\kisiler
+
+\perde[Kar Yağarken]
+
+\sahne[İç, Değirmen — Akşam]
+
+\action{Işıklar yavaşça açılır. Değirmen taşı durmuştur.}
+
+\stagedir{Karlı bir dağ köyü. Pencereden ışık sızar.}
+
+\se Amca, yine mi taş durdu?
+\oz Durdu kızım. \ic{elini taşa koyar} Soğuk her şeyi durdurur.
+\se Ama \oz bu kış başka türlü diyordu.
+\oz Ben öyle mi dedim? _Hiç_ hatırlamıyorum.
+
+\ihdo Kapıyı çalar.
+
+\se Kim o?
+\ih Yolcuyum. Biraz ısınsam yeter.
+
+\sedo\ozdo Birbirlerine bakarlar.
+
+\middir{Rüzgârın sesi giderek artar.}
+
+\sahne[Dış, Meydan — Gece]
+
+\ka Kar dinmeyecek bu gece.
+\co Sürü ağılda, merak etme.
+\hep Hep birlikte: Dinmeyecek!
+\se \ru{Добрый вечер}, dedi yolcu, \en{good evening}.
+\beat
+
+\perde[]
+
+\sahne[][2.1]
+
+\oz Sabah oldu.
+\ih Ben gidiyorum artık.
+\ihdo Çıkar.
+
+\end{document}
