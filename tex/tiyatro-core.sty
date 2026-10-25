@@ -14,8 +14,8 @@
 % Each alias gives three commands:
 %
 %   \alias Text up to the end of the line.        a line of dialogue
-%   \alias inside a line                          the character's name ("Maria")
-%   \aliasdo\otherdo Text up to the end of line.  a direction: (Maria, Ozan Text)
+%   \alias inside a line                          the character's name ("Selin")
+%   \aliasdo\otherdo Text up to the end of line.  a direction: (Selin, Ozan Text)
 %   \aliasfont                                    the font of the character's name
 %
 % A line of dialogue or a direction ends where the source line ends, so a "%" at
@@ -133,7 +133,7 @@
 \cs_new_protected:Npn \__tiy_namefont:n #1
   { \str_if_eq:eeTF { \tl_use:c { g__tiy_star_#1_tl } } { 1 } { \starfont } { \namefont } }
 
-% "MARİA" -> "Maria", with Turkish casing (İ/i, I/ı); \setinlinename wins.
+% "SELİN" -> "Selin", with Turkish casing (İ/i, I/ı); \setinlinename wins.
 \cs_new:Npn \__tiy_inline:n #1
   {
     \tl_if_exist:cTF { g__tiy_inline_#1_tl }
@@ -192,7 +192,7 @@
   }
 
 % \aliasdo collects names while the next token is another \xdo, then the rest
-% of the line is the direction: (Maria, Ozan Girerler.)
+% of the line is the direction: (Selin, Ozan Girerler.)
 \cs_new_protected:Npn \__tiy_do:n #1
   {
     \bool_if:NF \l__tiy_do_bool
