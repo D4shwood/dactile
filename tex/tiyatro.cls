@@ -29,10 +29,10 @@
 % Where it is missing, those requests get Liberation Serif.
 \IfFileExists{lmroman12-regular.otf}{}{%
   \DeclareFontFamily{TU}{lmr}{}%
-  \DeclareFontShape{TU}{lmr}{m}{n}{<->"[LiberationSerif-Regular.ttf]"}{}%
-  \DeclareFontShape{TU}{lmr}{m}{it}{<->"[LiberationSerif-Italic.ttf]"}{}%
-  \DeclareFontShape{TU}{lmr}{bx}{n}{<->"[LiberationSerif-Bold.ttf]"}{}%
-  \DeclareFontShape{TU}{lmr}{bx}{it}{<->"[LiberationSerif-BoldItalic.ttf]"}{}%
+  \DeclareFontShape{TU}{lmr}{m}{n}{<->"Liberation Serif"}{}%
+  \DeclareFontShape{TU}{lmr}{m}{it}{<->"Liberation Serif/I"}{}%
+  \DeclareFontShape{TU}{lmr}{bx}{n}{<->"Liberation Serif/B"}{}%
+  \DeclareFontShape{TU}{lmr}{bx}{it}{<->"Liberation Serif/BI"}{}%
   \DeclareFontShape{TU}{lmr}{b}{n}{<->ssub * lmr/bx/n}{}%
   \DeclareFontShape{TU}{lmr}{m}{sl}{<->ssub * lmr/m/it}{}%
   \DeclareFontShape{TU}{lmr}{m}{sc}{<->ssub * lmr/m/n}{}%
