@@ -1,11 +1,13 @@
 //! The terminal interface.
 
+mod popup;
 mod theme;
 mod writer;
 
 use anyhow::Result;
 use ratatui::crossterm::event::{
-    self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyEventKind,
+    self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
+    Event, KeyEventKind,
 };
 use ratatui::crossterm::execute;
 use std::io::stdout;
@@ -17,7 +19,7 @@ use writer::Writer;
 pub fn run(play: &Path) -> Result<()> {
     let mut w = Writer::open(play)?;
     let mut terminal = ratatui::init();
-    let _ = execute!(stdout(), EnableBracketedPaste);
+    let _ = execute!(stdout(), EnableBracketedPaste, EnableMouseCapture);
     let result = (|| -> Result<()> {
         while !w.quit {
             terminal.draw(|f| w.draw(f))?;
@@ -25,6 +27,7 @@ pub fn run(play: &Path) -> Result<()> {
                 match event::read()? {
                     Event::Key(k) if k.kind != KeyEventKind::Release => w.key(k),
                     Event::Paste(s) => w.paste(&s),
+                    Event::Mouse(m) => w.mouse(m),
                     _ => {}
                 }
             }
@@ -33,7 +36,7 @@ pub fn run(play: &Path) -> Result<()> {
         Ok(())
     })();
     let closed = w.close();
-    let _ = execute!(stdout(), DisableBracketedPaste);
+    let _ = execute!(stdout(), DisableBracketedPaste, DisableMouseCapture);
     ratatui::restore();
     result.and(closed)
 }

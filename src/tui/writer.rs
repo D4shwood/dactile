@@ -1,15 +1,20 @@
 //! The writing screen: the play as it will read, edited in place.
 
+use super::popup::{self, Field, Form, FormKind, Menu, Verbs};
 use super::theme::{self, BEIGE, CLARET, FAINT, MUTED, SELECTION, WARN};
 use anyhow::Result;
 use dactile::buffer::{self, Buffer};
+use dactile::cast::{self as dcast, Spec};
+use dactile::complete::{self, Action};
 use dactile::file::{self, LockState};
 use dactile::lex::Kind;
 use dactile::outline;
 use dactile::render::{self, Doc, Layout, Options, Stop};
 use dactile::source;
 use ratatui::Frame;
-use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::crossterm::event::{
+    KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -21,8 +26,8 @@ use std::time::{Duration, Instant, SystemTime};
 const AUTOSAVE_AFTER: Duration = Duration::from_secs(2);
 /// How often the file on disk is checked for changes from elsewhere.
 const CHECK_EVERY: Duration = Duration::from_secs(2);
-/// Columns left of the text.
-const MARGIN: u16 = 2;
+/// Columns left of the text: the draft line numbers.
+const MARGIN: u16 = 6;
 
 pub struct Writer {
     path: PathBuf,
@@ -50,7 +55,27 @@ pub struct Writer {
     clipboard: Option<arboard::Clipboard>,
     /// Fallback when there's no system clipboard.
     copied: String,
+    popup: Popup,
+    /// The cursor's line stays in the middle of the screen.
+    typewriter: bool,
+    /// Only the cursor's scene; the others fold to one line.
+    focus: bool,
+    /// Everything but the cursor's block in the background.
+    dim: bool,
+    /// The top of the text area on screen, for the mouse.
+    text_top: u16,
     pub quit: bool,
+}
+
+enum Popup {
+    None,
+    /// After a backslash: what can follow it.
+    Menu(Menu),
+    /// After `\xdo `: how directions usually start.
+    Verbs(Verbs),
+    /// ^K: the same list, searched by name.
+    Search(Menu, String),
+    Form(Form),
 }
 
 impl Writer {
@@ -98,6 +123,11 @@ impl Writer {
             message,
             clipboard: arboard::Clipboard::new().ok(),
             copied: String::new(),
+            popup: Popup::None,
+            typewriter: false,
+            focus: false,
+            dim: false,
+            text_top: 1,
             quit: false,
         };
         w.relayout();
@@ -117,6 +147,11 @@ impl Writer {
             raw_block: if self.raw_here { self.block() } else { None },
             raw_all: self.raw_all,
             preamble_open: self.preamble_open,
+            focus_scene: if self.focus {
+                self.block().and_then(|b| self.doc.scene_of(b))
+            } else {
+                None
+            },
         }
     }
 
@@ -168,11 +203,17 @@ impl Writer {
             self.buf.anchor = None;
         }
         let before = self.block();
+        let scene = before.and_then(|b| self.doc.scene_of(b));
         self.buf.cursor = byte;
-        if self.raw_here && self.block() != before {
+        let moved = self.block() != before;
+        if self.raw_here && moved {
             self.raw_here = false;
             self.relayout();
             self.snap_back();
+        } else if self.focus && moved && self.block().and_then(|b| self.doc.scene_of(b)) != scene {
+            // Into a folded scene: it opens, the one left folds.
+            self.relayout();
+            self.snap_forward();
         }
     }
 
@@ -204,6 +245,10 @@ impl Writer {
 
     pub fn key(&mut self, k: KeyEvent) {
         self.message = None;
+        if self.popup_key(k) {
+            self.keep_visible();
+            return;
+        }
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
         let alt = k.modifiers.contains(KeyModifiers::ALT);
         let shift = k.modifiers.contains(KeyModifiers::SHIFT);
@@ -256,6 +301,37 @@ impl Writer {
                 self.raw_all = !self.raw_all;
                 self.relayout();
                 self.snap_back();
+            }
+            KeyCode::F(3) => {
+                self.typewriter = !self.typewriter;
+                self.say(
+                    if self.typewriter {
+                        "Daktilo modu açık."
+                    } else {
+                        "Daktilo modu kapalı."
+                    },
+                    false,
+                );
+            }
+            KeyCode::F(4) => {
+                self.focus = !self.focus;
+                self.relayout();
+                self.snap_back();
+                self.say(
+                    if self.focus {
+                        "Sahne odağı: yalnız bu sahne."
+                    } else {
+                        "Sahne odağı kapalı."
+                    },
+                    false,
+                );
+            }
+            KeyCode::F(5) => {
+                self.dim = !self.dim;
+            }
+            KeyCode::Char('k') if ctrl => {
+                let items = complete::items(&self.doc, self.block());
+                self.popup = Popup::Search(Menu::new(items, self.buf.cursor), String::new());
             }
             KeyCode::Esc => {
                 self.buf.anchor = None;
@@ -315,6 +391,7 @@ impl Writer {
             KeyCode::Char(c) if !ctrl && !alt => self.type_char(c),
             _ => {}
         }
+        self.follow_popups();
         self.keep_visible();
     }
 
@@ -479,15 +556,24 @@ impl Writer {
         }
         let block = self.block().unwrap_or(0);
         let dialogue = self.doc.is_dialogue(block) || self.at_blank_line();
-        if c == '\\' && !self.raw_now() {
-            // A macro is being written: its block shows as source until done.
+        if c == '\\' {
+            // A macro is being written: its block shows as source until done,
+            // with what can follow the backslash.
             self.raw_here = true;
             self.buf.insert("\\");
+            let items = complete::items(&self.doc, self.block());
+            self.popup = Popup::Menu(Menu::new(items, self.buf.cursor));
         } else if self.raw_now() {
+            let name = if c == ' ' { self.macro_before() } else { None };
             self.buf.insert(&c.to_string());
             // `\se ` or `\se{` finishes the macro: show the block live again.
             if self.raw_here && (c == ' ' || c == '{') && self.ends_macro() {
                 self.raw_here = false;
+            }
+            if let Some(name) = name {
+                self.edited();
+                self.after_macro(&name);
+                return;
             }
         } else if c == '(' && dialogue && self.buf.text[..self.buf.cursor].ends_with('(') {
             // "((" in dialogue: an inline direction, \ic{…}.
@@ -563,6 +649,448 @@ impl Writer {
         if cut && self.editable() {
             self.buf.delete(0..0);
             self.edited();
+        }
+    }
+
+    /// The `\\name` right before the cursor, if any.
+    fn macro_before(&self) -> Option<String> {
+        let t = &self.buf.text[..self.buf.cursor];
+        let name: String = t
+            .chars()
+            .rev()
+            .take_while(|c| dactile::tex::is_letter(*c))
+            .collect();
+        let name: String = name.chars().rev().collect();
+        (!name.is_empty() && t[..t.len() - name.len()].ends_with('\\')).then_some(name)
+    }
+
+    /// A macro was just finished with a space: an unknown one at the start
+    /// of a line asks for a new character; `\\xdo ` offers verbs.
+    fn after_macro(&mut self, name: &str) {
+        let Some(b) = self.block() else { return };
+        match &self.doc.blocks[b].kind {
+            Kind::Unknown { name: n } if n == name => {
+                self.popup = Popup::Form(self.character_form(name, None));
+            }
+            Kind::Do { text, .. } if text.start == self.buf.cursor && text.is_empty() => {
+                let verbs = complete::verbs(&self.doc, &self.buf.text);
+                self.popup = Popup::Verbs(Verbs::new(verbs, self.buf.cursor));
+            }
+            _ => {}
+        }
+    }
+
+    // ------------------------------------------------------------ popups
+
+    /// Keys a popup takes; true when it took this one.
+    fn popup_key(&mut self, k: KeyEvent) -> bool {
+        let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+        match &mut self.popup {
+            Popup::None => false,
+            Popup::Menu(m) => match k.code {
+                KeyCode::Up => {
+                    m.up();
+                    true
+                }
+                KeyCode::Down => {
+                    m.down();
+                    true
+                }
+                KeyCode::Tab | KeyCode::Enter if !m.shown.is_empty() => {
+                    let item = m.chosen().cloned();
+                    let range = m.from - 1..self.buf.cursor;
+                    self.popup = Popup::None;
+                    if let Some(item) = item {
+                        self.choose(item.action, range);
+                    }
+                    true
+                }
+                KeyCode::Esc => {
+                    self.popup = Popup::None;
+                    true
+                }
+                _ => false,
+            },
+            Popup::Verbs(v) => match k.code {
+                KeyCode::Up => {
+                    v.sel = v.sel.saturating_sub(1);
+                    true
+                }
+                KeyCode::Down => {
+                    if v.sel + 1 < v.shown.len() {
+                        v.sel += 1;
+                    }
+                    true
+                }
+                KeyCode::Tab | KeyCode::Enter if !v.shown.is_empty() => {
+                    let verb = v.shown[v.sel].clone();
+                    let range = v.from..self.buf.cursor;
+                    self.popup = Popup::None;
+                    self.buf.apply(
+                        &[dactile::tex::Edit::new(range.clone(), verb.clone())],
+                        range.start + verb.len(),
+                    );
+                    self.edited();
+                    true
+                }
+                KeyCode::Esc => {
+                    self.popup = Popup::None;
+                    true
+                }
+                _ => false,
+            },
+            Popup::Search(m, q) => {
+                match k.code {
+                    KeyCode::Esc => self.popup = Popup::None,
+                    KeyCode::Up => m.up(),
+                    KeyCode::Down => m.down(),
+                    KeyCode::Backspace => {
+                        q.pop();
+                        let q = q.clone();
+                        m.filter(&q);
+                    }
+                    KeyCode::Enter | KeyCode::Tab => {
+                        let item = m.chosen().cloned();
+                        self.popup = Popup::None;
+                        if let Some(item) = item
+                            && self.editable()
+                        {
+                            let at = self.buf.cursor;
+                            self.choose(item.action, at..at);
+                        }
+                    }
+                    KeyCode::Char(c) if !ctrl => {
+                        q.push(c);
+                        let q = q.clone();
+                        m.filter(&q);
+                    }
+                    _ => {}
+                }
+                true
+            }
+            Popup::Form(_) => {
+                self.form_key(k);
+                true
+            }
+        }
+    }
+
+    /// Keeps the menu and the verb list in step with what is typed.
+    fn follow_popups(&mut self) {
+        let cur = self.buf.cursor;
+        match &mut self.popup {
+            Popup::Menu(m) => {
+                let q = self.buf.text.get(m.from..cur);
+                match q {
+                    Some(q) if cur >= m.from && q.chars().all(dactile::tex::is_letter) => {
+                        let q = q.to_string();
+                        m.filter(&q);
+                    }
+                    _ => self.popup = Popup::None,
+                }
+            }
+            Popup::Verbs(v) => match self.buf.text.get(v.from..cur) {
+                Some(q) if cur >= v.from && !q.contains(' ') => {
+                    let q = q.to_string();
+                    v.filter(&q);
+                }
+                _ => self.popup = Popup::None,
+            },
+            _ => {}
+        }
+    }
+
+    /// Carries out a suggestion over `range` (the typed `\\query`, or the
+    /// cursor when it came from the search window).
+    fn choose(&mut self, action: Action, range: std::ops::Range<usize>) {
+        match action {
+            Action::Insert { text, cursor } => {
+                let at = range.start;
+                self.buf
+                    .apply(&[dactile::tex::Edit::new(range, text.clone())], at + cursor);
+                self.raw_here = false;
+                self.edited();
+                self.snap_forward_if_inside();
+                if text.ends_with("do ") {
+                    let verbs = complete::verbs(&self.doc, &self.buf.text);
+                    self.popup = Popup::Verbs(Verbs::new(verbs, self.buf.cursor));
+                }
+            }
+            Action::Scene | Action::Act | Action::NewCharacter => {
+                // The typed `\\query` goes; the form writes the real thing.
+                let at = range.start;
+                if !range.is_empty() {
+                    self.buf.apply(&[dactile::tex::Edit::new(range, "")], at);
+                }
+                self.raw_here = false;
+                self.edited();
+                let at = self.buf.cursor;
+                self.popup = Popup::Form(match action {
+                    Action::Scene => self.scene_form(at),
+                    Action::Act => self.act_form(at),
+                    _ => self.character_form("", Some(at)),
+                });
+            }
+        }
+    }
+
+    fn scene_form(&self, at: usize) -> Form {
+        Form {
+            kind: FormKind::Scene,
+            title: "yeni sahne".into(),
+            fields: vec![
+                Field::text("Yer", "", complete::places(&self.doc)),
+                Field::text("Zaman", "", complete::times(&self.doc)),
+            ],
+            focus: 0,
+            at: at..at,
+            error: None,
+        }
+    }
+
+    fn act_form(&self, at: usize) -> Form {
+        Form {
+            kind: FormKind::Act,
+            title: "yeni perde".into(),
+            fields: vec![Field::text("Başlık", "", Vec::new())],
+            focus: 0,
+            at: at..at,
+            error: None,
+        }
+    }
+
+    /// `alias` is the one typed (`\\yv `), or empty from the menu, where
+    /// `insert_at` is where `\\alias ` goes once the character exists.
+    fn character_form(&self, alias: &str, insert_at: Option<usize>) -> Form {
+        let mut alias_field = Field::text("Kısaltma", alias, Vec::new());
+        alias_field.touched = !alias.is_empty();
+        let at = insert_at.unwrap_or(usize::MAX);
+        Form {
+            kind: FormKind::Character,
+            title: "yeni karakter".into(),
+            fields: vec![
+                Field::text("Ad", "", Vec::new()),
+                alias_field,
+                Field::text("Tam ad", "", Vec::new()),
+                Field::text("Açıklama", "", Vec::new()),
+                Field::flag("Kişiler tablosunda", true),
+                Field::flag("Yıldızlı", false),
+                Field::flag("Gizli (HERKES gibi)", false),
+            ],
+            focus: 0,
+            at: at..at,
+            error: None,
+        }
+    }
+
+    fn form_key(&mut self, k: KeyEvent) {
+        let Popup::Form(form) = &mut self.popup else {
+            return;
+        };
+        form.error = None;
+        let n = form.fields.len();
+        match k.code {
+            KeyCode::Esc => {
+                self.popup = Popup::None;
+                return;
+            }
+            KeyCode::Up | KeyCode::BackTab => form.focus = (form.focus + n - 1) % n,
+            KeyCode::Down => form.focus = (form.focus + 1) % n,
+            KeyCode::Tab => {
+                if !form.complete() {
+                    form.focus = (form.focus + 1) % n;
+                }
+            }
+            KeyCode::Enter => {
+                let form = match std::mem::replace(&mut self.popup, Popup::None) {
+                    Popup::Form(f) => f,
+                    _ => return,
+                };
+                if let Err(err) = self.submit(form) {
+                    let (mut form, e) = *err;
+                    form.error = Some(e);
+                    self.popup = Popup::Form(form);
+                }
+                return;
+            }
+            KeyCode::Backspace => {
+                let f = &mut form.fields[form.focus];
+                if !f.toggle {
+                    f.value.pop();
+                    f.touched = true;
+                }
+            }
+            KeyCode::Char(' ') if form.fields[form.focus].toggle => {
+                let f = &mut form.fields[form.focus];
+                f.value = if f.on() { "hayır" } else { "evet" }.into();
+            }
+            KeyCode::Char(c) => {
+                let f = &mut form.fields[form.focus];
+                if !f.toggle {
+                    f.value.push(c);
+                    f.touched = true;
+                }
+            }
+            _ => {}
+        }
+        // The alias follows the name until it is edited by hand.
+        if form.kind == FormKind::Character {
+            let name = form.get("Ad").to_string();
+            let cast = &self.doc.cast;
+            if let Some(a) = form.field_mut("Kısaltma")
+                && !a.touched
+            {
+                a.value = if name.is_empty() {
+                    String::new()
+                } else {
+                    cast.suggest_alias(&name)
+                };
+            }
+        }
+    }
+
+    /// Writes what a form says into the text; Err gives the form back with
+    /// what is wrong.
+    fn submit(&mut self, form: Form) -> Result<(), Box<(Form, String)>> {
+        let nl = source::line_ending(&self.buf.text).to_string();
+        match form.kind {
+            FormKind::Scene => {
+                let parts: Vec<&str> = [form.get("Yer"), form.get("Zaman")]
+                    .into_iter()
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                let text = if parts.is_empty() {
+                    "\\sahne".to_string()
+                } else {
+                    format!("\\sahne[{}]", parts.join(" — "))
+                };
+                self.write_line(form.at.start, &text, &nl);
+            }
+            FormKind::Act => {
+                let title = form.get("Başlık");
+                let text = if title.is_empty() {
+                    "\\perde".to_string()
+                } else {
+                    format!("\\perde[{title}]")
+                };
+                self.write_line(form.at.start, &text, &nl);
+            }
+            FormKind::Character => {
+                let script = form.get("Ad").to_string();
+                let alias = form.get("Kısaltma").to_string();
+                if script.is_empty() {
+                    return Err(Box::new((form, "Ad boş olamaz.".into())));
+                }
+                if alias.is_empty() || !alias.chars().all(|c| c.is_ascii_alphabetic()) {
+                    return Err(Box::new((
+                        form,
+                        "Kısaltma yalnız İngilizce harflerden oluşmalı (ş, ç… olmadan).".into(),
+                    )));
+                }
+                let typed_here = form.at.start == usize::MAX;
+                if self.doc.cast.alias_taken(&alias) {
+                    return Err(Box::new((
+                        form,
+                        format!(
+                            "\\{alias} kullanılıyor ya da bir LaTeX komutu; başka bir kısaltma seç."
+                        ),
+                    )));
+                }
+                let hidden = form
+                    .fields
+                    .iter()
+                    .find(|f| f.label.starts_with("Gizli"))
+                    .is_some_and(Field::on);
+                let in_table = form
+                    .fields
+                    .iter()
+                    .find(|f| f.label.starts_with("Kişiler"))
+                    .is_some_and(Field::on);
+                let star = form
+                    .fields
+                    .iter()
+                    .find(|f| f.label == "Yıldızlı")
+                    .is_some_and(Field::on);
+                let spec = Spec {
+                    alias: alias.clone(),
+                    script,
+                    full: form.get("Tam ad").to_string(),
+                    desc: form.get("Açıklama").to_string(),
+                    star,
+                    kind: if hidden {
+                        dcast::Kind::Hidden
+                    } else if in_table {
+                        dcast::Kind::Cast
+                    } else {
+                        dcast::Kind::Plain
+                    },
+                };
+                let decl = dcast::add(&self.buf.text, &self.doc.cast, &spec, None);
+                let shift = decl.text.len();
+                let mut edits = vec![decl.clone()];
+                let mut cursor = self.buf.cursor;
+                if !typed_here {
+                    let at = form.at.start;
+                    let use_text = format!("\\{alias} ");
+                    cursor = at + use_text.len();
+                    edits.push(dactile::tex::Edit::new(at..at, use_text));
+                }
+                if decl.range.start <= cursor {
+                    cursor += shift;
+                }
+                self.buf.apply(&edits, cursor);
+                self.raw_here = false;
+                self.edited();
+                self.say(&format!("{} eklendi: \\{alias}", spec.script), false);
+            }
+        }
+        Ok(())
+    }
+
+    /// Puts `text` on a line of its own at `at` and the cursor on the line after.
+    fn write_line(&mut self, at: usize, text: &str, nl: &str) {
+        let line_start = self.buf.text[..at].rfind('\n').map_or(0, |i| i + 1);
+        let line_end = self.buf.text[at..]
+            .find(['\r', '\n'])
+            .map_or(self.buf.text.len(), |i| at + i);
+        let alone = self.buf.text[line_start..line_end].trim().is_empty();
+        let (range, insert) = if alone {
+            (line_start..line_end, format!("{text}{nl}"))
+        } else {
+            (at..at, format!("{nl}{text}{nl}"))
+        };
+        let cursor = range.start + insert.len();
+        self.buf
+            .apply(&[dactile::tex::Edit::new(range, insert)], cursor);
+        self.raw_here = false;
+        self.edited();
+        self.snap_forward_if_inside();
+    }
+
+    // ------------------------------------------------------------ mouse
+
+    pub fn mouse(&mut self, m: MouseEvent) {
+        match m.kind {
+            MouseEventKind::ScrollUp => self.scroll = self.scroll.saturating_sub(3),
+            MouseEventKind::ScrollDown => {
+                let max = self.lay.rows.len().saturating_sub(self.text_height() / 2);
+                self.scroll = (self.scroll + 3).min(max);
+            }
+            MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(MouseButton::Left) => {
+                if !matches!(self.popup, Popup::None) || m.row < self.text_top {
+                    return;
+                }
+                let row = self.scroll + (m.row - self.text_top) as usize;
+                let col = m.column.saturating_sub(MARGIN);
+                let hit = (row..self.lay.rows.len())
+                    .chain((0..row).rev())
+                    .find_map(|r| self.lay.stop_near(r, col));
+                if let Some(s) = hit {
+                    let drag = matches!(m.kind, MouseEventKind::Drag(_));
+                    self.go(s.byte, drag);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -646,6 +1174,10 @@ impl Writer {
             return;
         };
         let h = self.text_height();
+        if self.typewriter {
+            self.scroll = cur.row.saturating_sub(h / 2);
+            return;
+        }
         let pad = 3.min(h / 3);
         if cur.row < self.scroll + pad {
             self.scroll = cur.row.saturating_sub(pad);
@@ -677,6 +1209,7 @@ impl Writer {
             height: self.text_height() as u16,
             ..area
         };
+        self.text_top = body.y;
         self.draw_text(f, body);
         let status = Rect {
             y: area.y + area.height.saturating_sub(2),
@@ -690,6 +1223,26 @@ impl Writer {
             ..area
         };
         self.draw_keys(f, keys);
+        let at = self
+            .cursor_stop()
+            .filter(|c| c.row >= self.scroll)
+            .map(|c| {
+                Position::new(
+                    body.x + MARGIN + c.col,
+                    body.y + (c.row - self.scroll) as u16,
+                )
+            })
+            .unwrap_or(Position::new(body.x, body.y));
+        match &self.popup {
+            Popup::None => {}
+            Popup::Menu(m) => {
+                let q = self.buf.text.get(m.from..self.buf.cursor).unwrap_or("");
+                popup::draw_menu(f, body, at, m, q);
+            }
+            Popup::Verbs(v) => popup::draw_verbs(f, body, at, v),
+            Popup::Search(m, q) => popup::draw_search(f, area, m, q),
+            Popup::Form(form) => popup::draw_form(f, area, form),
+        }
     }
 
     fn draw_header(&self, f: &mut Frame, area: Rect) {
@@ -741,12 +1294,25 @@ impl Writer {
             .enumerate()
         {
             let y = area.y + i as u16;
+            let here = row.block.is_some() && row.block == self.block();
+            if let Some(n) = row.number {
+                let label = format!("{n:>4}");
+                let style = theme::base().fg(if here { MUTED } else { FAINT });
+                for (k, ch) in label.chars().enumerate() {
+                    if (k as u16) < area.width {
+                        buf[(area.x + k as u16, y)].set_char(ch).set_style(style);
+                    }
+                }
+            }
             for c in &row.cells {
                 let x = area.x + MARGIN + c.col;
                 if x >= area.x + area.width {
                     continue;
                 }
                 let mut style = theme::of(c.style);
+                if self.dim && !here {
+                    style = style.fg(FAINT);
+                }
                 if let (Some(s), Some(b)) = (&sel, c.byte)
                     && s.contains(&b)
                 {
@@ -822,7 +1388,10 @@ impl Writer {
             ("^S", "kaydet"),
             ("^Z", "geri al"),
             ("^C/^X/^V", "kopyala"),
+            ("\\", "öneri"),
+            ("^K", "ara"),
             ("F2", "ham"),
+            ("F3/F4/F5", "daktilo/odak/soluk"),
             ("Alt+P", "kişiler"),
             ("^Q", "çık"),
         ];

@@ -5,6 +5,7 @@
 
 pub mod buffer;
 pub mod cast;
+pub mod complete;
 pub mod file;
 pub mod lex;
 pub mod outline;

@@ -137,6 +137,8 @@ pub struct Row {
     /// The block the row shows; None for the folded preamble line.
     pub block: Option<usize>,
     pub cells: Vec<Cell>,
+    /// The draft line number shown in the margin, on a block's first row.
+    pub number: Option<usize>,
 }
 
 /// A place the cursor can stand.
@@ -201,6 +203,9 @@ pub struct Options {
     pub raw_all: bool,
     /// Show the preamble's source instead of one summary line.
     pub preamble_open: bool,
+    /// Show only this scene (an index into `outline.scenes`); the others
+    /// fold to one line each.
+    pub focus_scene: Option<usize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -278,6 +283,26 @@ pub fn layout(text: &str, doc: &Doc, opts: Options) -> Layout {
             b.out.block_rows.push(start..b.out.rows.len());
             continue;
         }
+        // Scene focus: other scenes are one summary line each.
+        if let Some(f) = opts.focus_scene
+            && let Some(sc) = doc.scene_of(i)
+            && sc != f
+        {
+            let scene = &doc.outline.scenes[sc];
+            if scene.block + doc.body.start == i {
+                let place = if scene.place.trim().is_empty() {
+                    String::new()
+                } else {
+                    format!(" — {}", scene.place.trim())
+                };
+                let s = format!("▸ Sahne {}{place} · {} replik", scene.label, scene.lines);
+                let glyphs = chip(&s, Style::Faint, doc.blocks[i].span.start);
+                let width = b.width;
+                b.flow(i, &glyphs, 0, width, Align::Center, None, start);
+            }
+            b.out.block_rows.push(start..b.out.rows.len());
+            continue;
+        }
         if raw || !b.rendered(i) {
             // Plain prose reads as text; other LaTeX stays in the background.
             let prose = matches!(doc.blocks[i].kind, Kind::Other)
@@ -290,6 +315,13 @@ pub fn layout(text: &str, doc: &Doc, opts: Options) -> Layout {
                 Style::Faint
             };
             b.raw(i, base);
+        }
+        if let Some(n) = i
+            .checked_sub(doc.body.start)
+            .and_then(|k| doc.outline.numbers.get(k).copied().flatten())
+            && start < b.out.rows.len()
+        {
+            b.out.rows[start].number = Some(n);
         }
         b.out.block_rows.push(start..b.out.rows.len());
     }
@@ -326,6 +358,7 @@ impl Builder<'_> {
             self.out.rows.push(Row {
                 block: Some(block),
                 cells: Vec::new(),
+                number: None,
             });
         }
     }
@@ -501,9 +534,8 @@ impl Builder<'_> {
                 }
                 Inline::Ic { inner } => {
                     out.push(Glyph::deco('(', Style::Direction, Some(p.span.start)));
-                    for (i, c) in self.text[inner.clone()].char_indices() {
-                        out.push(Glyph::plain(c, Style::Direction, inner.start + i));
-                    }
+                    // Macros inside a direction are live too.
+                    out.extend(self.inline_glyphs(inner.clone(), Style::Direction, dialogue));
                     out.push(Glyph::deco(')', Style::Direction, Some(inner.end)));
                 }
                 Inline::Under { inner } => {
@@ -519,9 +551,7 @@ impl Builder<'_> {
                         _ => ('«', '»', base),
                     };
                     out.push(Glyph::deco(open, Style::Faint, Some(p.span.start)));
-                    for (i, c) in self.text[inner.clone()].char_indices() {
-                        out.push(Glyph::plain(c, style, inner.start + i));
-                    }
+                    out.extend(self.inline_glyphs(inner.clone(), style, dialogue));
                     out.push(Glyph::deco(close, Style::Faint, Some(inner.end)));
                 }
                 Inline::Special if s.starts_with("\\\\") => {
@@ -805,6 +835,56 @@ mod tests {
         );
         assert!(row_text(&l, find_row(&l, "Добрый")).contains("«Добрый вечер», dedi yolcu"));
         assert!(row_text(&l, find_row(&l, "Sahne 2.1")).contains("Sahne 2.1"));
+    }
+
+    #[test]
+    fn macros_inside_macros() {
+        let t = "\\karakter[x]{KADIN}{ka}\n\\begin{document}\n\\ka \\textit{0.001\\% of it} \\ic{bakar \\ka{}ya}\n\\end{document}\n";
+        let doc = Doc::new(t);
+        let l = layout(
+            t,
+            &doc,
+            Options {
+                width: 80,
+                ..Options::default()
+            },
+        );
+        assert_eq!(
+            row_text(&l, find_row(&l, "0.001")),
+            "KADIN  ‹0.001% of it› (bakar Kadınya)"
+        );
+    }
+
+    #[test]
+    fn margin_numbers_and_focus() {
+        let doc = Doc::new(PLAY);
+        let l = layout(
+            PLAY,
+            &doc,
+            Options {
+                width: 80,
+                ..Options::default()
+            },
+        );
+        let numbers: Vec<usize> = l.rows.iter().filter_map(|r| r.number).collect();
+        assert_eq!(numbers, (1..=18).collect::<Vec<_>>());
+        assert_eq!(l.rows[find_row(&l, "Amca")].number, Some(3));
+        // Focus on the second scene: the first folds to one line.
+        let l = layout(
+            PLAY,
+            &doc,
+            Options {
+                width: 80,
+                focus_scene: Some(1),
+                ..Options::default()
+            },
+        );
+        assert!(
+            row_text(&l, find_row(&l, "▸ Sahne 1"))
+                .contains("▸ Sahne 1 — İç, Değirmen — Akşam · 6 replik")
+        );
+        assert!((0..l.rows.len()).all(|r| !row_text(&l, r).contains("Amca")));
+        assert!(row_text(&l, find_row(&l, "Kar dinmeyecek")).contains("KADIN"));
     }
 
     #[test]

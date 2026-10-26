@@ -25,7 +25,7 @@ Each milestone ends with a demo.
    - Escaping TeX's special characters.
    - Selection, clipboard and undo.
    - Autosave, draft history, atomic writes and a lock file.
-5. **M4 the `\` menu, forms and look.**
+5. ~~**M4 the `\` menu, forms and look.**~~ Done.
    - The `\` suggestion menu, the verbs list, and a fuzzy search window.
    - The new-character, scene and act forms.
    - The theme, typewriter / scene focus / dimming modes, margin numbers, and the mouse.

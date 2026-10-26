@@ -363,6 +363,12 @@ pub fn inline(text: &str, range: Range<usize>, cast: &Cast, in_dialogue: bool) -
                 let name = &text[i + 1..i + 1 + name_len];
                 let end = i + 1 + name_len;
                 let piece = if cast.get(name).is_some() {
+                    // `\\ka{}ya`: the empty group only ends the name.
+                    let end = if text[end..range.end].starts_with("{}") {
+                        end + 2
+                    } else {
+                        end
+                    };
                     Piece {
                         kind: Inline::Ref(name.to_string()),
                         span: i..end,
