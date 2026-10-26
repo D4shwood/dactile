@@ -70,7 +70,10 @@ plays live in, your name, and how the suggestion menu opens.
 
 On the home screen `d` copies the chosen play under a new title, and `f`
 starts a new draft of it next to it (`kar-masali-0.2.tex`, the draft number
-one up, the character cards along).
+one up, the character cards along). Drafts hang under the play they came
+from, as a tree. F2 renames a play (its title, its file, and the files that go
+with it); Del, pressed twice, sends it to the desktop's trash, and `u` brings
+it back.
 
 | Type | You get |
 |---|---|

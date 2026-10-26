@@ -1608,7 +1608,8 @@ impl Writer {
             | FormKind::OpenPath
             | FormKind::Settings
             | FormKind::Copy(_)
-            | FormKind::Fork(_) => {}
+            | FormKind::Fork(_)
+            | FormKind::Rename(_) => {}
             FormKind::Card(alias) => {
                 let card = dactile::sidecar::Card {
                     age: form.get("Yaş").to_string(),

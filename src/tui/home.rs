@@ -27,7 +27,10 @@ pub enum Action {
 }
 
 pub struct Home {
+    /// In the order of their tree, each with whether it and the plays above
+    /// it are the last of their siblings (see `library::tree`).
     plays: Vec<Play>,
+    lasts: Vec<Vec<bool>>,
     sel: usize,
     form: Option<Form>,
     message: Option<(String, bool)>,
@@ -41,13 +44,18 @@ pub struct Home {
     /// When the form on screen opened.
     form_born: std::time::Instant,
     form_kind: Option<std::mem::Discriminant<FormKind>>,
+    /// Del pressed once on this play: a second one throws it away.
+    arming: Option<PathBuf>,
+    /// What went to the trash last, for `u`.
+    thrown: Option<(String, Vec<dactile::trash::Moved>)>,
 }
 
 impl Home {
     pub fn new(cfg: &Config, first_run: bool) -> Home {
         lang::set(lang::resolve(&cfg.lang, None));
         let mut h = Home {
-            plays: library::list(cfg),
+            plays: Vec::new(),
+            lasts: Vec::new(),
             sel: 0,
             form: None,
             message: None,
@@ -56,7 +64,10 @@ impl Home {
             born: std::time::Instant::now(),
             form_born: std::time::Instant::now(),
             form_kind: None,
+            arming: None,
+            thrown: None,
         };
+        h.refresh(cfg);
         if first_run {
             h.form = Some(settings_form(cfg, true));
         }
@@ -65,12 +76,13 @@ impl Home {
 
     pub fn refresh(&mut self, cfg: &Config) {
         lang::set(lang::resolve(&cfg.lang, None));
-        self.plays = library::list(cfg);
+        (self.plays, self.lasts) = library::tree(library::list(cfg)).into_iter().unzip();
         self.sel = self.sel.min(self.plays.len().saturating_sub(1));
     }
 
     pub fn key(&mut self, k: KeyEvent, cfg: &mut Config) -> Action {
         self.message = None;
+        let armed = self.arming.take();
         if let Some(form) = &mut self.form {
             match popup::edit(form, k) {
                 Outcome::Stay => {
@@ -129,6 +141,93 @@ impl Home {
                 });
             }
             KeyCode::Char('s') => self.form = Some(settings_form(cfg, false)),
+            KeyCode::F(2) => {
+                if let Some(p) = self.plays.get(self.sel) {
+                    let raw = dactile::info::get(
+                        &std::fs::read_to_string(&p.path).unwrap_or_default(),
+                        "title",
+                    )
+                    .unwrap_or_default();
+                    let file = p
+                        .path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_default();
+                    self.form = Some(Form {
+                        kind: FormKind::Rename(p.path.clone()),
+                        title: lang::l("adını değiştir", "rename").into(),
+                        fields: vec![
+                            Field::text("Başlık", &dactile::tex::unescape_text(&raw), Vec::new()),
+                            Field::text("Dosya", &file, Vec::new()),
+                        ],
+                        focus: 0,
+                        at: 0..0,
+                        error: None,
+                        confirmed: false,
+                    });
+                }
+            }
+            KeyCode::Delete => {
+                if let Some(p) = self.plays.get(self.sel) {
+                    let path = p.path.clone();
+                    if armed.as_ref() == Some(&path) {
+                        self.throw_away(cfg);
+                    } else if let Some(who) = dactile::file::holder(&path) {
+                        self.message = Some((
+                            lang::f(
+                                "Başka bir Dactile'da açık ({}).",
+                                "Open in another Dactile ({}).",
+                                &[&who],
+                            ),
+                            true,
+                        ));
+                    } else {
+                        let drafts = self.drafts_of(&path).len();
+                        let then = if drafts > 0 {
+                            lang::f(
+                                " Taslakları ({}) yerinde kalır.",
+                                " Its drafts ({}) stay.",
+                                &[&drafts],
+                            )
+                        } else {
+                            String::new()
+                        };
+                        self.message = Some((
+                            lang::f(
+                                "«{}» çöp kutusuna gitsin mi? Del: evet, başka tuş: hayır.{}",
+                                "Send «{}» to the trash? Del: yes, any other key: no.{}",
+                                &[&p.title, &then],
+                            ),
+                            true,
+                        ));
+                        self.arming = Some(path);
+                    }
+                }
+            }
+            KeyCode::Char('u') => {
+                if let Some((title, moved)) = self.thrown.take() {
+                    match dactile::trash::restore(&moved) {
+                        Ok(()) => {
+                            self.refresh(cfg);
+                            if !self.plays.iter().any(|p| p.path == moved[0].from) {
+                                // From outside the plays folder: back in the recent list.
+                                cfg.opened(&moved[0].from);
+                                let _ = cfg.save();
+                                self.refresh(cfg);
+                            }
+                            if let Some(i) = self.plays.iter().position(|p| p.path == moved[0].from)
+                            {
+                                self.sel = i;
+                            }
+                            self.message = Some((
+                                lang::f("«{}» geri geldi.", "«{}» is back.", &[&title]),
+                                false,
+                            ));
+                        }
+                        Err(e) => self.message = Some((format!("{e:#}"), true)),
+                    }
+                }
+            }
             KeyCode::Char('d') => {
                 if let Some(p) = self.plays.get(self.sel) {
                     let title = lang::f("{} (kopya)", "{} (copy)", &[&p.title]);
@@ -349,11 +448,13 @@ impl Home {
                 if let Err(e) = made {
                     return fail(self, form, format!("{e:#}"));
                 }
-                // The character cards and the play's own words go along.
-                let side = dactile::sidecar::path_for(&src);
-                if side.is_file() {
-                    let _ = std::fs::copy(&side, dactile::sidecar::path_for(&path));
-                }
+                // The character cards and the play's own words go along; a
+                // draft remembers what it is a draft of, a copy does not.
+                let mut side = dactile::sidecar::Sidecar::load(&src).unwrap_or_default();
+                side.parent = fork
+                    .then(|| src.file_name().map(|n| n.to_string_lossy().to_string()))
+                    .flatten();
+                let _ = side.save(&path);
                 self.refresh(cfg);
                 if let Some(i) = self.plays.iter().position(|p| p.path == path) {
                     self.sel = i;
@@ -370,6 +471,91 @@ impl Home {
                 ));
                 Action::Stay
             }
+            FormKind::Rename(ref from) => {
+                let from = from.clone();
+                let title = form.get("Başlık").trim().to_string();
+                let mut name = form.get("Dosya").trim().to_string();
+                if title.is_empty() || name.is_empty() {
+                    return fail(
+                        self,
+                        form,
+                        lang::l(
+                            "Başlık ve dosya adı boş olamaz.",
+                            "Title and file name can't be empty.",
+                        )
+                        .into(),
+                    );
+                }
+                if name.contains('/') {
+                    return fail(
+                        self,
+                        form,
+                        lang::l(
+                            "Dosya adında / olamaz: oyun yerinde kalır.",
+                            "No / in the file name: the play stays where it is.",
+                        )
+                        .into(),
+                    );
+                }
+                if !name.ends_with(".tex") {
+                    name.push_str(".tex");
+                }
+                if let Some(who) = dactile::file::holder(&from) {
+                    return fail(
+                        self,
+                        form,
+                        lang::f(
+                            "Başka bir Dactile'da açık ({}).",
+                            "Open in another Dactile ({}).",
+                            &[&who],
+                        ),
+                    );
+                }
+                let to = from.with_file_name(&name);
+                if to != from {
+                    if to.exists() {
+                        return fail(
+                            self,
+                            form,
+                            lang::f(
+                                "{} zaten var.",
+                                "{} already exists.",
+                                &[&config::tilde(&to)],
+                            ),
+                        );
+                    }
+                    let drafts = self.drafts_of(&from);
+                    if let Err(e) = library::rename(&from, &to, &drafts) {
+                        return fail(self, form, format!("{e:#}"));
+                    }
+                    let (old, new) = (from.to_string_lossy(), to.to_string_lossy());
+                    for r in cfg.recent.iter_mut().filter(|r| **r == old) {
+                        *r = new.to_string();
+                    }
+                    let _ = cfg.save();
+                }
+                let text = dactile::file::read(&to).unwrap_or_default();
+                let old_title = dactile::info::get(&text, "title").unwrap_or_default();
+                if dactile::tex::unescape_text(&old_title) != title {
+                    let new_text = library::derive(&text, Some(&title), None);
+                    if let Err(e) = dactile::file::write_atomic(&to, &new_text) {
+                        return fail(self, form, format!("{e:#}"));
+                    }
+                }
+                self.refresh(cfg);
+                if let Some(i) = self.plays.iter().position(|p| p.path == to) {
+                    self.sel = i;
+                }
+                self.message = Some((
+                    lang::f(
+                        "Artık «{}»: {}.",
+                        "Now «{}»: {}.",
+                        &[&title, &config::tilde(&to)],
+                    ),
+                    false,
+                ));
+                Action::Stay
+            }
             FormKind::OpenPath => {
                 let path = resolve_path(form.get("Dosya"), cfg);
                 if !path.is_file() {
@@ -382,6 +568,40 @@ impl Home {
                 Action::Open(path)
             }
             _ => Action::Stay,
+        }
+    }
+
+    /// The plays whose parent is `path`.
+    fn drafts_of(&self, path: &Path) -> Vec<PathBuf> {
+        self.plays
+            .iter()
+            .filter(|p| p.parent.as_deref() == Some(path))
+            .map(|p| p.path.clone())
+            .collect()
+    }
+
+    /// The chosen play, and what goes with it, to the desktop's trash.
+    fn throw_away(&mut self, cfg: &mut Config) {
+        let Some(p) = self.plays.get(self.sel).cloned() else {
+            return;
+        };
+        match library::throw_away(&p.path, &dactile::trash::bin()) {
+            Ok(moved) => {
+                let gone = p.path.to_string_lossy();
+                cfg.recent.retain(|r| *r != gone);
+                let _ = cfg.save();
+                self.refresh(cfg);
+                self.message = Some((
+                    lang::f(
+                        "«{}» çöp kutusunda. u: geri al.",
+                        "«{}» is in the trash. u: undo.",
+                        &[&p.title],
+                    ),
+                    false,
+                ));
+                self.thrown = Some((p.title, moved));
+            }
+            Err(e) => self.message = Some((format!("{e:#}"), true)),
         }
     }
 
@@ -576,6 +796,8 @@ impl Home {
             ("o", lang::l("dosya aç", "open a file")),
             ("d", lang::l("kopya", "copy")),
             ("f", lang::l("yeni taslak", "new draft")),
+            ("F2", lang::l("ad", "rename")),
+            ("Del", lang::l("çöpe", "trash")),
             ("s", lang::l("ayarlar", "settings")),
             ("q", lang::l("çık", "quit")),
         ];
@@ -609,20 +831,57 @@ impl Home {
     }
 
     /// The plays, two rows each: the title and when, then who and how long.
+    /// A play's drafts hang under it as a tree.
     fn draw_list(&self, f: &mut Frame, area: Rect) {
         let per = 3usize;
         let rows = (area.height as usize / per).max(1);
         let start = self.sel.saturating_sub(rows.saturating_sub(1));
+        let guide = Style::default().fg(FAINT);
         let mut lines = Vec::new();
         for (i, p) in self.plays.iter().enumerate().skip(start).take(rows) {
             let sel = i == self.sel;
             let w = area.width as usize;
+            let lasts = &self.lasts[i];
+            let has_drafts = self.lasts.get(i + 1).is_some_and(|n| n.len() > lasts.len());
+            // The lines down the left: one per level above, then the branch.
+            let above: String = lasts
+                .iter()
+                .take(lasts.len().saturating_sub(1))
+                .map(|&last| if last { "   " } else { "│  " })
+                .collect();
+            let branch = match lasts.last() {
+                Some(true) => "└─ ",
+                Some(false) => "├─ ",
+                None => "",
+            };
+            let under: String = lasts
+                .iter()
+                .map(|&last| if last { "   " } else { "│  " })
+                .chain(std::iter::once(if has_drafts { "│ " } else { "  " }))
+                .collect();
+            // A draft of the same title goes by its draft number.
+            let parent = p
+                .parent
+                .as_ref()
+                .and_then(|up| self.plays.iter().find(|x| x.path == *up));
+            let same = parent.is_some_and(|x| x.title == p.title);
+            let name = match (&p.draft, same) {
+                (Some(d), true) => format!("{} {d}", lang::l("taslak", "draft")),
+                (None, true) => p
+                    .path
+                    .file_stem()
+                    .map(|s| s.to_string_lossy().to_string())
+                    .unwrap_or_default(),
+                _ => p.title.clone(),
+            };
             let stamp = when(p.modified);
-            let title = popup::fit(&p.title, w.saturating_sub(stamp.width() + 6));
-            let gap = w.saturating_sub(2 + title.width() + stamp.width());
+            let lead = above.width() + branch.width();
+            let title = popup::fit(&name, w.saturating_sub(stamp.width() + 6 + lead));
+            let gap = w.saturating_sub(2 + lead + title.width() + stamp.width());
             lines.push(popup::row(
                 vec![
                     popup::mark(sel),
+                    Span::styled(format!("{above}{branch}"), guide),
                     Span::styled(
                         title,
                         Style::default()
@@ -636,10 +895,12 @@ impl Home {
                 area.width,
             ));
             let mut about = Vec::new();
-            if !p.author.is_empty() {
+            if !p.author.is_empty() && !parent.is_some_and(|x| x.author == p.author) {
                 about.push(p.author.clone());
             }
-            if let Some(d) = &p.draft {
+            if let Some(d) = &p.draft
+                && !same
+            {
                 about.push(format!("{} {d}", lang::l("taslak", "draft")));
             }
             about.push(lang::f(
@@ -653,15 +914,19 @@ impl Home {
             lines.push(popup::row(
                 vec![
                     Span::raw("  "),
+                    Span::styled(under.clone(), guide),
                     Span::styled(
-                        popup::fit(&about.join("  ·  "), w.saturating_sub(2)),
+                        popup::fit(&about.join("  ·  "), w.saturating_sub(2 + under.width())),
                         Style::default().fg(MUTED),
                     ),
                 ],
                 sel,
                 area.width,
             ));
-            lines.push(Line::from(""));
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(under, guide),
+            ]));
         }
         f.render_widget(Paragraph::new(lines).style(theme::base()), area);
     }
@@ -728,11 +993,7 @@ fn fork_name(src: &Path, draft: &str) -> String {
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_default();
     // Without an earlier draft's number at its end.
-    let base = stem
-        .rsplit_once('-')
-        .filter(|(_, tail)| tail.chars().all(|c| c.is_ascii_digit() || c == '.'))
-        .map_or(stem.as_str(), |(b, _)| b)
-        .to_string();
+    let base = library::draft_base(&stem).to_string();
     // Letters, digits and dots stay; the rest becomes a dash.
     let draft: String = draft
         .trim()

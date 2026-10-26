@@ -121,6 +121,8 @@ pub enum FormKind {
     Copy(std::path::PathBuf),
     /// A new draft of this play, next to it.
     Fork(std::path::PathBuf),
+    /// A new title or file name for this play.
+    Rename(std::path::PathBuf),
     /// This character's lines go to another one.
     Merge(String),
     /// A new character takes some of this one's scenes.

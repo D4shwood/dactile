@@ -92,20 +92,21 @@ fn alive(pid: u32, lock_host: &str) -> bool {
     }
 }
 
+/// Who holds the play open, when another living Dactile does.
+pub fn holder(play: &Path) -> Option<String> {
+    let held = fs::read_to_string(lock_path(play)).ok()?;
+    let mut parts = held.split_whitespace();
+    let pid: u32 = parts.next()?.parse().ok()?;
+    let lock_host = parts.next().unwrap_or("");
+    (pid != std::process::id() && alive(pid, lock_host)).then(|| held.trim().to_string())
+}
+
 /// Takes the lock, unless a living Dactile holds it. A stale lock (its
 /// process gone) is taken over.
 pub fn lock(play: &Path) -> Result<LockState> {
     let path = lock_path(play);
-    if let Ok(held) = fs::read_to_string(&path) {
-        let mut parts = held.split_whitespace();
-        let pid: Option<u32> = parts.next().and_then(|p| p.parse().ok());
-        let lock_host = parts.next().unwrap_or("").to_string();
-        if let Some(pid) = pid
-            && pid != std::process::id()
-            && alive(pid, &lock_host)
-        {
-            return Ok(LockState::Taken(held.trim().to_string()));
-        }
+    if let Some(held) = holder(play) {
+        return Ok(LockState::Taken(held));
     }
     let line = format!(
         "{} {} {}\n",

@@ -31,6 +31,9 @@ pub struct Sidecar {
     /// Words the spell checker accepts in this play.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub words: Vec<String>,
+    /// The play this one is a draft of: its file name, next to it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
     /// Character cards by alias.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub cards: BTreeMap<String, Card>,
