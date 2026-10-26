@@ -117,13 +117,11 @@
     \bool_lazy_and:nnT { \IfBooleanTF {#2} { \c_true_bool } { \c_false_bool } }
       { ! \str_if_eq_p:nn {#1} { plain } }
       { \seq_gput_right:Nn \g__tiy_cover_seq {#6} }
-    % Group members are listed in the cast table only; they don't widen the column.
-    \str_if_eq:nnF {#1} { group }
-      {
-        \hbox_set:Nn \l_tmpa_box { \__tiy_namefont:n {#6} #5 \space }
-        \dim_gset:Nn \g__tiy_widest_dim
-          { \dim_max:nn { \g__tiy_widest_dim } { \box_wd:N \l_tmpa_box } }
-      }
+    % Every character can speak, group members too, so each one widens the
+    % name column (up to \setmaxnamewidth).
+    \hbox_set:Nn \l_tmpa_box { \__tiy_namefont:n {#6} #5 \space }
+    \dim_gset:Nn \g__tiy_widest_dim
+      { \dim_max:nn { \g__tiy_widest_dim } { \box_wd:N \l_tmpa_box } }
     \cs_gset_protected:cpn {#6} { \__tiy_who:n {#6} }
     \cs_gset_protected:cpn {#6do} { \__tiy_do:n {#6} }
     \cs_gset_protected:cpn {#6font} { \__tiy_namefont:n {#6} }
