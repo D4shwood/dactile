@@ -7,6 +7,7 @@
 //! Blocks the app doesn't understand are always shown raw.
 
 use crate::cast::{self, Cast};
+use crate::lang;
 use crate::lex::{self, Block, Inline, Kind};
 use crate::outline::{self, Outline};
 use crate::source::{self, Parts};
@@ -272,7 +273,11 @@ pub fn layout(text: &str, doc: &Doc, opts: Options) -> Layout {
             // One summary row for the whole preamble.
             if i == 0 {
                 let n = doc.cast.characters.len();
-                let s = format!("▸ Kişiler ({n}) · oyun bilgisi");
+                let s = lang::f(
+                    "▸ Kişiler ({}) · oyun bilgisi",
+                    "▸ Cast ({}) · cover details",
+                    &[&n],
+                );
                 let glyphs = chip(&s, Style::Faint, doc.parts.preamble.start);
                 let width = b.width;
                 b.flow(0, &glyphs, 0, width, Align::Left, None, start);
@@ -295,7 +300,11 @@ pub fn layout(text: &str, doc: &Doc, opts: Options) -> Layout {
                 } else {
                     format!(" — {}", scene.place.trim())
                 };
-                let s = format!("▸ Sahne {}{place} · {} replik", scene.label, scene.lines);
+                let s = lang::f(
+                    "▸ Sahne {}{} · {} replik",
+                    "▸ Scene {}{} · {} lines",
+                    &[&scene.label, &place, &scene.lines],
+                );
                 let glyphs = chip(&s, Style::Faint, doc.blocks[i].span.start);
                 let width = b.width;
                 b.flow(i, &glyphs, 0, width, Align::Center, None, start);
@@ -683,7 +692,7 @@ impl Builder<'_> {
                     .doc
                     .act_of(b)
                     .map_or(0, |a| self.doc.outline.acts[a].number);
-                let mut s = format!("{}. PERDE", outline::roman(act));
+                let mut s = format!("{}. {}", outline::roman(act), lang::l("PERDE", "ACT"));
                 if !title.trim().is_empty() {
                     s.push_str(&format!(" · {}", title.trim()));
                 }
@@ -701,7 +710,7 @@ impl Builder<'_> {
             Kind::Scene { place, .. } => {
                 let scene = self.doc.scene_of(b).map(|s| &self.doc.outline.scenes[s]);
                 let label = scene.map_or("?".to_string(), |s| s.label.clone());
-                let mut s = format!("Sahne {label}");
+                let mut s = format!("{} {label}", lang::l("Sahne", "Scene"));
                 if !place.trim().is_empty() {
                     s.push_str(&format!(" — {}", place.trim()));
                 }
@@ -731,7 +740,7 @@ impl Builder<'_> {
                 }
             }
             Kind::Beat => {
-                let glyphs = chip("(Sus.)", Style::Direction, lead);
+                let glyphs = chip(lang::l("(Sus.)", "(Pause.)"), Style::Direction, lead);
                 self.flow(b, &glyphs, 0, self.width, Align::Left, Some(span.end), row);
             }
             Kind::Unknown { .. } => {

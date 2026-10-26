@@ -3,6 +3,7 @@
 
 use super::theme::{self, BEIGE, CLARET, FAINT, FG, MUTED};
 use dactile::complete::{self, Item};
+use dactile::lang;
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Modifier, Style};
@@ -105,6 +106,10 @@ pub enum FormKind {
     /// The cover details and draft/final.
     Info,
     Find,
+    /// Home screen: a new play, opening a file, the settings.
+    NewPlay,
+    OpenPath,
+    Settings,
 }
 
 pub struct Field {
@@ -269,7 +274,7 @@ pub fn draw_verbs(f: &mut Frame, area: Rect, at: Position, v: &Verbs) {
         .unwrap_or(10) as u16;
     let r = near(area, at, w.clamp(16, 40), rows + 2);
     f.render_widget(Clear, r);
-    f.render_widget(panel("fiil"), r);
+    f.render_widget(panel(lang::l("fiil", "verb")), r);
     let start = v.sel.saturating_sub(rows as usize - 1);
     let lines: Vec<Line> = v
         .shown
@@ -302,7 +307,13 @@ pub fn draw_search(f: &mut Frame, area: Rect, m: &Menu, query: &str) {
         height: h,
     };
     f.render_widget(Clear, r);
-    f.render_widget(panel("ara — karakter, komut"), r);
+    f.render_widget(
+        panel(lang::l(
+            "ara — karakter, komut",
+            "search — characters, commands",
+        )),
+        r,
+    );
     let inner = inner(r);
     let q = Line::from(vec![
         Span::styled("› ", Style::default().fg(CLARET)),
@@ -350,7 +361,7 @@ pub fn draw_form(f: &mut Frame, area: Rect, form: &Form) {
     let label_w = form
         .fields
         .iter()
-        .map(|x| x.label.chars().count())
+        .map(|x| label_of(&x.label).chars().count())
         .max()
         .unwrap_or(4) as u16
         + 2;
@@ -370,12 +381,17 @@ pub fn draw_form(f: &mut Frame, area: Rect, form: &Form) {
         let y = inner.y + i as u16;
         let focused = i == form.focus;
         let label = Span::styled(
-            format!("{:<w$}", fl.label, w = label_w as usize),
+            format!("{:<w$}", label_of(&fl.label), w = label_w as usize),
             Style::default().fg(if focused { BEIGE } else { MUTED }),
         );
         let value = if fl.toggle {
             Span::styled(
-                if fl.on() { "[x] evet" } else { "[ ] hayır" }.to_string(),
+                if fl.on() {
+                    lang::l("[x] evet", "[x] yes")
+                } else {
+                    lang::l("[ ] hayır", "[ ] no")
+                }
+                .to_string(),
                 Style::default().fg(FG),
             )
         } else {
@@ -416,9 +432,15 @@ pub fn draw_form(f: &mut Frame, area: Rect, form: &Form) {
         y += 1;
     }
     let hint = if form.kind == FormKind::Find {
-        "⏎ sonraki   ^R değiştir   Alt+R hepsini   ↑↓ alan   Esc kapat"
+        lang::l(
+            "⏎ sonraki   ^R değiştir   Alt+R hepsini   ↑↓ alan   Esc kapat",
+            "⏎ next   ^R replace   Alt+R all   ↑↓ field   Esc close",
+        )
     } else {
-        "⏎ tamam   Tab tamamla   ↑↓ alan   Esc vazgeç"
+        lang::l(
+            "⏎ tamam   Tab tamamla   ↑↓ alan   Esc vazgeç",
+            "⏎ done   Tab complete   ↑↓ field   Esc cancel",
+        )
     };
     f.render_widget(
         Paragraph::new(hint).style(theme::base().fg(FAINT)),
@@ -431,6 +453,90 @@ pub fn draw_form(f: &mut Frame, area: Rect, form: &Form) {
     if let Some(c) = cursor {
         f.set_cursor_position(c);
     }
+}
+
+/// A field's label on screen: the Turkish label is also its key in code.
+pub fn label_of(key: &str) -> &str {
+    if lang::is_tr() {
+        return key;
+    }
+    match key {
+        "Yer" => "Place",
+        "Zaman" => "Time",
+        "Başlık" => "Title",
+        "Ad" => "Name",
+        "Kısaltma" => "Alias",
+        "Tam ad" => "Full name",
+        "Açıklama" => "Description",
+        "Kişiler tablosunda" => "In the cast table",
+        "Yıldızlı" => "Starred",
+        "Gizli (HERKES gibi)" => "Hidden (like ALL)",
+        "Yaş" => "Age",
+        "İlişkiler" => "Relations",
+        "Notlar" => "Notes",
+        "Ara" => "Find",
+        "Değiştir" => "Replace",
+        "Yazar" => "Author",
+        "Taslak no" => "Draft no",
+        "Telif" => "Copyright",
+        "Adres" => "Address",
+        "E-posta" => "E-mail",
+        "Telefon" => "Phone",
+        "Final (baskı)" => "Final (print)",
+        "Dil" => "Language",
+        "Oyunlar klasörü" => "Plays folder",
+        "Adın" => "Your name",
+        "Öneri menüsü" => "Suggestion menu",
+        "Dakikada kelime" => "Words a minute",
+        "Dosya" => "File",
+        other => other,
+    }
+}
+
+/// What a key did to a form.
+pub enum Outcome {
+    Stay,
+    Submit,
+    Cancel,
+}
+
+/// Field editing shared by every form: typing, Backspace, ↑↓, Tab to
+/// complete or move on, Space on a yes/no field.
+pub fn edit(form: &mut Form, k: ratatui::crossterm::event::KeyEvent) -> Outcome {
+    use ratatui::crossterm::event::KeyCode;
+    form.error = None;
+    let n = form.fields.len();
+    match k.code {
+        KeyCode::Esc => return Outcome::Cancel,
+        KeyCode::Enter => return Outcome::Submit,
+        KeyCode::Up | KeyCode::BackTab => form.focus = (form.focus + n - 1) % n,
+        KeyCode::Down => form.focus = (form.focus + 1) % n,
+        KeyCode::Tab => {
+            if !form.complete() {
+                form.focus = (form.focus + 1) % n;
+            }
+        }
+        KeyCode::Backspace => {
+            let f = &mut form.fields[form.focus];
+            if !f.toggle {
+                f.value.pop();
+                f.touched = true;
+            }
+        }
+        KeyCode::Char(' ') if form.fields[form.focus].toggle => {
+            let f = &mut form.fields[form.focus];
+            f.value = if f.on() { "hayır" } else { "evet" }.into();
+        }
+        KeyCode::Char(c) => {
+            let f = &mut form.fields[form.focus];
+            if !f.toggle {
+                f.value.push(c);
+                f.touched = true;
+            }
+        }
+        _ => {}
+    }
+    Outcome::Stay
 }
 
 fn inner(r: Rect) -> Rect {

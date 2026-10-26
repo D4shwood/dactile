@@ -33,7 +33,7 @@ Each milestone ends with a demo.
    - The cast panel: rename, order and character cards, saved in a sidecar file.
    - The scene navigator and running time.
    - Turkish spell check (hunspell-tr), play info, find and replace, help.
-7. **M6** home screen, setup wizard, settings, Turkish and English.
+7. ~~**M6** home screen, setup wizard, settings, Turkish and English.~~ Done.
 8. **M7** README with a GIF, `dactile install`, Linux release, beta.
 
 ## Later

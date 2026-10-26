@@ -6,9 +6,12 @@
 pub mod buffer;
 pub mod cast;
 pub mod complete;
+pub mod config;
 pub mod file;
 pub mod info;
+pub mod lang;
 pub mod lex;
+pub mod library;
 pub mod outline;
 pub mod render;
 pub mod sidecar;

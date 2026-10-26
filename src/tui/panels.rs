@@ -2,6 +2,7 @@
 
 use super::theme::{self, BEIGE, CLARET, FAINT, FG, MUTED, WARN};
 use dactile::cast::{Kind as CastKind, Row};
+use dactile::lang;
 use dactile::lex::{self, Kind};
 use dactile::outline;
 use dactile::render::Doc;
@@ -108,11 +109,11 @@ pub fn draw_cast(f: &mut Frame, area: Rect, doc: &Doc, text: &str, side: &Sideca
     let r = big(area);
     f.render_widget(Clear, r);
     let order = if p.by_lines {
-        "en çok konuşan"
+        lang::l("en çok konuşan", "most lines")
     } else {
-        "oyundaki sıra"
+        lang::l("oyundaki sıra", "the play's order")
     };
-    f.render_widget(panel(&format!("kişiler — {order}")), r);
+    f.render_widget(panel(&lang::f("kişiler — {}", "cast — {}", &[&order])), r);
     let inn = inner(r);
     let st = stats(doc, text);
     let list = entries(doc, &st, p.by_lines);
@@ -149,8 +150,8 @@ pub fn draw_cast(f: &mut Frame, area: Rect, doc: &Doc, text: &str, side: &Sideca
                 };
                 let star = if c.star { "★" } else { " " };
                 let kind = match c.kind {
-                    CastKind::Hidden => " gizli",
-                    CastKind::Plain => " tabloda yok",
+                    CastKind::Hidden => lang::l(" gizli", " hidden"),
+                    CastKind::Plain => lang::l(" tabloda yok", " not in the table"),
                     _ => "",
                 };
                 let name_style = Style::default()
@@ -179,7 +180,11 @@ pub fn draw_cast(f: &mut Frame, area: Rect, doc: &Doc, text: &str, side: &Sideca
                     Span::styled(format!(" \\{:<8}", c.alias), Style::default().fg(MUTED)),
                     Span::styled(format!("{:<20}", c.script), name_style),
                     Span::styled(
-                        format!("{lines_n:>4} replik {words:>6} kelime"),
+                        lang::f(
+                            "{} replik {} kelime",
+                            "{} lines {} words",
+                            &[&format!("{lines_n:>4}"), &format!("{words:>6}")],
+                        ),
                         Style::default().fg(MUTED),
                     ),
                     Span::styled(format!("{full} {desc}{kind}"), Style::default().fg(FAINT)),
@@ -196,9 +201,15 @@ pub fn draw_cast(f: &mut Frame, area: Rect, doc: &Doc, text: &str, side: &Sideca
         },
     );
     let keys = if p.by_lines {
-        "⏎ kart   e düzenle   n yeni   d sil   s sıra   Esc kapat"
+        lang::l(
+            "⏎ kart   e düzenle   n yeni   d sil   s sıra   Esc kapat",
+            "⏎ card   e edit   n new   d delete   s order   Esc close",
+        )
     } else {
-        "⏎ kart   e düzenle   n yeni   d sil   Alt+↑↓ taşı   s sıra   Esc kapat"
+        lang::l(
+            "⏎ kart   e düzenle   n yeni   d sil   Alt+↑↓ taşı   s sıra   Esc kapat",
+            "⏎ card   e edit   n new   d delete   Alt+↑↓ move   s order   Esc close",
+        )
     };
     f.render_widget(
         Paragraph::new(keys).style(theme::base().fg(FAINT)),
@@ -222,7 +233,11 @@ pub fn draw_scenes(f: &mut Frame, area: Rect, doc: &Doc, wpm: u32, sel: usize) {
         .map(|s| timing::scene_secs(s, wpm))
         .sum();
     f.render_widget(
-        panel(&format!("sahneler — toplam ≈ {}", timing::format(total))),
+        panel(&lang::f(
+            "sahneler — toplam ≈ {}",
+            "scenes — total ≈ {}",
+            &[&timing::format(total)],
+        )),
         r,
     );
     let inn = inner(r);
@@ -241,7 +256,11 @@ pub fn draw_scenes(f: &mut Frame, area: Rect, doc: &Doc, wpm: u32, sel: usize) {
                     format!(" · {}", a.title.trim())
                 };
                 lines.push(Line::from(Span::styled(
-                    format!("{}. PERDE{title}", outline::roman(a.number)),
+                    format!(
+                        "{}. {}{title}",
+                        outline::roman(a.number),
+                        lang::l("PERDE", "ACT")
+                    ),
                     Style::default().fg(CLARET).add_modifier(Modifier::BOLD),
                 )));
             }
@@ -266,15 +285,18 @@ pub fn draw_scenes(f: &mut Frame, area: Rect, doc: &Doc, wpm: u32, sel: usize) {
                 Style::default().fg(CLARET),
             ),
             Span::styled(
-                format!("Sahne {}{place}", s.label),
+                format!("{} {}{place}", lang::l("Sahne", "Scene"), s.label),
                 Style::default().fg(if is_sel { BEIGE } else { FG }),
             ),
             Span::styled(
-                format!(
+                lang::f(
                     "   {} replik · {} kelime · ≈ {}",
-                    s.lines,
-                    s.words,
-                    timing::format(timing::scene_secs(s, wpm))
+                    "   {} lines · {} words · ≈ {}",
+                    &[
+                        &s.lines,
+                        &s.words,
+                        &timing::format(timing::scene_secs(s, wpm)),
+                    ],
                 ),
                 Style::default().fg(MUTED),
             ),
@@ -286,7 +308,10 @@ pub fn draw_scenes(f: &mut Frame, area: Rect, doc: &Doc, wpm: u32, sel: usize) {
     }
     if doc.outline.scenes.is_empty() {
         lines.push(Line::from(Span::styled(
-            "Henüz sahne yok: \\sahne ile başla.",
+            lang::l(
+                "Henüz sahne yok: \\sahne ile başla.",
+                "No scenes yet: start one with \\sahne.",
+            ),
             Style::default().fg(MUTED),
         )));
     }
@@ -302,7 +327,11 @@ pub fn draw_scenes(f: &mut Frame, area: Rect, doc: &Doc, wpm: u32, sel: usize) {
         },
     );
     f.render_widget(
-        Paragraph::new("⏎ git   ↑↓ seç   Esc kapat").style(theme::base().fg(FAINT)),
+        Paragraph::new(lang::l(
+            "⏎ git   ↑↓ seç   Esc kapat",
+            "⏎ go   ↑↓ choose   Esc close",
+        ))
+        .style(theme::base().fg(FAINT)),
         Rect {
             y: inn.y + inn.height.saturating_sub(1),
             height: 1,
@@ -313,49 +342,104 @@ pub fn draw_scenes(f: &mut Frame, area: Rect, doc: &Doc, wpm: u32, sel: usize) {
 
 // ------------------------------------------------------------------ help
 
-pub const HELP: &[(&str, &str)] = &[
-    ("", "Yazarken"),
+pub const HELP: &[(&str, &str, &str)] = &[
+    ("", "Yazarken", "Writing"),
     (
         "\\",
         "öneri menüsü: karakterler, komutlar (↑↓ seç, Tab/⏎ kabul, Esc kapat)",
+        "suggestions: characters, commands (↑↓ choose, Tab/⏎ take, Esc close)",
     ),
     (
         "\\se + boşluk",
         "SELİN konuşur; satır başında tanımsız kısaltma yeni karakter sorar",
+        "SELİN speaks; an unknown alias at a line's start asks for a new character",
     ),
-    ("\\sedo + boşluk", "yönerge: (Selin …), fiil listesi açılır"),
-    ("((", "replik içinde yönerge: (güler)"),
+    (
+        "\\sedo + boşluk",
+        "yönerge: (Selin …), fiil listesi açılır",
+        "a direction: (Selin …), with a list of verbs",
+    ),
+    (
+        "((",
+        "replik içinde yönerge: (güler)",
+        "a direction inside a line: (laughs)",
+    ),
     (
         "Backspace",
         "bir makronun içine girince satır ham açılır; Esc kapatır",
+        "into a macro: the line shows its source; Esc closes it",
     ),
-    ("^K", "karakter ya da komut ara"),
-    ("", "Pencereler"),
-    ("^O", "kişiler: düzenle, kart, sıra, yeni, sil"),
-    ("^G", "sahneler ve süreler"),
-    ("Alt+I", "oyun bilgisi: başlık, yazar, taslak/final"),
-    ("^F", "bul ve değiştir"),
-    ("Alt+S", "imleçteki kelime için yazım önerileri"),
-    ("", "Görünüm"),
-    ("F2", "tüm metin ham"),
-    ("F3", "daktilo: imleç satırı ortada"),
-    ("F4", "sahne odağı: diğer sahneler kapanır"),
-    ("F5", "imleç dışını soldur"),
-    ("Alt+P", "kişi tanımları ve oyun bilgisi satırlarını aç"),
-    ("", "Dosya"),
-    ("^S", "kaydet (zaten kendiliğinden kaydeder)"),
-    ("^Z / ^Y", "geri al / yinele"),
-    ("^C ^X ^V", "kopyala / kes / yapıştır"),
-    ("^Q", "çık"),
+    (
+        "^K",
+        "karakter ya da komut ara",
+        "search characters and commands",
+    ),
+    ("", "Pencereler", "Panels"),
+    (
+        "^O",
+        "kişiler: düzenle, kart, sıra, yeni, sil",
+        "cast: edit, card, order, new, delete",
+    ),
+    ("^G", "sahneler ve süreler", "scenes and running times"),
+    (
+        "Alt+I",
+        "oyun bilgisi: başlık, yazar, taslak/final",
+        "cover details: title, author, draft/final",
+    ),
+    ("^F", "bul ve değiştir", "find and replace"),
+    (
+        "Alt+S",
+        "imleçteki kelime için yazım önerileri",
+        "spelling suggestions for the word at the cursor",
+    ),
+    ("", "Görünüm", "View"),
+    ("F2", "tüm metin ham", "everything as source"),
+    (
+        "F3",
+        "daktilo: imleç satırı ortada",
+        "typewriter: the cursor's line in the middle",
+    ),
+    (
+        "F4",
+        "sahne odağı: diğer sahneler kapanır",
+        "scene focus: the other scenes fold",
+    ),
+    ("F5", "imleç dışını soldur", "dim all but the cursor's line"),
+    (
+        "Alt+P",
+        "kişi tanımları ve oyun bilgisi satırlarını aç",
+        "show the cast and cover lines",
+    ),
+    ("", "Dosya", "File"),
+    (
+        "^S",
+        "kaydet (zaten kendiliğinden kaydeder)",
+        "save (it saves by itself anyway)",
+    ),
+    ("^Z / ^Y", "geri al / yinele", "undo / redo"),
+    ("^C ^X ^V", "kopyala / kes / yapıştır", "copy / cut / paste"),
+    ("^Q", "çık", "quit"),
 ];
 
 pub fn draw_help(f: &mut Frame, area: Rect) {
     let r = big(area);
     f.render_widget(Clear, r);
-    f.render_widget(panel("yardım — F1 ya da Esc kapatır"), r);
+    f.render_widget(
+        panel(lang::l(
+            "yardım — F1 ya da Esc kapatır",
+            "help — F1 or Esc closes",
+        )),
+        r,
+    );
     let lines: Vec<Line> = HELP
         .iter()
-        .map(|(k, what)| {
+        .map(|(k, tr, en)| {
+            let what = if lang::is_tr() { tr } else { en };
+            let k = if lang::is_tr() {
+                k.to_string()
+            } else {
+                k.replace("boşluk", "space")
+            };
             if k.is_empty() {
                 Line::from(Span::styled(
                     what.to_string(),

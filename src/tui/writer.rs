@@ -14,7 +14,7 @@ use dactile::render::{self, Doc, Layout, Options, Stop};
 use dactile::sidecar::Sidecar;
 use dactile::source;
 use dactile::spell::{self, Speller};
-use dactile::{info, timing};
+use dactile::{info, lang, timing};
 use ratatui::Frame;
 use ratatui::crossterm::event::{
     KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
@@ -68,6 +68,9 @@ pub struct Writer {
     focus: bool,
     /// Everything but the cursor's block in the background.
     dim: bool,
+    /// Suggestions only with ^K, not on every backslash.
+    menu_manual: bool,
+    default_wpm: u32,
     /// The top of the text area on screen, for the mouse.
     text_top: u16,
     sidecar: Sidecar,
@@ -100,15 +103,20 @@ enum Popup {
 }
 
 impl Writer {
-    pub fn open(path: &Path) -> Result<Writer> {
+    pub fn open(path: &Path, cfg: &dactile::config::Config) -> Result<Writer> {
         let text = file::read(path)?;
+        lang::set(lang::resolve(&cfg.lang, Some(&text)));
         let (lock, read_only, message) = match file::lock(path)? {
             LockState::Ours(l) => (Some(l), false, None),
             LockState::Taken(who) => (
                 None,
                 true,
                 Some((
-                    format!("Başka bir Dactile bu oyunu açmış ({who}); salt okunur açıldı."),
+                    lang::f(
+                        "Başka bir Dactile bu oyunu açmış ({}); salt okunur açıldı.",
+                        "Another Dactile has this play open ({}); opened read-only.",
+                        &[&who],
+                    ),
                     true,
                 )),
             ),
@@ -145,9 +153,11 @@ impl Writer {
             clipboard: arboard::Clipboard::new().ok(),
             copied: String::new(),
             popup: Popup::None,
-            typewriter: false,
-            focus: false,
-            dim: false,
+            typewriter: cfg.typewriter,
+            focus: cfg.focus,
+            dim: cfg.dim,
+            menu_manual: cfg.menu == "manual",
+            default_wpm: cfg.wpm,
             text_top: 1,
             sidecar: Sidecar::load(path).unwrap_or_default(),
             speller: None,
@@ -259,11 +269,23 @@ impl Writer {
 
     fn editable(&mut self) -> bool {
         if self.read_only {
-            self.say("Salt okunur: oyun başka bir Dactile'da açık.", true);
+            self.say(
+                lang::l(
+                    "Salt okunur: oyun başka bir Dactile'da açık.",
+                    "Read-only: the play is open in another Dactile.",
+                ),
+                true,
+            );
             return false;
         }
         if self.in_folded_preamble() {
-            self.say("Kişiler ve oyun bilgisi kapalı: Alt+P ile aç.", false);
+            self.say(
+                lang::l(
+                    "Kişiler ve oyun bilgisi kapalı: Alt+P ile aç.",
+                    "The cast and cover lines are folded: Alt+P opens them.",
+                ),
+                false,
+            );
             return false;
         }
         true
@@ -342,9 +364,9 @@ impl Writer {
                 self.typewriter = !self.typewriter;
                 self.say(
                     if self.typewriter {
-                        "Daktilo modu açık."
+                        lang::l("Daktilo modu açık.", "Typewriter mode on.")
                     } else {
-                        "Daktilo modu kapalı."
+                        lang::l("Daktilo modu kapalı.", "Typewriter mode off.")
                     },
                     false,
                 );
@@ -355,9 +377,12 @@ impl Writer {
                 self.snap_back();
                 self.say(
                     if self.focus {
-                        "Sahne odağı: yalnız bu sahne."
+                        lang::l(
+                            "Sahne odağı: yalnız bu sahne.",
+                            "Scene focus: this scene only.",
+                        )
                     } else {
-                        "Sahne odağı kapalı."
+                        lang::l("Sahne odağı kapalı.", "Scene focus off.")
                     },
                     false,
                 );
@@ -384,7 +409,7 @@ impl Writer {
                     .to_string();
                 self.popup = Popup::Form(Form {
                     kind: FormKind::Find,
-                    title: "bul".into(),
+                    title: lang::l("bul", "find").into(),
                     fields: vec![
                         Field::text("Ara", &q, Vec::new()),
                         Field::text("Değiştir", "", Vec::new()),
@@ -631,7 +656,9 @@ impl Writer {
             self.raw_here = true;
             self.buf.insert("\\");
             let items = complete::items(&self.doc, self.block());
-            self.popup = Popup::Menu(Menu::new(items, self.buf.cursor));
+            if !self.menu_manual {
+                self.popup = Popup::Menu(Menu::new(items, self.buf.cursor));
+            }
         } else if self.raw_now() {
             let name = if c == ' ' { self.macro_before() } else { None };
             self.buf.insert(&c.to_string());
@@ -893,7 +920,14 @@ impl Writer {
                             self.sidecar.add_word(&word);
                             let _ = self.sidecar.save(&self.path);
                             self.refresh_known();
-                            self.say(&format!("«{word}» bu oyunun sözlüğüne eklendi."), false);
+                            self.say(
+                                &lang::f(
+                                    "«{}» bu oyunun sözlüğüne eklendi.",
+                                    "«{}» added to this play's words.",
+                                    &[&word],
+                                ),
+                                false,
+                            );
                         } else if self.editable() {
                             let at = range.start;
                             self.buf.apply(
@@ -972,7 +1006,7 @@ impl Writer {
     fn scene_form(&self, at: usize) -> Form {
         Form {
             kind: FormKind::Scene,
-            title: "yeni sahne".into(),
+            title: lang::l("yeni sahne", "new scene").into(),
             fields: vec![
                 Field::text("Yer", "", complete::places(&self.doc)),
                 Field::text("Zaman", "", complete::times(&self.doc)),
@@ -987,7 +1021,7 @@ impl Writer {
     fn act_form(&self, at: usize) -> Form {
         Form {
             kind: FormKind::Act,
-            title: "yeni perde".into(),
+            title: lang::l("yeni perde", "new act").into(),
             fields: vec![Field::text("Başlık", "", Vec::new())],
             focus: 0,
             at: at..at,
@@ -1004,7 +1038,7 @@ impl Writer {
         let at = insert_at.unwrap_or(usize::MAX);
         Form {
             kind: FormKind::Character,
-            title: "yeni karakter".into(),
+            title: lang::l("yeni karakter", "new character").into(),
             fields: vec![
                 Field::text("Ad", "", Vec::new()),
                 alias_field,
@@ -1139,7 +1173,7 @@ impl Writer {
                 };
                 self.write_line(form.at.start, &text, &nl);
             }
-            FormKind::Find => {}
+            FormKind::Find | FormKind::NewPlay | FormKind::OpenPath | FormKind::Settings => {}
             FormKind::Card(alias) => {
                 let card = dactile::sidecar::Card {
                     age: form.get("Yaş").to_string(),
@@ -1152,7 +1186,14 @@ impl Writer {
                     self.sidecar.cards.insert(alias.clone(), card);
                 }
                 if let Err(e) = self.sidecar.save(&self.path) {
-                    self.say(&format!("Kart kaydedilemedi: {e:#}"), true);
+                    self.say(
+                        &lang::f(
+                            "Kart kaydedilemedi: {}",
+                            "Couldn't save the card: {}",
+                            &[&format!("{e:#}")],
+                        ),
+                        true,
+                    );
                 }
                 self.popup = Popup::Cast(CastPanel {
                     sel: self.cast_index(&alias),
@@ -1181,7 +1222,10 @@ impl Writer {
                     let all = 0..self.buf.text.len();
                     self.buf.apply(&[dactile::tex::Edit::new(all, t)], cursor);
                     self.edited();
-                    self.say("Oyun bilgisi güncellendi.", false);
+                    self.say(
+                        lang::l("Oyun bilgisi güncellendi.", "Cover details updated."),
+                        false,
+                    );
                 }
             }
             FormKind::EditCharacter(old) => {
@@ -1236,12 +1280,19 @@ impl Writer {
                 let script = form.get("Ad").to_string();
                 let alias = form.get("Kısaltma").to_string();
                 if script.is_empty() {
-                    return Err(Box::new((form, "Ad boş olamaz.".into())));
+                    return Err(Box::new((
+                        form,
+                        lang::l("Ad boş olamaz.", "The name can't be empty.").into(),
+                    )));
                 }
                 if alias.is_empty() || !alias.chars().all(|c| c.is_ascii_alphabetic()) {
                     return Err(Box::new((
                         form,
-                        "Kısaltma yalnız İngilizce harflerden oluşmalı (ş, ç… olmadan).".into(),
+                        lang::l(
+                            "Kısaltma yalnız İngilizce harflerden oluşmalı (ş, ç… olmadan).",
+                            "The alias takes plain letters a–z only.",
+                        )
+                        .into(),
                     )));
                 }
                 let typed_here = form.at.start == usize::MAX;
@@ -1309,10 +1360,14 @@ impl Writer {
         let script = form.get("Ad").to_string();
         let alias = form.get("Kısaltma").to_string();
         if script.is_empty() {
-            return Err("Ad boş olamaz.".into());
+            return Err(lang::l("Ad boş olamaz.", "The name can't be empty.").into());
         }
         if alias.is_empty() || !alias.chars().all(|c| c.is_ascii_alphabetic()) {
-            return Err("Kısaltma yalnız İngilizce harflerden oluşmalı (ş, ç… olmadan).".into());
+            return Err(lang::l(
+                "Kısaltma yalnız İngilizce harflerden oluşmalı (ş, ç… olmadan).",
+                "The alias takes plain letters a–z only.",
+            )
+            .into());
         }
         if Some(alias.as_str()) != old && self.doc.cast.alias_taken(&alias) {
             return Err(format!(
@@ -1399,7 +1454,10 @@ impl Writer {
                 }
                 self.keep_visible();
             }
-            None => self.say(&format!("«{needle}» bulunamadı."), false),
+            None => self.say(
+                &lang::f("«{}» bulunamadı.", "«{}» not found.", &[&needle]),
+                false,
+            ),
         }
     }
 
@@ -1443,7 +1501,14 @@ impl Writer {
             self.buf.apply(&edits, cursor.min(edits[0].range.start));
             self.edited();
         }
-        self.say(&format!("{n} yer değişti (^Z geri alır)."), false);
+        self.say(
+            &lang::f(
+                "{} yer değişti (^Z geri alır).",
+                "{} replaced (^Z undoes).",
+                &[&n],
+            ),
+            false,
+        );
     }
 
     /// Puts `text` on a line of its own at `at` and the cursor on the line after.
@@ -1469,7 +1534,7 @@ impl Writer {
     // ------------------------------------------------------------ cast panel
 
     fn wpm(&self) -> u32 {
-        self.sidecar.wpm.unwrap_or(timing::WPM)
+        self.sidecar.wpm.unwrap_or(self.default_wpm)
     }
 
     fn cast_entries(&self, by_lines: bool) -> Vec<Entry> {
@@ -1529,7 +1594,13 @@ impl Writer {
                         }
                     }
                     Some(_) => {}
-                    None => self.say("Yalnız kişiler tablosundaki satırlar taşınır.", false),
+                    None => self.say(
+                        lang::l(
+                            "Yalnız kişiler tablosundaki satırlar taşınır.",
+                            "Only rows of the cast table move.",
+                        ),
+                        false,
+                    ),
                 }
             }
             KeyCode::Up => {
@@ -1582,7 +1653,14 @@ impl Writer {
                         self.edited();
                         self.sidecar.cards.remove(&a);
                         let _ = self.sidecar.save(&self.path);
-                        self.say(&format!("\\{a} silindi (^Z geri alır)."), false);
+                        self.say(
+                            &lang::f(
+                                "\\{} silindi (^Z geri alır).",
+                                "\\{} deleted (^Z undoes).",
+                                &[&a],
+                            ),
+                            false,
+                        );
                         if let Popup::Cast(p) = &mut self.popup {
                             p.sel = sel.min(n.saturating_sub(2));
                         }
@@ -1598,7 +1676,7 @@ impl Writer {
         let c = c.as_ref();
         let mut f = self.character_form(alias, None);
         f.kind = FormKind::EditCharacter(alias.to_string());
-        f.title = format!("\\{alias} düzenle");
+        f.title = lang::f("\\{} düzenle", "edit \\{}", &[&alias]);
         let set = |f: &mut Form, label: &str, v: String| {
             if let Some(x) = f.field_mut(label) {
                 x.value = v;
@@ -1640,7 +1718,11 @@ impl Writer {
             .map_or(alias.to_string(), |c| c.script.clone());
         Form {
             kind: FormKind::Card(alias.to_string()),
-            title: format!("{name} — kart (PDF'e girmez)"),
+            title: lang::f(
+                "{} — kart (PDF'e girmez)",
+                "{} — card (not printed)",
+                &[&name],
+            ),
             fields: vec![
                 Field::text("Yaş", &card.age, Vec::new()),
                 Field::text("İlişkiler", &card.relations, Vec::new()),
@@ -1664,7 +1746,7 @@ impl Writer {
         fields.push(Field::flag("Final (baskı)", info::is_final(&self.buf.text)));
         Form {
             kind: FormKind::Info,
-            title: "oyun bilgisi".into(),
+            title: lang::l("oyun bilgisi", "cover details").into(),
             fields,
             focus: 0,
             at: 0..0,
@@ -1725,9 +1807,15 @@ impl Writer {
     fn suggest(&mut self) {
         if self.speller.is_none() {
             let why = if self.speller_rx.is_some() {
-                "Sözlük yükleniyor, birazdan."
+                lang::l(
+                    "Sözlük yükleniyor, birazdan.",
+                    "The dictionary is loading, a moment.",
+                )
             } else {
-                "Türkçe sözlük bulunamadı (tr_TR.aff/.dic): paru -S hunspell-tr ile kurulabilir."
+                lang::l(
+                    "Türkçe sözlük bulunamadı (tr_TR.aff/.dic): paru -S hunspell-tr ile kurulabilir.",
+                    "No Turkish dictionary (tr_TR.aff/.dic): install hunspell-tr.",
+                )
             };
             self.say(why, true);
             return;
@@ -1736,7 +1824,13 @@ impl Writer {
         let Some(b) = self.block() else { return };
         let words = spell::words(&self.buf.text, &self.doc, b);
         let Some(range) = words.into_iter().find(|r| r.start <= cur && cur <= r.end) else {
-            self.say("İmleç bir kelimenin üstünde değil.", false);
+            self.say(
+                lang::l(
+                    "İmleç bir kelimenin üstünde değil.",
+                    "The cursor isn't on a word.",
+                ),
+                false,
+            );
             return;
         };
         let word = self.buf.text[range.clone()].to_string();
@@ -1745,7 +1839,11 @@ impl Writer {
             .as_ref()
             .map(|s| s.suggest(&word))
             .unwrap_or_default();
-        items.push(format!("+ «{word}» oyunun sözlüğüne"));
+        items.push(lang::f(
+            "+ «{}» oyunun sözlüğüne",
+            "+ «{}» to the play's words",
+            &[&word],
+        ));
         self.popup = Popup::Suggest(range, items, 0);
     }
 
@@ -1788,7 +1886,14 @@ impl Writer {
                     self.speller = Some(sp);
                     self.spell_cache.clear();
                 }
-                Err(e) => self.say(&format!("Sözlük yüklenemedi: {e:#}"), true),
+                Err(e) => self.say(
+                    &lang::f(
+                        "Sözlük yüklenemedi: {}",
+                        "Couldn't load the dictionary: {}",
+                        &[&format!("{e:#}")],
+                    ),
+                    true,
+                ),
             }
         }
         if self.checked.elapsed() >= CHECK_EVERY {
@@ -1814,7 +1919,10 @@ impl Writer {
         if self.buf.dirty {
             self.conflict = true;
             self.say(
-                "Dosya başka yerde değişti. ^S senin halini yazar; ^Q'dan önce karar ver.",
+                lang::l(
+                    "Dosya başka yerde değişti. ^S senin halini yazar; ^Q'dan önce karar ver.",
+                    "The file changed elsewhere. ^S writes yours over it; decide before ^Q.",
+                ),
                 true,
             );
             return;
@@ -1826,7 +1934,13 @@ impl Writer {
             self.raw_here = false;
             self.relayout();
             self.snap_back();
-            self.say("Dosya başka yerde değişti; yeniden yüklendi.", false);
+            self.say(
+                lang::l(
+                    "Dosya başka yerde değişti; yeniden yüklendi.",
+                    "The file changed elsewhere; reloaded.",
+                ),
+                false,
+            );
         }
         self.disk_time = now;
     }
@@ -1845,11 +1959,23 @@ impl Writer {
                 self.disk_time = file::modified(&self.path);
                 let _ = file::snapshot(&self.history, &self.buf.text, false);
                 if by_hand {
-                    self.say("Kaydedildi.", false);
+                    self.say(lang::l("Kaydedildi.", "Saved."), false);
                 }
             }
-            Err(e) => self.say(&format!("Kaydedilemedi: {e:#}"), true),
+            Err(e) => self.say(
+                &lang::f(
+                    "Kaydedilemedi: {}",
+                    "Couldn't save: {}",
+                    &[&format!("{e:#}")],
+                ),
+                true,
+            ),
         }
+    }
+
+    /// The view toggles, for the settings: typewriter, scene focus, dim.
+    pub fn view(&self) -> (bool, bool, bool) {
+        (self.typewriter, self.focus, self.dim)
     }
 
     /// On quit: save what's left and keep a version.
@@ -1957,13 +2083,19 @@ impl Writer {
                 .unwrap_or_default()
         });
         let state = if self.read_only {
-            Span::styled("salt okunur ", Style::default().fg(WARN))
+            Span::styled(
+                lang::l("salt okunur ", "read-only "),
+                Style::default().fg(WARN),
+            )
         } else if self.conflict {
-            Span::styled("dışarıda değişti ", Style::default().fg(WARN))
+            Span::styled(
+                lang::l("dışarıda değişti ", "changed elsewhere "),
+                Style::default().fg(WARN),
+            )
         } else if self.buf.dirty {
             Span::styled("• ", Style::default().fg(MUTED))
         } else {
-            Span::styled("kaydedildi ", Style::default().fg(FAINT))
+            Span::styled(lang::l("kaydedildi ", "saved "), Style::default().fg(FAINT))
         };
         let left = Line::from(vec![
             Span::styled(" dactile", Style::default().fg(MUTED)),
@@ -2056,8 +2188,9 @@ impl Writer {
         if let Some(a) = block.and_then(|b| self.doc.act_of(b)) {
             parts.push(Span::styled(
                 format!(
-                    " {}. Perde",
-                    outline::roman(self.doc.outline.acts[a].number)
+                    " {}. {}",
+                    outline::roman(self.doc.outline.acts[a].number),
+                    lang::l("Perde", "Act")
                 ),
                 Style::default().fg(CLARET),
             ));
@@ -2065,13 +2198,14 @@ impl Writer {
         if let Some(s) = block.and_then(|b| self.doc.scene_of(b)) {
             let s = &self.doc.outline.scenes[s];
             parts.push(Span::styled(
-                format!(" · Sahne {}", s.label),
+                format!(" · {} {}", lang::l("Sahne", "Scene"), s.label),
                 Style::default().fg(CLARET),
             ));
             parts.push(Span::styled(
                 format!(
-                    " · {} kelime · ≈ {}",
+                    " · {} {} · ≈ {}",
                     s.words,
+                    lang::l("kelime", "words"),
                     timing::format(timing::scene_secs(s, self.wpm()))
                 ),
                 Style::default().fg(MUTED),
@@ -2088,7 +2222,7 @@ impl Writer {
         }
         if self.raw_now() {
             parts.push(Span::styled(
-                "  HAM",
+                lang::l("  HAM", "  RAW"),
                 Style::default().fg(WARN).add_modifier(Modifier::BOLD),
             ));
         }
@@ -2100,15 +2234,15 @@ impl Writer {
 
     fn draw_keys(&self, f: &mut Frame, area: Rect) {
         let keys = [
-            ("^S", "kaydet"),
-            ("^Z", "geri al"),
-            ("^C/^X/^V", "kopyala"),
-            ("F1", "yardım"),
-            ("\\", "öneri"),
-            ("^O", "kişiler"),
-            ("^G", "sahneler"),
-            ("^F", "bul"),
-            ("^Q", "çık"),
+            ("^S", lang::l("kaydet", "save")),
+            ("^Z", lang::l("geri al", "undo")),
+            ("^C/^X/^V", lang::l("kopyala", "copy")),
+            ("F1", lang::l("yardım", "help")),
+            ("\\", lang::l("öneri", "suggest")),
+            ("^O", lang::l("kişiler", "cast")),
+            ("^G", lang::l("sahneler", "scenes")),
+            ("^F", lang::l("bul", "find")),
+            ("^Q", lang::l("çık", "quit")),
         ];
         let mut spans = vec![Span::raw(" ")];
         for (k, what) in keys {

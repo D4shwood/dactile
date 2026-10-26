@@ -18,6 +18,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
+    /// Starts a new play in the plays folder and opens it.
+    New { title: String },
     /// Lists a play's characters as the app reads them (changes nothing).
     Cast { play: PathBuf },
     /// Lists a play's acts and scenes as the app reads them (changes nothing).
@@ -34,15 +36,26 @@ fn main() -> Result<()> {
     match cli.cmd {
         Some(Cmd::Cast { play }) => print_cast(&play),
         Some(Cmd::Outline { play, aux }) => print_outline(&play, aux),
-        None if cli.play.is_some() => tui::run(cli.play.as_ref().unwrap()),
-        None => {
-            println!(
-                "dactile {} — tiyatro class {}",
-                env!("CARGO_PKG_VERSION"),
-                dactile::class::version()
-            );
-            Ok(())
+        Some(Cmd::New { title }) => {
+            let cfg = dactile::config::Config::load()?;
+            let path = cfg.plays_dir().join(dactile::library::file_name(&title));
+            anyhow::ensure!(!path.exists(), "{} already exists", path.display());
+            std::fs::create_dir_all(cfg.plays_dir())?;
+            let lang = match cfg.lang.as_str() {
+                "en" => dactile::lang::Lang::En,
+                "tr" => dactile::lang::Lang::Tr,
+                _ => dactile::lang::system(),
+            };
+            dactile::file::write_atomic(
+                &path,
+                &dactile::library::template(&title, &cfg.author, lang),
+            )?;
+            tui::run(tui::Start::Play(path))
         }
+        None => match cli.play {
+            Some(p) => tui::run(tui::Start::Play(p)),
+            None => tui::run(tui::Start::Home),
+        },
     }
 }
 

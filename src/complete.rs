@@ -3,6 +3,7 @@
 //! `\xdo` direction usually starts with.
 
 use crate::cast::{self, Cast, Kind as CastKind};
+use crate::lang;
 use crate::lex::Kind;
 use crate::render::Doc;
 
@@ -55,7 +56,9 @@ pub fn items(doc: &Doc, block: Option<usize>) -> Vec<Item> {
         let desc = c.desc.as_deref().filter(|d| !d.trim().is_empty());
         let label = match (desc, c.kind) {
             (Some(d), _) => format!("{} — {d}", c.script),
-            (None, CastKind::Hidden) => format!("{} (tabloda yok)", c.script),
+            (None, CastKind::Hidden) => {
+                lang::f("{} (tabloda yok)", "{} (not in the table)", &[&c.script])
+            }
             (None, _) => c.script.clone(),
         };
         let group = if scene_cast.contains(&c.alias) {
@@ -82,28 +85,61 @@ pub fn items(doc: &Doc, block: Option<usize>) -> Vec<Item> {
         };
         out.push(Item {
             key: format!("{}do", c.alias),
-            label: format!("yönerge: {} bir şey yapar", c.script),
+            label: lang::f(
+                "yönerge: {} bir şey yapar",
+                "direction: {} does something",
+                &[&c.script],
+            ),
             group,
             action: insert(&text, text.len()),
         });
     }
     let commands: [(&str, &str, Action); 8] = [
-        ("sahne", "yeni sahne: yer ve zaman sorulur", Action::Scene),
-        ("perde", "yeni perde", Action::Act),
-        ("karakter", "yeni karakter", Action::NewCharacter),
+        (
+            "sahne",
+            lang::l(
+                "yeni sahne: yer ve zaman sorulur",
+                "new scene: asks for place and time",
+            ),
+            Action::Scene,
+        ),
+        ("perde", lang::l("yeni perde", "new act"), Action::Act),
+        (
+            "karakter",
+            lang::l("yeni karakter", "new character"),
+            Action::NewCharacter,
+        ),
         (
             "action",
-            "isimsiz sahne yönü: (Işıklar söner.)",
+            lang::l(
+                "isimsiz sahne yönü: (Işıklar söner.)",
+                "a direction: (The lights fade.)",
+            ),
             insert("\\action{}", 8),
         ),
         (
             "stagedir",
-            "ortalanmış sahne tasviri",
+            lang::l("ortalanmış sahne tasviri", "a centred stage description"),
             insert("\\stagedir{}", 10),
         ),
-        ("middir", "sağa yaslı kısa not", insert("\\middir{}", 8)),
-        ("ic", "replik içinde yönerge: (güler)", insert("\\ic{}", 4)),
-        ("beat", "kısa sessizlik: (Sus.)", insert("\\beat", 5)),
+        (
+            "middir",
+            lang::l("sağa yaslı kısa not", "a short note on the right"),
+            insert("\\middir{}", 8),
+        ),
+        (
+            "ic",
+            lang::l(
+                "replik içinde yönerge: (güler)",
+                "a direction inside a line: (laughs)",
+            ),
+            insert("\\ic{}", 4),
+        ),
+        (
+            "beat",
+            lang::l("kısa sessizlik: (Sus.)", "a short pause"),
+            insert("\\beat", 5),
+        ),
     ];
     for (key, label, action) in commands {
         out.push(Item {
@@ -114,15 +150,24 @@ pub fn items(doc: &Doc, block: Option<usize>) -> Vec<Item> {
         });
     }
     let macros: [(&str, &str); 9] = [
-        ("ru", "Rusça (Kiril) bölüm"),
-        ("en", "İngilizce bölüm"),
-        ("de", "Almanca bölüm"),
-        ("fr", "Fransızca bölüm"),
-        ("el", "Yunanca bölüm"),
-        ("textit", "italik"),
-        ("textbf", "kalın"),
-        ("setinlinename", "replik içinde geçen adı değiştir"),
-        ("clearpage", "yeni sayfa"),
+        (
+            "ru",
+            lang::l("Rusça (Kiril) bölüm", "a Russian (Cyrillic) passage"),
+        ),
+        ("en", lang::l("İngilizce bölüm", "an English passage")),
+        ("de", lang::l("Almanca bölüm", "a German passage")),
+        ("fr", lang::l("Fransızca bölüm", "a French passage")),
+        ("el", lang::l("Yunanca bölüm", "a Greek passage")),
+        ("textit", lang::l("italik", "italics")),
+        ("textbf", lang::l("kalın", "bold")),
+        (
+            "setinlinename",
+            lang::l(
+                "replik içinde geçen adı değiştir",
+                "the name used inside lines",
+            ),
+        ),
+        ("clearpage", lang::l("yeni sayfa", "new page")),
     ];
     for (key, label) in macros {
         let text = if key == "clearpage" {
@@ -224,10 +269,18 @@ pub fn verbs(doc: &Doc, text: &str) -> Vec<String> {
     }
     counts.sort_by_key(|c| std::cmp::Reverse(c.1));
     let mut out: Vec<String> = counts.into_iter().map(|(v, _)| v).collect();
-    for v in [
-        "Girer.", "Çıkar.", "Oturur.", "Kalkar.", "Güler.", "Susar.", "Ağlar.", "Bakar.", "Döner.",
-        "Bekler.",
-    ] {
+    let common: &[&str] = if lang::is_tr() {
+        &[
+            "Girer.", "Çıkar.", "Oturur.", "Kalkar.", "Güler.", "Susar.", "Ağlar.", "Bakar.",
+            "Döner.", "Bekler.",
+        ]
+    } else {
+        &[
+            "Enters.", "Exits.", "Sits.", "Stands.", "Laughs.", "Pauses.", "Cries.", "Looks.",
+            "Turns.", "Waits.",
+        ]
+    };
+    for v in common {
         if !out.iter().any(|o| o == v) {
             out.push(v.to_string());
         }
@@ -258,7 +311,12 @@ pub fn times(doc: &Doc) -> Vec<String> {
             }
         }
     }
-    for t in ["Gece", "Sabah", "Öğle", "Akşam", "Gün batımı", "Şafak"] {
+    let usual: &[&str] = if lang::is_tr() {
+        &["Gece", "Sabah", "Öğle", "Akşam", "Gün batımı", "Şafak"]
+    } else {
+        &["Night", "Morning", "Noon", "Evening", "Sunset", "Dawn"]
+    };
+    for t in usual {
         if !out.iter().any(|o| o == t) {
             out.push(t.to_string());
         }

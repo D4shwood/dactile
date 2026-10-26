@@ -15,15 +15,20 @@ pub fn scene_secs(s: &Scene, wpm: u32) -> u32 {
     ((spoken + directions) * 60.0 / wpm).round() as u32
 }
 
-/// "45 sn", "12 dk", "1 sa 05 dk".
+/// "45 sn", "12 dk", "1 sa 05 dk" (in English "45 s", "12 min", "1 h 05 min").
 pub fn format(secs: u32) -> String {
+    let (s, m, h) = if crate::lang::is_tr() {
+        ("sn", "dk", "sa")
+    } else {
+        ("s", "min", "h")
+    };
     let mins = (secs + 30) / 60;
     if secs < 60 {
-        format!("{secs} sn")
+        format!("{secs} {s}")
     } else if mins < 60 {
-        format!("{mins} dk")
+        format!("{mins} {m}")
     } else {
-        format!("{} sa {:02} dk", mins / 60, mins % 60)
+        format!("{} {h} {:02} {m}", mins / 60, mins % 60)
     }
 }
 
