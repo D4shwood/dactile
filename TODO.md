@@ -49,5 +49,7 @@ Each milestone ends with a demo.
 - A play as a folder, acts in separate files with `\input`
 - Sharing within a troupe; director's notes
 - Moving scenes
+- Renaming a character in plain text too ("Selin'in" → "Selma'nın", suffixes by vowel harmony); on hold
+- Merging two characters, or splitting one by scene
 - Windows, a phone app on the same core
 - The class: English command names; check fonts without TeX's missing-font noise
