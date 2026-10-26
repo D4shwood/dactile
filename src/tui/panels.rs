@@ -592,6 +592,68 @@ pub fn draw_split(
     );
 }
 
+/// ^P: the palette, its query on top.
+pub fn draw_palette(
+    f: &mut Frame,
+    area: Rect,
+    query: &str,
+    items: &[super::writer::PItem],
+    sel: usize,
+) {
+    let h = (items.len() as u16 + 5).min(20);
+    let r = Rect {
+        y: area.y + 2,
+        ..centered(area, 72, h)
+    };
+    float(f, r);
+    f.render_widget(panel(lang::l("ne yapalım? — ^P", "what now? — ^P")), r);
+    let inn = inner(r);
+    f.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("› ", Style::default().fg(CLARET)),
+            Span::styled(query.to_string(), Style::default().fg(FG)),
+        ]))
+        .style(theme::base().bg(ratatui::style::Color::Rgb(0x22, 0x22, 0x22))),
+        Rect { height: 1, ..inn },
+    );
+    let rows = inn.height.saturating_sub(2) as usize;
+    let start = sel.saturating_sub(rows.saturating_sub(1));
+    let lines: Vec<Line> = items
+        .iter()
+        .enumerate()
+        .skip(start)
+        .take(rows)
+        .map(|(n, it)| {
+            let is_sel = n == sel;
+            let room = (inn.width as usize).saturating_sub(it.key.width() + 4);
+            let name = fit(&it.name, room);
+            let gap = room.saturating_sub(name.width()) + 2;
+            row(
+                vec![
+                    mark(is_sel),
+                    Span::styled(name, Style::default().fg(if is_sel { BEIGE } else { FG })),
+                    Span::raw(" ".repeat(gap)),
+                    Span::styled(it.key.to_string(), Style::default().fg(MUTED)),
+                ],
+                is_sel,
+                inn.width,
+            )
+        })
+        .collect();
+    f.render_widget(
+        Paragraph::new(lines).style(theme::base()),
+        Rect {
+            y: inn.y + 2,
+            height: inn.height.saturating_sub(2),
+            ..inn
+        },
+    );
+    f.set_cursor_position(ratatui::layout::Position::new(
+        inn.x + 2 + query.width() as u16,
+        inn.y,
+    ));
+}
+
 // ------------------------------------------------------------------ spelling
 
 pub fn draw_suggest(

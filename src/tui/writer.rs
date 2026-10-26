@@ -1,5 +1,6 @@
 //! The writing screen: the play as it will read, edited in place.
 
+use super::anim;
 use super::keys;
 use super::panels::{self, CastPanel, Entry, ScenesPanel};
 use super::popup::{self, Field, Form, FormKind, Menu, Verbs};
@@ -28,6 +29,14 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, channel};
 use std::time::{Duration, Instant, SystemTime};
+
+/// How long a window takes to open, and how long a message stays before
+/// it fades.
+const POPUP_OPENS: Duration = Duration::from_millis(160);
+const MESSAGE_STAYS: Duration = Duration::from_secs(4);
+const MESSAGE_FADES: Duration = Duration::from_millis(900);
+/// How fast a new heading types itself.
+const REVEAL_PER_CHAR: Duration = Duration::from_millis(28);
 
 /// Saved this long after the last keystroke.
 const AUTOSAVE_AFTER: Duration = Duration::from_secs(2);
@@ -61,6 +70,17 @@ pub struct Writer {
     raw_all: bool,
     preamble_open: bool,
     scroll: usize,
+    /// The scroll as drawn: it glides to `scroll` when animations are on.
+    shown: usize,
+    glide: f32,
+    animations: bool,
+    /// A heading just written: it types itself out from then.
+    reveal: Option<(usize, Instant)>,
+    /// When the open popup opened, and which kind it is.
+    popup_born: Instant,
+    popup_kind: Option<std::mem::Discriminant<Popup>>,
+    /// When the message on the status line came.
+    message_at: Instant,
     /// The column Up/Down try to keep.
     goal_col: Option<u16>,
     _lock: Option<file::Lock>,
@@ -82,8 +102,8 @@ pub struct Writer {
     focus: bool,
     /// Everything but the cursor's block in the background.
     dim: bool,
-    /// The play on a paper page; dark otherwise.
-    paper: bool,
+    /// paper, sepia, night, contrast or dark.
+    theme: String,
     /// Page view: A4-shaped sheets broken where the PDF breaks.
     pages: bool,
     /// `NAME:` just became a line with its space: the next space is dropped.
@@ -128,8 +148,9 @@ pub struct View {
     pub typewriter: bool,
     pub focus: bool,
     pub dim: bool,
-    pub paper: bool,
+    pub theme: String,
     pub pages: bool,
+    pub animations: bool,
 }
 
 enum Popup {
@@ -147,6 +168,8 @@ enum Popup {
     Scenes(ScenesPanel),
     /// Splitting a character: which of its scenes the new one takes.
     Split(SplitPanel),
+    /// ^P: everything there is to do, by name; the query and the choice.
+    Palette(String, usize),
     /// F1: the keyboard, with the key last pressed or pointed at.
     Help(keys::Help),
     /// Alt+S: spelling suggestions for the word at `range`.
@@ -193,6 +216,13 @@ impl Writer {
             raw_all: false,
             preamble_open: false,
             scroll: 0,
+            shown: 0,
+            glide: 0.0,
+            animations: cfg.animations,
+            reveal: None,
+            popup_born: Instant::now(),
+            popup_kind: None,
+            message_at: Instant::now(),
             goal_col: None,
             _lock: lock,
             read_only,
@@ -207,7 +237,7 @@ impl Writer {
             typewriter: cfg.typewriter,
             focus: cfg.focus,
             dim: cfg.dim,
-            paper: cfg.paper,
+            theme: cfg.theme().to_string(),
             pages: cfg.pages,
             eat_space: false,
             keyboard: cfg.keyboard.clone(),
@@ -296,11 +326,13 @@ impl Writer {
     }
 
     fn palette(&self) -> &'static theme::Palette {
-        if self.paper {
-            &theme::PAPER
-        } else {
-            &theme::DARK
-        }
+        theme::palette(&self.theme)
+    }
+
+    /// A page of its own colour on the dark around it; the dark theme is
+    /// all one.
+    fn on_paper(&self) -> bool {
+        self.theme != "dark"
     }
 
     /// Rebuilds the model and the layout from the text.
@@ -392,6 +424,37 @@ impl Writer {
 
     fn say(&mut self, s: &str, warn: bool) {
         self.message = Some((s.to_string(), warn));
+        self.message_at = Instant::now();
+    }
+
+    /// Whether something on screen is still moving: the loop draws faster.
+    pub fn animating(&self) -> bool {
+        self.animations
+            && (self.shown != self.scroll
+                || self.reveal.is_some()
+                || self.popup_born.elapsed() < POPUP_OPENS
+                || (self.message.is_some()
+                    && (MESSAGE_STAYS..MESSAGE_STAYS + MESSAGE_FADES)
+                        .contains(&self.message_at.elapsed())))
+    }
+
+    /// Moves the drawn scroll a step toward the real one.
+    fn glide_scroll(&mut self) {
+        if !self.animations {
+            self.shown = self.scroll;
+            self.glide = self.scroll as f32;
+            return;
+        }
+        let target = self.scroll as f32;
+        // Far jumps cut most of the way at once, then ease in.
+        if (target - self.glide).abs() > self.text_height() as f32 * 3.0 {
+            self.glide = target - (target - self.glide).signum() * self.text_height() as f32;
+        }
+        self.glide += (target - self.glide) * 0.3;
+        if (target - self.glide).abs() < 0.5 {
+            self.glide = target;
+        }
+        self.shown = self.glide.round() as usize;
     }
 
     fn raw_now(&self) -> bool {
@@ -493,7 +556,11 @@ impl Writer {
                 self.dim = !self.dim;
             }
             KeyCode::F(6) => {
-                self.paper = !self.paper;
+                self.theme = theme::next_theme(&self.theme).to_string();
+                self.say(
+                    &lang::f("Tema: {}", "Theme: {}", &[&theme::theme_name(&self.theme)]),
+                    false,
+                );
             }
             KeyCode::F(7) => {
                 self.pages = !self.pages;
@@ -555,6 +622,7 @@ impl Writer {
             KeyCode::Char('i') if alt => self.popup = Popup::Form(self.info_form()),
             KeyCode::Char('s') if alt => self.suggest(),
             KeyCode::F(1) => self.popup = Popup::Help(keys::Help::default()),
+            KeyCode::Char('p') if ctrl => self.popup = Popup::Palette(String::new(), 0),
             KeyCode::Char('k') if ctrl => {
                 let items = complete::items(&self.doc, self.block());
                 self.popup = Popup::Search(Menu::new(items, self.buf.cursor), String::new());
@@ -1199,6 +1267,32 @@ impl Writer {
                 }
                 true
             }
+            Popup::Palette(q, sel) => {
+                let n = palette_items(q).len();
+                match k.code {
+                    KeyCode::Esc => self.popup = Popup::None,
+                    KeyCode::Char('p') if ctrl => self.popup = Popup::None,
+                    KeyCode::Up => *sel = sel.saturating_sub(1),
+                    KeyCode::Down => *sel = (*sel + 1).min(n.saturating_sub(1)),
+                    KeyCode::Backspace => {
+                        q.pop();
+                        *sel = 0;
+                    }
+                    KeyCode::Char(c) if !ctrl => {
+                        q.push(c);
+                        *sel = 0;
+                    }
+                    KeyCode::Enter => {
+                        let chosen = palette_items(q).get(*sel).map(|i| i.act);
+                        self.popup = Popup::None;
+                        if let Some(act) = chosen {
+                            self.run(act);
+                        }
+                    }
+                    _ => {}
+                }
+                true
+            }
             Popup::Split(p) => {
                 let n = p.scenes.len();
                 match k.code {
@@ -1491,6 +1585,9 @@ impl Writer {
                     (false, false) => format!("\\sahne[{}]", parts.join(" — ")),
                 };
                 self.write_line(form.at.start, &text, &nl);
+                if self.animations {
+                    self.reveal = Some((form.at.start, Instant::now()));
+                }
             }
             FormKind::Act => {
                 let title = dactile::tex::escape_text(form.get("Başlık"));
@@ -1502,6 +1599,9 @@ impl Writer {
                     (false, false) => format!("\\perde[{title}]"),
                 };
                 self.write_line(form.at.start, &text, &nl);
+                if self.animations {
+                    self.reveal = Some((form.at.start, Instant::now()));
+                }
             }
             FormKind::Find
             | FormKind::NewPlay
@@ -2179,6 +2279,42 @@ impl Writer {
         );
     }
 
+    /// Does what a palette entry says.
+    fn run(&mut self, act: PAct) {
+        match act {
+            PAct::Key(code, mods) => self.key(KeyEvent::new(code, mods)),
+            PAct::Theme(t) => {
+                self.theme = t.to_string();
+                self.say(
+                    &lang::f("Tema: {}", "Theme: {}", &[&theme::theme_name(t)]),
+                    false,
+                );
+            }
+            PAct::Animations => {
+                self.animations = !self.animations;
+                self.say(
+                    if self.animations {
+                        lang::l("Animasyonlar açık.", "Animations on.")
+                    } else {
+                        lang::l("Animasyonlar kapalı.", "Animations off.")
+                    },
+                    false,
+                );
+            }
+            PAct::NewScene | PAct::NewAct => {
+                if self.editable() {
+                    let at = self.buf.cursor;
+                    self.popup = Popup::Form(if act == PAct::NewScene {
+                        self.scene_form(at)
+                    } else {
+                        self.act_form(at)
+                    });
+                }
+            }
+            PAct::NewCharacter => self.popup = Popup::Form(self.character_form("", None)),
+        }
+    }
+
     // ------------------------------------------------------------ putting away
 
     /// The marked units, or the chosen one; a scene inside a chosen act goes
@@ -2474,7 +2610,7 @@ impl Writer {
             .lay
             .rows
             .iter()
-            .skip(self.scroll)
+            .skip(self.shown)
             .take(h)
             .filter_map(|r| r.block)
             .collect();
@@ -2588,7 +2724,7 @@ impl Writer {
                     }
                     return;
                 }
-                let row = self.scroll + (m.row - self.text_top) as usize;
+                let row = self.shown + (m.row - self.text_top) as usize;
                 let col = m.column.saturating_sub(self.sheet().text_x);
                 let hit = (row..self.lay.rows.len())
                     .chain((0..row).rev())
@@ -2707,7 +2843,8 @@ impl Writer {
             typewriter: self.typewriter,
             focus: self.focus,
             dim: self.dim,
-            paper: self.paper,
+            theme: self.theme.clone(),
+            animations: self.animations,
             pages: self.pages,
         }
     }
@@ -2746,6 +2883,18 @@ impl Writer {
 
     pub fn draw(&mut self, f: &mut Frame) {
         let area = f.area();
+        let kind =
+            (!matches!(self.popup, Popup::None)).then(|| std::mem::discriminant(&self.popup));
+        if kind != self.popup_kind {
+            self.popup_kind = kind;
+            self.popup_born = Instant::now();
+        }
+        // A heading being typed out is done once all of it shows.
+        if let Some((_, born)) = self.reveal
+            && born.elapsed() > REVEAL_PER_CHAR * 120
+        {
+            self.reveal = None;
+        }
         if area.width != self.width || area.height != self.height {
             self.width = area.width;
             self.height = area.height;
@@ -2764,6 +2913,7 @@ impl Writer {
             ..area
         };
         self.text_top = body.y;
+        self.glide_scroll();
         self.draw_sheet(f, body);
         self.draw_map(f, body);
         self.mark_misspelt();
@@ -2782,14 +2932,17 @@ impl Writer {
         self.draw_keys(f, keys);
         let at = self
             .cursor_stop()
-            .filter(|c| c.row >= self.scroll)
+            .filter(|c| c.row >= self.shown)
             .map(|c| {
                 Position::new(
                     body.x + self.sheet().text_x + c.col,
-                    body.y + (c.row - self.scroll) as u16,
+                    body.y + (c.row - self.shown) as u16,
                 )
             })
             .unwrap_or(Position::new(body.x, body.y));
+        // What was under the window, for it to unroll over.
+        let before = (self.animations && kind.is_some() && self.popup_born.elapsed() < POPUP_OPENS)
+            .then(|| f.buffer_mut().clone());
         match &self.popup {
             Popup::None => {}
             Popup::Menu(m) => {
@@ -2817,6 +2970,10 @@ impl Writer {
             }
             // Drawn below: it keeps where its caps are, for the mouse.
             Popup::Help(_) => {}
+            Popup::Palette(q, sel) => {
+                let items = palette_items(q);
+                panels::draw_palette(f, area, q, &items, *sel);
+            }
             Popup::Split(p) => panels::draw_split(
                 f,
                 area,
@@ -2834,6 +2991,9 @@ impl Writer {
         }
         if let Popup::Help(h) = &mut self.popup {
             keys::draw_help(f, area, &self.keyboard, h);
+        }
+        if let Some(before) = before {
+            anim::unroll(f.buffer_mut(), &before, self.popup_born, POPUP_OPENS);
         }
     }
 
@@ -2974,7 +3134,7 @@ impl Writer {
         for y in area.y..area.y + area.height {
             for x in area.x..area.x + area.width {
                 let on_page = x >= sheet.x && x < sheet.x + sheet.width;
-                let shadow = self.paper && x == sheet.x + sheet.width && y > area.y;
+                let shadow = self.on_paper() && x == sheet.x + sheet.width && y > area.y;
                 let bg = if on_page {
                     p.bg
                 } else if shadow {
@@ -2999,26 +3159,44 @@ impl Writer {
             Popup::Cast(_)
                 | Popup::Scenes(_)
                 | Popup::Split(_)
+                | Popup::Palette(..)
                 | Popup::Help(_)
                 | Popup::Form(_)
                 | Popup::Search(..)
         );
         let cursor = self.cursor_stop().filter(|c| {
-            !covered && c.row >= self.scroll && c.row < self.scroll + area.height as usize
+            !covered && c.row >= self.shown && c.row < self.shown + area.height as usize
         });
+        // A heading just written types itself out.
+        let typing = self.reveal.and_then(|(at, born)| {
+            let b = (self.doc.body.clone()).find(|&b| {
+                self.doc.blocks[b].span.start >= at
+                    && matches!(
+                        self.doc.blocks[b].kind,
+                        Kind::Act { .. } | Kind::Scene { .. } | Kind::Section { .. }
+                    )
+            })?;
+            let n = (born.elapsed().as_millis() / REVEAL_PER_CHAR.as_millis()) as usize;
+            Some((b, n))
+        });
+        let mut shown_chars = 0usize;
         let buf = f.buffer_mut();
         for (i, row) in self
             .lay
             .rows
             .iter()
-            .skip(self.scroll)
+            .skip(self.shown)
             .take(area.height as usize)
             .enumerate()
         {
             let y = area.y + i as u16;
             if row.gap {
                 // Between two pages: the desk shows through.
-                let bg = if self.paper { theme::BG } else { theme::SHADOW };
+                let bg = if self.on_paper() {
+                    theme::BG
+                } else {
+                    theme::SHADOW
+                };
                 for x in
                     area.x + sheet.x..(area.x + sheet.x + sheet.width + 1).min(area.x + area.width)
                 {
@@ -3045,6 +3223,14 @@ impl Writer {
                 if x >= right {
                     continue;
                 }
+                if let Some((b, n)) = typing
+                    && row.block == Some(b)
+                {
+                    if shown_chars >= n {
+                        continue;
+                    }
+                    shown_chars += 1;
+                }
                 let mut style = theme::on(c.style, p);
                 if self.dim && !here {
                     style = style.fg(p.faint);
@@ -3068,7 +3254,7 @@ impl Writer {
         if let (Some(a), Some(cur)) = (self.ghost(), cursor)
             && let Some(c) = self.doc.cast.get(&a)
         {
-            let y = area.y + (cur.row - self.scroll) as u16;
+            let y = area.y + (cur.row - self.shown) as u16;
             let hint = format!("{}   Tab", c.script);
             let style = Style::default()
                 .bg(p.bg)
@@ -3085,8 +3271,8 @@ impl Writer {
         // terminal's own cursor can vanish, so the page draws its own.
         if let Some(cur) = cursor {
             let x = (left + cur.col).min(right.saturating_sub(1));
-            let y = area.y + (cur.row - self.scroll) as u16;
-            if self.paper {
+            let y = area.y + (cur.row - self.shown) as u16;
+            if self.on_paper() {
                 let cell = &mut buf[(x, y)];
                 cell.set_style(Style::default().fg(p.bg).bg(p.fg));
             } else {
@@ -3096,8 +3282,18 @@ impl Writer {
     }
 
     fn draw_status(&self, f: &mut Frame, area: Rect) {
-        if let Some((msg, warn)) = &self.message {
-            let style = Style::default().fg(if *warn { WARN } else { MUTED });
+        // A message stays a while, then fades into the status line.
+        let age = self.message_at.elapsed();
+        let gone = self.animations && age >= MESSAGE_STAYS + MESSAGE_FADES;
+        if let Some((msg, warn)) = &self.message
+            && !gone
+        {
+            let mut color = if *warn { WARN } else { MUTED };
+            if self.animations && age > MESSAGE_STAYS {
+                let t = (age - MESSAGE_STAYS).as_secs_f32() / MESSAGE_FADES.as_secs_f32();
+                color = anim::mix(color, theme::BG, t);
+            }
+            let style = Style::default().fg(color);
             f.render_widget(
                 Paragraph::new(format!(" {msg}")).style(theme::base().patch(style)),
                 area,
@@ -3199,13 +3395,14 @@ impl Writer {
         // the screen is narrow.
         let keys = [
             ("F1", lang::l("yardım", "help"), 9),
+            ("^P", lang::l("komutlar", "commands"), 8),
             ("\\", lang::l("öneri", "suggest"), 7),
             ("^O", lang::l("kişiler", "cast"), 8),
             ("^G", lang::l("sahneler", "scenes"), 6),
             ("^F", lang::l("bul", "find"), 4),
             ("^K", lang::l("ara", "search"), 3),
             ("^Z", lang::l("geri al", "undo"), 2),
-            ("F6", lang::l("kâğıt", "paper"), 1),
+            ("F6", lang::l("tema", "theme"), 1),
             ("F7", lang::l("sayfalar", "pages"), 1),
             ("^S", lang::l("kaydet", "save"), 5),
             ("^Q", lang::l("çık", "quit"), 10),
@@ -3233,4 +3430,124 @@ impl Writer {
         }
         f.render_widget(Paragraph::new(Line::from(spans)).style(theme::base()), area);
     }
+}
+
+/// What a palette entry does.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PAct {
+    /// What this key does in the writer.
+    Key(KeyCode, KeyModifiers),
+    Theme(&'static str),
+    Animations,
+    NewScene,
+    NewAct,
+    NewCharacter,
+}
+
+/// An entry of the command palette.
+pub struct PItem {
+    pub name: String,
+    /// The key that does the same, if any.
+    pub key: &'static str,
+    pub act: PAct,
+}
+
+/// Everything the palette offers, the best matches for `q` first.
+fn palette_items(q: &str) -> Vec<PItem> {
+    use KeyCode::{Char, F};
+    let (c, a, n) = (KeyModifiers::CONTROL, KeyModifiers::ALT, KeyModifiers::NONE);
+    let k = |code, mods| PAct::Key(code, mods);
+    let mut all: Vec<(&str, &str, &'static str, PAct)> = vec![
+        ("Yeni sahne", "New scene", "#sahne", PAct::NewScene),
+        ("Yeni perde", "New act", "#perde", PAct::NewAct),
+        ("Yeni karakter", "New character", "", PAct::NewCharacter),
+        (
+            "Kişiler: düzenle, birleştir, böl",
+            "Cast: edit, merge, split",
+            "^O",
+            k(Char('o'), c),
+        ),
+        (
+            "Sahneler: git, gizle, çöp kutusu",
+            "Scenes: go, hide, trash",
+            "^G",
+            k(Char('g'), c),
+        ),
+        (
+            "Karakter ya da komut ara",
+            "Search characters and commands",
+            "^K",
+            k(Char('k'), c),
+        ),
+        ("Bul ve değiştir", "Find and replace", "^F", k(Char('f'), c)),
+        (
+            "Oyun bilgisi, taslak/final",
+            "Cover details, draft/final",
+            "Alt+İ",
+            k(Char('i'), a),
+        ),
+        (
+            "Yazım önerileri",
+            "Spelling suggestions",
+            "Alt+S",
+            k(Char('s'), a),
+        ),
+        (
+            "Kişi tanımlarını kaynakta aç",
+            "Show the cast lines of the source",
+            "Alt+P",
+            k(Char('p'), a),
+        ),
+        (
+            "Bütün oyun kaynak olarak",
+            "The whole play as source",
+            "F2",
+            k(F(2), n),
+        ),
+        ("Daktilo modu", "Typewriter mode", "F3", k(F(3), n)),
+        ("Sahne odağı", "Scene focus", "F4", k(F(4), n)),
+        ("İmleç dışını soldur", "Dim the rest", "F5", k(F(5), n)),
+        ("Sayfa görünümü", "Page view", "F7", k(F(7), n)),
+        (
+            "Animasyonları aç/kapat",
+            "Animations on/off",
+            "",
+            PAct::Animations,
+        ),
+        ("Tuşlar", "Keys", "F1", k(F(1), n)),
+        ("Kaydet", "Save", "^S", k(Char('s'), c)),
+        ("Geri al", "Undo", "^Z", k(Char('z'), c)),
+        ("Yinele", "Redo", "^Y", k(Char('y'), c)),
+        ("Hepsini seç", "Select all", "^A", k(Char('a'), c)),
+        ("Çık", "Quit", "^Q", k(Char('q'), c)),
+    ];
+    let mut all: Vec<(String, &'static str, PAct)> = all
+        .drain(..)
+        .map(|(tr, en, key, act)| ((if lang::is_tr() { tr } else { en }).to_string(), key, act))
+        .collect();
+    for t in theme::THEMES {
+        let name = lang::f("Tema: {}", "Theme: {}", &[&theme::theme_name(t)]);
+        all.push((name, "F6", PAct::Theme(t)));
+    }
+    let mut out: Vec<(i32, PItem)> = all
+        .into_iter()
+        .filter_map(|(name, key, act)| {
+            let name = name.as_str();
+            let score = if q.is_empty() {
+                0
+            } else {
+                complete::score(q, name)?
+            };
+            Some((
+                score,
+                PItem {
+                    name: name.to_string(),
+                    key,
+                    act,
+                },
+            ))
+        })
+        .collect();
+    out.sort_by_key(|(s, _)| std::cmp::Reverse(*s));
+    out.into_iter().map(|(_, i)| i).collect()
 }

@@ -624,6 +624,10 @@ impl Builder<'_> {
             self.flow(0, &glyphs, 0, width, Align::Center, None, row);
             self.out.rows[row].block = None;
         }
+        // Air before the next act.
+        if !last {
+            self.out.rows.push(Row::default());
+        }
     }
 
     fn stop(&mut self, byte: usize, row: usize, col: u16) {

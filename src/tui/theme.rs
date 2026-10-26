@@ -55,6 +55,76 @@ pub const PAPER: Palette = Palette {
     selection: Color::Rgb(0xd2, 0xc4, 0xa6),
 };
 
+/// Sepia: older paper, browner ink.
+pub const SEPIA: Palette = Palette {
+    bg: Color::Rgb(0xef, 0xe0, 0xc2),
+    fg: Color::Rgb(0x3a, 0x2a, 0x1a),
+    muted: Color::Rgb(0x7a, 0x62, 0x46),
+    faint: Color::Rgb(0xb2, 0x9a, 0x78),
+    star: Color::Rgb(0x7a, 0x3b, 0x12),
+    name_ref: Color::Rgb(0x6b, 0x4a, 0x2a),
+    heading: Color::Rgb(0x8a, 0x33, 0x24),
+    warn: Color::Rgb(0xb0, 0x58, 0x20),
+    selection: Color::Rgb(0xdd, 0xc5, 0x96),
+};
+
+/// Night: a blue-grey page, easy in the dark.
+pub const NIGHT: Palette = Palette {
+    bg: Color::Rgb(0x1f, 0x25, 0x30),
+    fg: Color::Rgb(0xd6, 0xdb, 0xe4),
+    muted: Color::Rgb(0x8d, 0x96, 0xa8),
+    faint: Color::Rgb(0x4e, 0x57, 0x6a),
+    star: Color::Rgb(0xe2, 0xc0, 0x8d),
+    name_ref: Color::Rgb(0xc9, 0xb3, 0x8a),
+    heading: Color::Rgb(0xd5, 0x7f, 0x86),
+    warn: Color::Rgb(0xd7, 0x9a, 0x5a),
+    selection: Color::Rgb(0x31, 0x3c, 0x52),
+};
+
+/// High contrast: black on white.
+pub const CONTRAST: Palette = Palette {
+    bg: Color::Rgb(0xff, 0xff, 0xff),
+    fg: Color::Rgb(0x00, 0x00, 0x00),
+    muted: Color::Rgb(0x30, 0x30, 0x30),
+    faint: Color::Rgb(0x70, 0x70, 0x70),
+    star: Color::Rgb(0x00, 0x00, 0x00),
+    name_ref: Color::Rgb(0x1a, 0x1a, 0x1a),
+    heading: Color::Rgb(0xa0, 0x00, 0x10),
+    warn: Color::Rgb(0xb0, 0x40, 0x00),
+    selection: Color::Rgb(0xff, 0xd8, 0x4d),
+};
+
+/// The themes, in the order F6 goes through them.
+pub const THEMES: [&str; 5] = ["paper", "sepia", "night", "contrast", "dark"];
+
+pub fn palette(theme: &str) -> &'static Palette {
+    match theme {
+        "sepia" => &SEPIA,
+        "night" => &NIGHT,
+        "contrast" => &CONTRAST,
+        "dark" => &DARK,
+        _ => &PAPER,
+    }
+}
+
+/// A theme's name on screen.
+pub fn theme_name(theme: &str) -> &'static str {
+    use dactile::lang::l;
+    match theme {
+        "sepia" => l("sepya", "sepia"),
+        "night" => l("gece", "night"),
+        "contrast" => l("yüksek kontrast", "high contrast"),
+        "dark" => l("koyu", "dark"),
+        _ => l("kâğıt", "paper"),
+    }
+}
+
+/// The theme after `theme`, for F6.
+pub fn next_theme(theme: &str) -> &'static str {
+    let i = THEMES.iter().position(|t| *t == theme).unwrap_or(0);
+    THEMES[(i + 1) % THEMES.len()]
+}
+
 pub fn base() -> Style {
     Style::default().fg(FG).bg(BG)
 }

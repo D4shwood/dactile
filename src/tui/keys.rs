@@ -127,6 +127,14 @@ pub const BINDS: &[Bind] = &[
         "into a macro: the line shows its source",
     ),
     b(
+        "P",
+        true,
+        false,
+        Cat::Panel,
+        "komut paleti: her şeyi adıyla bul ve yap",
+        "command palette: find anything by name and do it",
+    ),
+    b(
         "O",
         true,
         false,
@@ -221,8 +229,8 @@ pub const BINDS: &[Bind] = &[
         false,
         false,
         Cat::View,
-        "kâğıt sayfa ya da koyu",
-        "paper page or dark",
+        "tema: kâğıt, sepya, gece, yüksek kontrast, koyu",
+        "theme: paper, sepia, night, high contrast, dark",
     ),
     b(
         "F7",

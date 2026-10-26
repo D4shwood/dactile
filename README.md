@@ -96,6 +96,7 @@ screen the play's outline sits in the margin; a click goes there.
 
 | Key | |
 |---|---|
+| ^P | the command palette: everything by name — new scene, themes, page view, animations… |
 | ^O | the cast: edit, rename an alias everywhere, order, character cards; m merges one into another, b splits one, giving the scenes you pick to a new character |
 | ^G | the acts and scenes: go there; ␣ marks, h hides (out of the PDF, as `%~` lines), t moves to the play's trash; Tab shows the trash: r puts back, x x destroys |
 | ^K | search characters and commands |
@@ -104,7 +105,7 @@ screen the play's outline sits in the margin; a click goes there.
 | Alt+S | spelling suggestions for the word at the cursor |
 | Alt+P | show the cast and cover lines of the source |
 | F3 / F4 / F5 | typewriter, scene focus, dim the rest |
-| F6 | the play on a paper page, or dark |
+| F6 | the theme: paper, sepia, night, high contrast, dark |
 | F7 | page view: A4 sheets broken where the PDF breaks, numbered |
 | ^Z ^Y, ^C ^X ^V | undo, redo, copy, cut, paste |
 | ^S, ^Q | save (it saves by itself anyway), quit |

@@ -568,6 +568,7 @@ pub fn label_of(key: &str) -> &str {
         "Öneri menüsü" => "Suggestion menu",
         "Dakikada kelime" => "Words a minute",
         "Klavye" => "Keyboard",
+        "Animasyonlar" => "Animations",
         "Şununla birleştir" => "Merge into",
         "Dosya" => "File",
         other => other,

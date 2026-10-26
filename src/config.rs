@@ -23,8 +23,13 @@ pub struct Config {
     pub typewriter: bool,
     pub focus: bool,
     pub dim: bool,
-    /// The play on a paper page; dark otherwise.
+    /// The play on a paper page; dark otherwise. Kept for older settings:
+    /// `theme` says more.
     pub paper: bool,
+    /// paper, sepia, night, contrast or dark; empty in older settings.
+    pub theme: String,
+    /// Typing, scrolling and windows move; off, everything appears at once.
+    pub animations: bool,
     /// Page view: A4-shaped sheets.
     pub pages: bool,
     /// The keyboard drawn on the help screen: "q" (Turkish Q), "f" (Turkish
@@ -46,9 +51,22 @@ impl Default for Config {
             focus: false,
             dim: false,
             paper: true,
+            theme: String::new(),
+            animations: true,
             pages: false,
             keyboard: "q".into(),
             recent: Vec::new(),
+        }
+    }
+}
+
+impl Config {
+    /// The theme, from `paper` when the settings are older than themes.
+    pub fn theme(&self) -> &str {
+        match self.theme.as_str() {
+            "" if self.paper => "paper",
+            "" => "dark",
+            t => t,
         }
     }
 }

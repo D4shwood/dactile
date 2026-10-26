@@ -1,5 +1,6 @@
 //! The terminal interface: the home screen and the writer.
 
+mod anim;
 mod home;
 mod keys;
 mod panels;
@@ -55,7 +56,13 @@ pub fn run(start: Start) -> Result<()> {
                 Screen::Home(h) => h.draw(f, &cfg),
                 Screen::Writer(w) => w.draw(f),
             })?;
-            let ev = if event::poll(Duration::from_millis(200))? {
+            // Faster while something moves on screen.
+            let moving = match &screen {
+                Screen::Home(h) => h.animating(&cfg),
+                Screen::Writer(w) => w.animating(),
+            };
+            let wait = Duration::from_millis(if moving { 16 } else { 200 });
+            let ev = if event::poll(wait)? {
                 Some(event::read()?)
             } else {
                 None
@@ -119,7 +126,9 @@ fn close(w: &mut Writer, cfg: &mut Config) -> Result<()> {
     cfg.typewriter = v.typewriter;
     cfg.focus = v.focus;
     cfg.dim = v.dim;
-    cfg.paper = v.paper;
+    cfg.paper = v.theme != "dark";
+    cfg.theme = v.theme;
+    cfg.animations = v.animations;
     cfg.pages = v.pages;
     cfg.save()
 }

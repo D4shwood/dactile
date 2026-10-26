@@ -17,6 +17,9 @@ use ratatui::widgets::Paragraph;
 use std::path::{Path, PathBuf};
 use unicode_width::UnicodeWidthStr;
 
+/// How long the home screen types itself out.
+const TYPE_FOR: std::time::Duration = std::time::Duration::from_millis(2200);
+
 pub enum Action {
     Stay,
     Open(PathBuf),
@@ -32,8 +35,12 @@ pub struct Home {
     first_run: bool,
     /// A play asked for on the command line, opened once setup is done.
     pub pending: Option<PathBuf>,
-    /// When the screen opened: the cursor after the name blinks from it.
+    /// When the screen opened: the cursor after the name blinks from it,
+    /// the lines under it type themselves out.
     born: std::time::Instant,
+    /// When the form on screen opened.
+    form_born: std::time::Instant,
+    form_kind: Option<std::mem::Discriminant<FormKind>>,
 }
 
 impl Home {
@@ -47,6 +54,8 @@ impl Home {
             first_run,
             pending: None,
             born: std::time::Instant::now(),
+            form_born: std::time::Instant::now(),
+            form_kind: None,
         };
         if first_run {
             h.form = Some(settings_form(cfg, true));
@@ -160,6 +169,23 @@ impl Home {
         Action::Stay
     }
 
+    /// Whether the screen is still typing itself out (the name's cursor
+    /// blinks at the slow pace).
+    pub fn animating(&self, cfg: &Config) -> bool {
+        cfg.animations
+            && (self.born.elapsed() < TYPE_FOR
+                || self.form_born.elapsed() < std::time::Duration::from_millis(160))
+    }
+
+    /// How much of `s` has been typed so far, `delay` after the screen came.
+    fn typed(&self, s: &str, cfg: &Config, delay: u128) -> String {
+        if !cfg.animations {
+            return s.to_string();
+        }
+        let ms = self.born.elapsed().as_millis().saturating_sub(delay);
+        s.chars().take((ms / 28) as usize).collect()
+    }
+
     fn submit(&mut self, mut form: Form, cfg: &mut Config) -> Action {
         let fail = |this: &mut Home, mut form: Form, e: String| {
             form.error = Some(e);
@@ -182,6 +208,11 @@ impl Home {
                     "auto"
                 }
                 .into();
+                cfg.animations = form
+                    .fields
+                    .iter()
+                    .find(|f| f.label == "Animasyonlar")
+                    .is_some_and(Field::on);
                 cfg.keyboard = match form.get("Klavye") {
                     k if k.ends_with('F') || k.ends_with('f') => "f",
                     k if k.eq_ignore_ascii_case("us") => "us",
@@ -354,8 +385,13 @@ impl Home {
         }
     }
 
-    pub fn draw(&self, f: &mut Frame, cfg: &Config) {
+    pub fn draw(&mut self, f: &mut Frame, cfg: &Config) {
         let area = f.area();
+        let kind = self.form.as_ref().map(|x| std::mem::discriminant(&x.kind));
+        if kind != self.form_kind {
+            self.form_kind = kind;
+            self.form_born = std::time::Instant::now();
+        }
         f.render_widget(
             ratatui::widgets::Block::default().style(theme::base()),
             area,
@@ -385,11 +421,18 @@ impl Home {
         );
         f.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::styled("Dynamic Stagewright", Style::default().fg(MUTED)),
                 Span::styled(
-                    format!(
-                        "   {}",
-                        lang::l("tiyatro oyunu yazmak için", "for writing stage plays")
+                    self.typed("Dynamic Stagewright", cfg, 150),
+                    Style::default().fg(MUTED),
+                ),
+                Span::styled(
+                    self.typed(
+                        &format!(
+                            "   {}",
+                            lang::l("tiyatro oyunu yazmak için", "for writing stage plays")
+                        ),
+                        cfg,
+                        150 + 19 * 28,
                     ),
                     Style::default().fg(FAINT),
                 ),
@@ -489,7 +532,7 @@ impl Home {
                     height: body.height.min(16),
                     ..body
                 };
-                draw_card(f, card, p, cfg.paper);
+                draw_card(f, card, p, cfg.theme());
             }
         }
         // The spell checker, so a missing dictionary is noticed here.
@@ -554,7 +597,14 @@ impl Home {
             },
         );
         if let Some(form) = &self.form {
+            // The form unrolls over what was there.
+            let opens = std::time::Duration::from_millis(160);
+            let before = (cfg.animations && self.form_born.elapsed() < opens)
+                .then(|| f.buffer_mut().clone());
             popup::draw_form(f, area, form);
+            if let Some(before) = before {
+                super::anim::unroll(f.buffer_mut(), &before, self.form_born, opens);
+            }
         }
     }
 
@@ -619,8 +669,8 @@ impl Home {
 
 /// The chosen play's cover in miniature, on a page like the writer's, with
 /// its numbers under it.
-fn draw_card(f: &mut Frame, area: Rect, p: &Play, paper: bool) {
-    let pal = if paper { &theme::PAPER } else { &theme::DARK };
+fn draw_card(f: &mut Frame, area: Rect, p: &Play, theme_name: &str) {
+    let pal = theme::palette(theme_name);
     let base = Style::default().fg(pal.fg).bg(pal.bg);
     let w = area.width.saturating_sub(4) as usize;
     let center = |s: String, st: Style| Line::from(Span::styled(popup::fit(&s, w), st)).centered();
@@ -765,6 +815,7 @@ fn settings_form(cfg: &Config, first: bool) -> Form {
             Field::text("Öneri menüsü", &menu, menus),
             Field::text("Dakikada kelime", &cfg.wpm.to_string(), Vec::new()),
             Field::text("Klavye", &keyboard, keyboards),
+            Field::flag("Animasyonlar", cfg.animations),
         ],
         focus: 0,
         at: 0..0,

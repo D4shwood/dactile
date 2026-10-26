@@ -98,6 +98,7 @@ durur; tıklayınca oraya gider.
 
 | Tuş | |
 |---|---|
+| ^P | komut paleti: her şey adıyla — yeni sahne, temalar, sayfa görünümü, animasyonlar… |
 | ^O | kişiler: düzenle, kısaltmayı her yerde değiştir, sıra, karakter kartları; m birini ötekiyle birleştirir, b birini böler (seçtiğin sahneler yeni karaktere geçer) |
 | ^G | perdeler ve sahneler: oraya git; ␣ işaretler, h gizler (`%~` satırları, PDF'te yok), t oyunun çöp kutusuna atar; Tab çöp kutusu: r geri koyar, x x yok eder |
 | ^K | karakter ve komut ara |
@@ -106,7 +107,7 @@ durur; tıklayınca oraya gider.
 | Alt+S | imleçteki kelime için yazım önerileri |
 | Alt+P | kaynaktaki kişi ve oyun bilgisi satırlarını aç |
 | F3 / F4 / F5 | daktilo, sahne odağı, gerisini soldur |
-| F6 | oyun kâğıt sayfada ya da koyu |
+| F6 | tema: kâğıt, sepya, gece, yüksek kontrast, koyu |
 | F7 | sayfa görünümü: PDF'in böldüğü yerlerden bölünmüş, numaralı A4 yapraklar |
 | ^Z ^Y, ^C ^X ^V | geri al, yinele, kopyala, kes, yapıştır |
 | ^S, ^Q | kaydet (zaten kendiliğinden kaydeder), çık |
