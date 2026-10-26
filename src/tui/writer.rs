@@ -2164,8 +2164,10 @@ impl Writer {
                 buf[(x, y)].set_char(c.ch).set_style(style);
             }
         }
-        // The cursor.
-        if let Some(cur) = self.cursor_stop()
+        // The cursor, unless a full panel covers the text.
+        let covered = matches!(self.popup, Popup::Cast(_) | Popup::Scenes(_) | Popup::Help);
+        if !covered
+            && let Some(cur) = self.cursor_stop()
             && cur.row >= self.scroll
             && cur.row < self.scroll + area.height as usize
         {

@@ -2,15 +2,21 @@
 
 [English](README.md)
 
-> Geliştirme aşamasında. Henüz kurulacak bir şey yok; bu sayfa nereye gittiğini anlatıyor.
-
 Tiyatro oyunu yazmak için bir terminal uygulaması. Oyunu **tiyatro** XeLaTeX
-sınıfının sözdizimiyle yazarsın; makrolar yazarken canlanır: `\ma Merhaba`
-anında `MARİA : Merhaba` olur, `\sahne` numaralı bir sahne açar, sahnede
-görünen karakterler kendiliğinden sahne başlığının altında toplanır.
+sınıfının sözdizimiyle yazarsın; makrolar yazarken canlanır: `\se Amca`
+anında `SELİN   Amca` olur, `\sahne` yer ve zaman sorup numaralı bir sahne
+açar, sahnede görünen karakterler kendiliğinden sahne başlığının altında
+toplanır.
 
 Dosya düz bir `.tex` olarak kalır ve XeLaTeX ile derlenir. Dactile'da yazılan
-bir oyun her TeX düzenleyicisinde açılmaya devam eder.
+bir oyun her TeX düzenleyicisinde açılır, başka yerde yazılmış oyunlar da
+Dactile'da açılır.
+
+![Yazma ekranı](docs/writer.png)
+
+> Beta. Her değişiklik metnin kendisinde bir düzenlemedir, atomik kaydedilir
+> ve eski sürümler saklanır; ama uygulama yeni, değerli metinlerinin bir
+> kopyasını tut.
 
 ```latex
 \karakter*[Selin][Köy öğretmeni]{SELİN}{se}
@@ -25,6 +31,78 @@ bir oyun her TeX düzenleyicisinde açılmaya devam eder.
 ```
 
 Tüm özellikler için: [examples/ornek-oyun.tex](examples/ornek-oyun.tex).
+
+## Kurulum
+
+Linux'ta [Releases](https://github.com/D4shwood/dactile/releases) sayfasından:
+
+```sh
+tar xzf dactile-*-x86_64-linux.tar.gz
+cd dactile-*-x86_64-linux
+./dactile install
+```
+
+`dactile install` `dactile` komutunu `~/.local/bin`'e koyar, menüye bir girdi
+ekler ve tiyatro sınıfını TeX ağacına (`~/texmf`) kopyalar; oyunlar her
+klasörden derlenir. `dactile uninstall` üçünü de kaldırır; oyunların ve
+ayarların kalır.
+
+Kaynaktan: `cargo install --path .`, ardından `dactile install`.
+
+- **Yazım denetimi** için Türkçe bir Hunspell sözlüğü (`tr_TR.aff` ve
+  `tr_TR.dic`) `~/.local/share/hunspell` ya da `/usr/share/hunspell` içinde
+  olmalı; Arch'ta `paru -S hunspell-tr`. Sözlük yoksa geri kalan her şey
+  çalışır.
+- **PDF** için XeLaTeX gerekir (`texlive-xetex` ve `texlive-latexextra` ya da
+  tam bir TeX Live).
+
+## Kullanım
+
+```sh
+dactile                   # ana ekran: oyunların, yeni oyun, ayarlar
+dactile oyun.tex          # doğrudan bir oyuna
+dactile new "Kar Masalı"  # oyunlar klasöründe yeni bir oyun
+```
+
+İlk açılışta dil (Türkçe ya da İngilizce), oyunların duracağı klasör, adın ve
+öneri menüsünün nasıl açılacağı sorulur.
+
+![Ana ekran](docs/home.png)
+
+| Yazınca | Olan |
+|---|---|
+| `\se ` (kısaltma ve boşluk) | SELİN'in repliği; tanımlanmamış bir kısaltma yeni karakter formunu açar |
+| `\sedo ` | bir yönerge, `(Selin …)`; oyunda en çok kullanılan fiiller önerilir |
+| `\` | öneri menüsü: karakterler (sahnedekiler önce), komutlar, makrolar |
+| `\sahne`, `\perde` | yer ve zaman için bir form, ya da perdenin adı |
+| `((` | replik içinde yönerge, `\ic{…}` |
+
+Makrolar chip olarak görünür; imleç üstünden atlar. İçine Backspace ile
+girince, sen çıkana kadar satırın kaynağı görünür. F2 bütün oyunu kaynak
+olarak gösterir.
+
+![Öneri menüsü](docs/menu.png)
+
+| Tuş | |
+|---|---|
+| ^O | kişiler: düzenle, kısaltmayı her yerde değiştir, sıra, karakter kartları |
+| ^G | sahneler, her sahnede kimler var, süreler |
+| ^K | karakter ve komut ara |
+| ^F | bul ve değiştir |
+| Alt+I | oyun bilgisi (başlık, yazar, taslak no…) ve taslak/final |
+| Alt+S | imleçteki kelime için yazım önerileri |
+| Alt+P | kaynaktaki kişi ve oyun bilgisi satırlarını aç |
+| F3 / F4 / F5 | daktilo, sahne odağı, gerisini soldur |
+| ^Z ^Y, ^C ^X ^V | geri al, yinele, kopyala, kes, yapıştır |
+| ^S, ^Q | kaydet (zaten kendiliğinden kaydeder), çık |
+| F1 | hepsi |
+
+![Kişiler](docs/cast.png)
+
+Dactile bir oyunun yanında `oyun.dactile.toml` tutar: karakter kartları ve
+yazım denetimi için oyunun kendi kelimeleri (PDF'e hiç girmez). Oyun açıkken
+bir de `.oyun.tex.dactile-lock` durur; ikinci bir Dactile oyunu salt okunur
+açar. Eski sürümler `~/.local/share/dactile/history` içine gider.
 
 ## tiyatro sınıfı
 
@@ -57,7 +135,8 @@ geliyor; onun kodu burada kullanılmıyor.
 
 ## Yol haritası
 
-Kilometre taşları halinde planlandı; ayrıntılar [TODO.md](TODO.md) dosyasında.
+Uygulamanın içinden PDF, oyuncu kopyaları, Word'den içe aktarma ve dahası:
+bkz. [TODO.md](TODO.md).
 
 ## Lisans
 

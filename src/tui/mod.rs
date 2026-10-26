@@ -24,6 +24,8 @@ pub enum Start {
     Play(PathBuf),
 }
 
+// One value for the whole run, so the size difference costs nothing.
+#[allow(clippy::large_enum_variant)]
 enum Screen {
     Home(Home),
     Writer(Box<Writer>),

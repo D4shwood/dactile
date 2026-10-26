@@ -4,6 +4,7 @@ use dactile::cast::{Cast, Kind, Row};
 use dactile::{source, tex};
 use std::path::PathBuf;
 
+mod install;
 mod tui;
 
 /// Dactile — Dynamic Stagewright: write plays for the tiyatro class.
@@ -20,6 +21,11 @@ struct Cli {
 enum Cmd {
     /// Starts a new play in the plays folder and opens it.
     New { title: String },
+    /// Puts `dactile` in ~/.local/bin, adds a menu entry, and the tiyatro
+    /// class where XeLaTeX finds it.
+    Install,
+    /// Removes what `install` added (plays and settings stay).
+    Uninstall,
     /// Lists a play's characters as the app reads them (changes nothing).
     Cast { play: PathBuf },
     /// Lists a play's acts and scenes as the app reads them (changes nothing).
@@ -36,6 +42,18 @@ fn main() -> Result<()> {
     match cli.cmd {
         Some(Cmd::Cast { play }) => print_cast(&play),
         Some(Cmd::Outline { play, aux }) => print_outline(&play, aux),
+        Some(Cmd::Install) => {
+            for line in install::install()? {
+                println!("{line}");
+            }
+            Ok(())
+        }
+        Some(Cmd::Uninstall) => {
+            for line in install::uninstall()? {
+                println!("{line}");
+            }
+            Ok(())
+        }
         Some(Cmd::New { title }) => {
             let cfg = dactile::config::Config::load()?;
             let path = cfg.plays_dir().join(dactile::library::file_name(&title));

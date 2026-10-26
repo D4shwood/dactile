@@ -1,0 +1,61 @@
+name: Release
+
+# Pushing a tag like v0.1.0 or v0.1.0-beta.1 builds the Linux archive and
+# publishes it as a GitHub release; tags with a "-" become pre-releases. Run by
+# hand (workflow_dispatch) it only builds the archive, as a downloadable
+# artifact, without publishing.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  # The tag, or "dev" for a run by hand.
+  VERSION: ${{ github.ref_type == 'tag' && github.ref_name || 'dev' }}
+
+jobs:
+  linux:
+    # An older glibc, so the binary runs on older distributions too.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test
+      - run: cargo build --release --locked
+      - name: Package
+        run: |
+          name=dactile-${VERSION}-x86_64-linux
+          mkdir "$name"
+          cp target/release/dactile README.md README.tr.md LICENSE "$name"/
+          cp -r tex examples "$name"/
+          rm -rf "$name"/tex/test
+          tar czf "$name.tar.gz" "$name"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dactile-*.tar.gz
+
+  publish:
+    if: github.ref_type == 'tag'
+    needs: [linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS
+          pre=""
+          case "$VERSION" in *-*) pre="--prerelease" ;; esac
+          gh release create "$VERSION" $pre --verify-tag \
+            --title "$VERSION" --notes-file ../RELEASE_NOTES.md *
