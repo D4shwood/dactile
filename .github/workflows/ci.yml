@@ -29,6 +29,7 @@ jobs:
         with:
           packages: |
             scheme-basic
+            xetex
             fontspec
             geometry
             setspace
