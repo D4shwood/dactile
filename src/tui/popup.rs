@@ -117,6 +117,10 @@ pub enum FormKind {
     NewPlay,
     OpenPath,
     Settings,
+    /// A copy of this play under a new title.
+    Copy(std::path::PathBuf),
+    /// A new draft of this play, next to it.
+    Fork(std::path::PathBuf),
 }
 
 pub struct Field {

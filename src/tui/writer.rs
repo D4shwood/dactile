@@ -1404,7 +1404,12 @@ impl Writer {
                 };
                 self.write_line(form.at.start, &text, &nl);
             }
-            FormKind::Find | FormKind::NewPlay | FormKind::OpenPath | FormKind::Settings => {}
+            FormKind::Find
+            | FormKind::NewPlay
+            | FormKind::OpenPath
+            | FormKind::Settings
+            | FormKind::Copy(_)
+            | FormKind::Fork(_) => {}
             FormKind::Card(alias) => {
                 let card = dactile::sidecar::Card {
                     age: form.get("Yaş").to_string(),

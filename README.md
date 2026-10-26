@@ -68,6 +68,10 @@ plays live in, your name, and how the suggestion menu opens.
 
 ![Home](docs/home.png)
 
+On the home screen `d` copies the chosen play under a new title, and `f`
+starts a new draft of it next to it (`kar-masali-0.2.tex`, the draft number
+one up, the character cards along).
+
 | Type | You get |
 |---|---|
 | `\se ` (an alias and a space) | a line for SELİN; an alias nobody declared opens the new-character form |

@@ -123,6 +123,59 @@ pub fn file_name(title: &str) -> String {
     format!("{}.tex", if s.is_empty() { "oyun".to_string() } else { s })
 }
 
+/// Another play made from `text`: a copy under a new title, or a new draft
+/// of the same play. Only the cover changes; the values are as typed in a
+/// form and get escaped here.
+pub fn derive(text: &str, title: Option<&str>, draft: Option<&str>) -> String {
+    let mut t = text.to_string();
+    for (cmd, v) in [("title", title), ("draft", draft)] {
+        if let Some(v) = v
+            && let Some(e) = info::set(&t, cmd, &crate::tex::escape_text(v))
+        {
+            t = crate::tex::apply(&t, &[e]);
+        }
+    }
+    t
+}
+
+/// The draft number after `d`: 0.1 → 0.2, 1.9 → 1.10, 3 → 4; a date
+/// (02.08.2024) becomes today's; anything else gets " (2)".
+pub fn next_draft(d: &str, today: &str) -> String {
+    let d = d.trim();
+    if d.is_empty() {
+        return "0.2".into();
+    }
+    let parts: Vec<&str> = d.split('.').collect();
+    let date =
+        parts.len() == 3 && parts.iter().all(|p| p.parse::<u32>().is_ok()) && parts[2].len() == 4;
+    if date {
+        return today.to_string();
+    }
+    if let Some(last) = parts.last()
+        && let Ok(n) = last.parse::<u32>()
+    {
+        let mut out: Vec<String> = parts[..parts.len() - 1]
+            .iter()
+            .map(|p| p.to_string())
+            .collect();
+        out.push((n + 1).to_string());
+        return out.join(".");
+    }
+    format!("{d} (2)")
+}
+
+/// A file name next to `path` that is not taken: `name.tex`, `name-2.tex`…
+pub fn free_path(dir: &Path, name: &str) -> PathBuf {
+    let stem = name.strip_suffix(".tex").unwrap_or(name);
+    let mut p = dir.join(format!("{stem}.tex"));
+    let mut n = 2;
+    while p.exists() {
+        p = dir.join(format!("{stem}-{n}.tex"));
+        n += 1;
+    }
+    p
+}
+
 /// A new play: the class, the cover, one act and one scene, and three lines
 /// of help as comments.
 pub fn template(title: &str, author: &str, lang: Lang) -> String {
@@ -167,6 +220,25 @@ pub fn template(title: &str, author: &str, lang: Lang) -> String {
 mod tests {
     use super::*;
     use crate::render::Doc;
+
+    #[test]
+    fn copies_and_drafts() {
+        let play = include_str!("../examples/ornek-oyun.tex");
+        let copy = derive(play, Some("Kar & Masal"), None);
+        assert_eq!(info::get(&copy, "title").as_deref(), Some("Kar \\& Masal"));
+        assert_eq!(info::get(&copy, "draft").as_deref(), Some("0.1"));
+        let fork = derive(play, None, Some("0.2"));
+        assert_eq!(info::get(&fork, "title").as_deref(), Some("Kar Masalı"));
+        assert_eq!(info::get(&fork, "draft").as_deref(), Some("0.2"));
+        // Only the cover line changed.
+        assert_eq!(fork.lines().count(), play.lines().count());
+        assert_eq!(next_draft("0.1", "26.10.2026"), "0.2");
+        assert_eq!(next_draft("1.9", "26.10.2026"), "1.10");
+        assert_eq!(next_draft("3", "26.10.2026"), "4");
+        assert_eq!(next_draft("02.08.2024", "26.10.2026"), "26.10.2026");
+        assert_eq!(next_draft("ilk", "26.10.2026"), "ilk (2)");
+        assert_eq!(next_draft("", "26.10.2026"), "0.2");
+    }
 
     #[test]
     fn new_play() {
