@@ -16,11 +16,19 @@ struct Cli {
 enum Cmd {
     /// Lists a play's characters as the app reads them (changes nothing).
     Cast { play: PathBuf },
+    /// Lists a play's acts and scenes as the app reads them (changes nothing).
+    Outline {
+        play: PathBuf,
+        /// Print the scene casts as the class writes them to the .aux file.
+        #[arg(long)]
+        aux: bool,
+    },
 }
 
 fn main() -> Result<()> {
     match Cli::parse().cmd {
         Some(Cmd::Cast { play }) => print_cast(&play),
+        Some(Cmd::Outline { play, aux }) => print_outline(&play, aux),
         None => {
             println!(
                 "dactile {} — tiyatro class {}",
@@ -85,6 +93,68 @@ fn print_cast(path: &PathBuf) -> Result<()> {
         "\n{} karakter, {} grup, gövdede {total} komut.",
         cast.characters.len(),
         cast.groups.len()
+    );
+    Ok(())
+}
+
+fn print_outline(path: &PathBuf, aux: bool) -> Result<()> {
+    let text =
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
+    let cast = Cast::of_play(&text);
+    let blocks = dactile::lex::blocks(&text, source::split(&text).body, &cast);
+    let o = dactile::outline::Outline::of(&text, &blocks, &cast);
+    if aux {
+        for s in o.scenes.iter().filter(|s| !s.cast.is_empty()) {
+            println!(
+                "\\tiyatrocast{{{}}}{{{}}}",
+                s.key(&o.acts),
+                s.cast.join(",")
+            );
+        }
+        return Ok(());
+    }
+    let name = |a: &str| cast.get(a).map_or(a.to_string(), |c| c.script.clone());
+    let mut act = None;
+    for s in &o.scenes {
+        if s.act != act {
+            act = s.act;
+            if let Some(a) = act {
+                let a = &o.acts[a];
+                println!("{}. Perde {}", dactile::outline::roman(a.number), a.title);
+            }
+        }
+        let place = if s.place.is_empty() {
+            String::new()
+        } else {
+            format!(" — {}", s.place)
+        };
+        println!(
+            "  Sahne {}{place}  ·  {} replik, {} kelime (+{} yönerge)",
+            s.label, s.lines, s.words, s.direction_words
+        );
+        let names: Vec<String> = s.cast.iter().map(|a| name(a)).collect();
+        println!("    {}", names.join(", "));
+    }
+    let unknown: Vec<String> = blocks
+        .iter()
+        .filter_map(|b| match &b.kind {
+            dactile::lex::Kind::Unknown { name } => {
+                Some(format!("{} (satır {})", name, b.line + 1))
+            }
+            _ => None,
+        })
+        .collect();
+    if !unknown.is_empty() {
+        println!(
+            "\nTanımsız komutla başlayan satırlar: {}",
+            unknown.join(", ")
+        );
+    }
+    println!(
+        "\n{} perde, {} sahne, {} numaralı satır.",
+        o.acts.len(),
+        o.scenes.len(),
+        o.numbers.iter().flatten().count()
     );
     Ok(())
 }

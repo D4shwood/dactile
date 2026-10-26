@@ -4,6 +4,8 @@
 //! written back byte for byte. The terminal interface lives in the binary.
 
 pub mod cast;
+pub mod lex;
+pub mod outline;
 pub mod source;
 pub mod tex;
 

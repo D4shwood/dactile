@@ -7,8 +7,9 @@
 //! every declaration must read back as itself.
 
 use dactile::cast::{self, Cast, Kind, Spec};
-use dactile::source;
+use dactile::outline::Outline;
 use dactile::tex::apply;
+use dactile::{lex, source};
 use std::path::{Path, PathBuf};
 
 fn plays() -> Vec<PathBuf> {
@@ -58,6 +59,19 @@ fn real_plays_round_trip() {
             c.groups.len(),
             parts.body.len()
         );
+
+        let blocks = lex::blocks(&text, parts.body.clone(), &c);
+        let o = Outline::of(&text, &blocks, &c);
+        println!(
+            "  {} acts, {} scenes, {} numbered lines",
+            o.acts.len(),
+            o.scenes.len(),
+            o.numbers.iter().flatten().count()
+        );
+        // The blocks cover the body: nothing is lost between them.
+        let covered: usize =
+            blocks.iter().map(|b| b.span.len()).sum::<usize>() + blocks.len().saturating_sub(1);
+        assert!(covered <= parts.body.len(), "{name}: blocks overlap");
 
         // Each declaration reads back as itself, or differs only in spacing.
         for ch in &c.characters {

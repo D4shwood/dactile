@@ -15,7 +15,7 @@ Each milestone ends with a demo.
    - Read a play into preamble, body and tail.
    - Read and write every character declaration.
    - Write the file back byte for byte.
-3. **M2 lexer and outline.**
+3. ~~**M2 lexer and outline.**~~ Done; `dactile outline <play>` shows it, and `--aux` matches the class's scene lists.
    - Tokens, with the class's rules: the first macro on a line is the speaker, and a line ends at the end of the line.
    - Live act and scene numbers.
    - Who appears in each scene, and word counts.
