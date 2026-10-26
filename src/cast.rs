@@ -238,7 +238,7 @@ impl Cast {
     }
 
     /// An alias for a new character: the first letters of its script name,
-    /// growing until free. MARİA → "ma", then "mar", "mari"…
+    /// growing until free. MELİS → "me", then "mel", "meli"…
     pub fn suggest_alias(&self, script: &str) -> String {
         let letters: String = fold_ascii(script);
         let letters = if letters.is_empty() {
@@ -912,11 +912,11 @@ mod tests {
     #[test]
     fn aliases() {
         let cast = Cast::of_play(PLAY);
-        assert_eq!(cast.suggest_alias("MARİA"), "ma");
+        assert_eq!(cast.suggest_alias("MELİS"), "me");
         // "se" is taken; "sel" is free.
         assert_eq!(cast.suggest_alias("SEVGİ"), "sev");
         // "mu" is a TeX command; "mus" is free.
-        assert_eq!(cast.suggest_alias("MUSTAFA"), "mus");
+        assert_eq!(cast.suggest_alias("MURAT"), "mur");
         assert_eq!(cast.suggest_alias("ŞÜKRÜ"), "su");
         assert!(cast.alias_taken("se"));
         assert!(cast.alias_taken("sedo"));
