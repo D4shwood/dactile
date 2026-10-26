@@ -23,6 +23,8 @@ pub struct Config {
     pub typewriter: bool,
     pub focus: bool,
     pub dim: bool,
+    /// The play on a paper page; dark otherwise.
+    pub paper: bool,
     /// Plays opened lately, newest first.
     pub recent: Vec<String>,
 }
@@ -38,6 +40,7 @@ impl Default for Config {
             typewriter: false,
             focus: false,
             dim: false,
+            paper: true,
             recent: Vec::new(),
         }
     }

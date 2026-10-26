@@ -1,5 +1,6 @@
 //! Full-screen panels over the text: the cast, the scenes, help.
 
+use super::popup::{fit, float, inner, mark, panel, row};
 use super::theme::{self, BEIGE, CLARET, FAINT, FG, MUTED, WARN};
 use dactile::cast::{Kind as CastKind, Row};
 use dactile::lang;
@@ -12,37 +13,31 @@ use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Paragraph};
+use ratatui::widgets::Paragraph;
+use unicode_width::UnicodeWidthStr;
 
-fn panel(title: &str) -> Block<'_> {
-    Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(CLARET))
-        .title(Span::styled(
-            format!(" {title} "),
-            Style::default().fg(BEIGE),
-        ))
-        .style(theme::base())
-}
-
-fn big(area: Rect) -> Rect {
-    let w = area.width.saturating_sub(4).max(30);
-    let h = area.height.saturating_sub(2).max(8);
+/// A panel `w`×`h` (border included) in the middle of `area`, a little high.
+fn centered(area: Rect, w: u16, h: u16) -> Rect {
+    let w = w.min(area.width.saturating_sub(4)).max(30.min(area.width));
+    let h = h.min(area.height.saturating_sub(2)).max(6.min(area.height));
     Rect {
         x: area.x + (area.width - w) / 2,
-        y: area.y + 1,
+        y: area.y + (area.height - h) / 3,
         width: w,
         height: h,
     }
 }
 
-fn inner(r: Rect) -> Rect {
-    Rect {
-        x: r.x + 1,
-        y: r.y + 1,
-        width: r.width.saturating_sub(2),
-        height: r.height.saturating_sub(2),
-    }
+/// The keys at the bottom of a panel.
+fn keys_line(f: &mut Frame, inn: Rect, keys: &str) {
+    f.render_widget(
+        Paragraph::new(fit(keys, inn.width as usize)).style(theme::base().fg(FAINT)),
+        Rect {
+            y: inn.y + inn.height.saturating_sub(1),
+            height: 1,
+            ..inn
+        },
+    );
 }
 
 // ------------------------------------------------------------------ cast
@@ -106,52 +101,111 @@ pub fn entries(doc: &Doc, stats: &[(usize, usize)], by_lines: bool) -> Vec<Entry
 }
 
 pub fn draw_cast(f: &mut Frame, area: Rect, doc: &Doc, text: &str, side: &Sidecar, p: &CastPanel) {
-    let r = big(area);
-    f.render_widget(Clear, r);
+    let st = stats(doc, text);
+    let list = entries(doc, &st, p.by_lines);
+    let alias_head = lang::l("kısaltma", "alias");
+    let alias_w = doc
+        .cast
+        .characters
+        .iter()
+        .map(|c| c.alias.width() + 1)
+        .max()
+        .unwrap_or(4)
+        .max(alias_head.width())
+        + 2;
+    let name_w = doc
+        .cast
+        .characters
+        .iter()
+        .map(|c| c.script.width())
+        .max()
+        .unwrap_or(4)
+        .max(4)
+        + 2;
+    // mark, group bar, star, \alias, name, lines, words, card
+    let fixed = 2 + 2 + 2 + alias_w + name_w + 8 + 8 + 2 + 2;
+    let desc_w = doc
+        .cast
+        .characters
+        .iter()
+        .map(|c| c.desc.as_deref().unwrap_or("").width())
+        .max()
+        .unwrap_or(0)
+        .max(12);
+    let w = (fixed + desc_w + 6).max(78) as u16;
+    // Header, list, a blank, the chosen one's details, keys.
+    let h = list.len() as u16 + 6;
+    let r = centered(area, w.min(110), h);
+    float(f, r);
     let order = if p.by_lines {
         lang::l("en çok konuşan", "most lines")
     } else {
         lang::l("oyundaki sıra", "the play's order")
     };
-    f.render_widget(panel(&lang::f("kişiler — {}", "cast — {}", &[&order])), r);
+    let count = Line::from(Span::styled(
+        lang::f(
+            " {} kişi ",
+            " {} characters ",
+            &[&doc.cast.characters.len()],
+        ),
+        Style::default().fg(FAINT),
+    ))
+    .right_aligned();
+    f.render_widget(
+        panel(&lang::f("kişiler — {}", "cast — {}", &[&order])).title_bottom(count),
+        r,
+    );
     let inn = inner(r);
-    let st = stats(doc, text);
-    let list = entries(doc, &st, p.by_lines);
-    let rows = inn.height.saturating_sub(3) as usize;
+    let room = (inn.width as usize).saturating_sub(fixed);
+    let head = Style::default().fg(FAINT);
+    let mut lines: Vec<Line> = vec![Line::from(vec![
+        Span::styled(format!("      {alias_head:<alias_w$}"), head),
+        Span::styled(format!("{:<name_w$}", lang::l("ad", "name")), head),
+        Span::styled(
+            format!(
+                "{:>8}{:>8}  ",
+                lang::l("replik", "lines"),
+                lang::l("kelime", "words")
+            ),
+            head,
+        ),
+        Span::styled(lang::l("açıklama", "description").to_string(), head),
+    ])];
+    let rows = (inn.height as usize).saturating_sub(4);
     let start = p.sel.saturating_sub(rows.saturating_sub(1));
-    let mut lines: Vec<Line> = Vec::new();
     for (n, e) in list.iter().enumerate().skip(start).take(rows) {
         let sel = n == p.sel;
-        let mark = Span::styled(if sel { "▸ " } else { "  " }, Style::default().fg(CLARET));
         match *e {
             Entry::Group(g) => {
                 let grp = &doc.cast.groups[g];
-                lines.push(Line::from(vec![
-                    mark,
-                    Span::styled(
-                        format!(
-                            "┌ {}",
-                            if grp.desc.is_empty() {
-                                "grup"
-                            } else {
-                                &grp.desc
-                            }
+                let name = if grp.desc.is_empty() {
+                    lang::l("grup", "group")
+                } else {
+                    &grp.desc
+                };
+                lines.push(row(
+                    vec![
+                        mark(sel),
+                        Span::styled(
+                            format!("┌ {name}"),
+                            Style::default().fg(MUTED).add_modifier(Modifier::ITALIC),
                         ),
-                        Style::default().fg(MUTED).add_modifier(Modifier::ITALIC),
-                    ),
-                ]));
+                    ],
+                    sel,
+                    inn.width,
+                ));
             }
             Entry::Character(i) => {
                 let c = &doc.cast.characters[i];
-                let indent = if c.group.is_some() && !p.by_lines {
+                let bar = if c.group.is_some() && !p.by_lines {
                     "│ "
                 } else {
-                    ""
+                    "  "
                 };
-                let star = if c.star { "★" } else { " " };
+                let star = if c.star { "★ " } else { "  " };
                 let kind = match c.kind {
-                    CastKind::Hidden => lang::l(" gizli", " hidden"),
-                    CastKind::Plain => lang::l(" tabloda yok", " not in the table"),
+                    CastKind::Hidden => lang::l("gizli", "hidden"),
+                    CastKind::Plain => lang::l("tabloda yok", "not in the table"),
                     _ => "",
                 };
                 let name_style = Style::default()
@@ -164,42 +218,68 @@ pub fn draw_cast(f: &mut Frame, area: Rect, doc: &Doc, text: &str, side: &Sideca
                 let card = if side.cards.get(&c.alias).is_some_and(|k| !k.is_empty()) {
                     " ▤"
                 } else {
-                    ""
+                    "  "
                 };
                 let (lines_n, words) = st[i];
-                let desc = c.desc.as_deref().unwrap_or("");
-                let full = c
-                    .full
-                    .as_deref()
-                    .map(|f| format!(" ({f})"))
-                    .unwrap_or_default();
-                lines.push(Line::from(vec![
-                    mark,
-                    Span::styled(indent.to_string(), Style::default().fg(FAINT)),
-                    Span::styled(star, Style::default().fg(BEIGE)),
-                    Span::styled(format!(" \\{:<8}", c.alias), Style::default().fg(MUTED)),
-                    Span::styled(format!("{:<20}", c.script), name_style),
-                    Span::styled(
-                        lang::f(
-                            "{} replik {} kelime",
-                            "{} lines {} words",
-                            &[&format!("{lines_n:>4}"), &format!("{words:>6}")],
+                let desc = c.desc.as_deref().filter(|d| !d.is_empty()).unwrap_or(kind);
+                lines.push(row(
+                    vec![
+                        mark(sel),
+                        Span::styled(bar, Style::default().fg(FAINT)),
+                        Span::styled(star, Style::default().fg(BEIGE)),
+                        Span::styled(
+                            format!("{:<alias_w$}", format!("\\{}", c.alias)),
+                            Style::default().fg(MUTED),
                         ),
-                        Style::default().fg(MUTED),
-                    ),
-                    Span::styled(format!("{full} {desc}{kind}"), Style::default().fg(FAINT)),
-                    Span::styled(card, Style::default().fg(BEIGE)),
-                ]));
+                        Span::styled(format!("{:<name_w$}", c.script), name_style),
+                        Span::styled(
+                            format!("{lines_n:>8}{words:>8}  "),
+                            Style::default().fg(MUTED),
+                        ),
+                        Span::styled(
+                            format!("{:<room$}", fit(desc, room)),
+                            Style::default().fg(FAINT),
+                        ),
+                        Span::styled(card, Style::default().fg(BEIGE)),
+                    ],
+                    sel,
+                    inn.width,
+                ));
             }
         }
     }
     f.render_widget(
         Paragraph::new(lines).style(theme::base()),
         Rect {
-            height: inn.height.saturating_sub(2),
+            height: inn.height.saturating_sub(3),
             ..inn
         },
     );
+    // The chosen one in full: the table cuts long descriptions.
+    if let Some(Entry::Character(i)) = list.get(p.sel) {
+        let c = &doc.cast.characters[*i];
+        let mut parts = vec![c.display_name().to_string()];
+        if let Some(d) = c.desc.as_deref().filter(|d| !d.is_empty()) {
+            parts.push(d.to_string());
+        }
+        if let Some(k) = side.cards.get(&c.alias).filter(|k| !k.is_empty()) {
+            if !k.age.is_empty() {
+                parts.push(lang::f("{} yaş", "age {}", &[&k.age]));
+            }
+            if !k.relations.is_empty() {
+                parts.push(k.relations.clone());
+            }
+        }
+        f.render_widget(
+            Paragraph::new(fit(&parts.join(" · "), inn.width as usize))
+                .style(theme::base().fg(MUTED)),
+            Rect {
+                y: inn.y + inn.height.saturating_sub(2),
+                height: 1,
+                ..inn
+            },
+        );
+    }
     let keys = if p.by_lines {
         lang::l(
             "⏎ kart   e düzenle   n yeni   d sil   s sıra   Esc kapat",
@@ -211,21 +291,16 @@ pub fn draw_cast(f: &mut Frame, area: Rect, doc: &Doc, text: &str, side: &Sideca
             "⏎ card   e edit   n new   d delete   Alt+↑↓ move   s order   Esc close",
         )
     };
-    f.render_widget(
-        Paragraph::new(keys).style(theme::base().fg(FAINT)),
-        Rect {
-            y: inn.y + inn.height.saturating_sub(1),
-            height: 1,
-            ..inn
-        },
-    );
+    keys_line(f, inn, keys);
 }
 
 // ------------------------------------------------------------------ scenes
 
 pub fn draw_scenes(f: &mut Frame, area: Rect, doc: &Doc, wpm: u32, sel: usize) {
-    let r = big(area);
-    f.render_widget(Clear, r);
+    let acts = doc.outline.acts.len();
+    let h = (doc.outline.scenes.len() * 2 + acts + 4).max(6) as u16;
+    let r = centered(area, 90, h);
+    float(f, r);
     let total: u32 = doc
         .outline
         .scenes
@@ -279,32 +354,47 @@ pub fn draw_scenes(f: &mut Frame, area: Rect, doc: &Doc, wpm: u32, sel: usize) {
             .iter()
             .map(|a| doc.cast.get(a).map_or(a.clone(), |c| c.script.clone()))
             .collect();
-        lines.push(Line::from(vec![
-            Span::styled(
-                if is_sel { "▸ " } else { "  " },
-                Style::default().fg(CLARET),
-            ),
-            Span::styled(
-                format!("{} {}{place}", lang::l("Sahne", "Scene"), s.label),
-                Style::default().fg(if is_sel { BEIGE } else { FG }),
-            ),
-            Span::styled(
-                lang::f(
-                    "   {} replik · {} kelime · ≈ {}",
-                    "   {} lines · {} words · ≈ {}",
-                    &[
-                        &s.lines,
-                        &s.words,
-                        &timing::format(timing::scene_secs(s, wpm)),
-                    ],
+        let stats = lang::f(
+            "{} replik · {} kelime · ≈ {}",
+            "{} lines · {} words · ≈ {}",
+            &[
+                &s.lines,
+                &s.words,
+                &timing::format(timing::scene_secs(s, wpm)),
+            ],
+        );
+        // The heading on the left, the numbers on the right.
+        let heading = format!("{} {}{place}", lang::l("Sahne", "Scene"), s.label);
+        let room = (inner(r).width as usize).saturating_sub(stats.width() + 4);
+        let heading = fit(&heading, room);
+        let gap = room.saturating_sub(heading.width()) + 2;
+        lines.push(row(
+            vec![
+                mark(is_sel),
+                Span::styled(
+                    heading,
+                    Style::default()
+                        .fg(if is_sel { BEIGE } else { FG })
+                        .add_modifier(if is_sel {
+                            Modifier::BOLD
+                        } else {
+                            Modifier::empty()
+                        }),
                 ),
-                Style::default().fg(MUTED),
-            ),
-        ]));
-        lines.push(Line::from(Span::styled(
-            format!("    {}", names.join(", ")),
-            Style::default().fg(FAINT),
-        )));
+                Span::raw(" ".repeat(gap)),
+                Span::styled(stats, Style::default().fg(MUTED)),
+            ],
+            is_sel,
+            inner(r).width,
+        ));
+        lines.push(row(
+            vec![Span::styled(
+                format!("    {}", names.join(", ")),
+                Style::default().fg(FAINT),
+            )],
+            is_sel,
+            inner(r).width,
+        ));
     }
     if doc.outline.scenes.is_empty() {
         lines.push(Line::from(Span::styled(
@@ -326,17 +416,10 @@ pub fn draw_scenes(f: &mut Frame, area: Rect, doc: &Doc, wpm: u32, sel: usize) {
             ..inn
         },
     );
-    f.render_widget(
-        Paragraph::new(lang::l(
-            "⏎ git   ↑↓ seç   Esc kapat",
-            "⏎ go   ↑↓ choose   Esc close",
-        ))
-        .style(theme::base().fg(FAINT)),
-        Rect {
-            y: inn.y + inn.height.saturating_sub(1),
-            height: 1,
-            ..inn
-        },
+    keys_line(
+        f,
+        inn,
+        lang::l("⏎ git   ↑↓ seç   Esc kapat", "⏎ go   ↑↓ choose   Esc close"),
     );
 }
 
@@ -405,6 +488,7 @@ pub const HELP: &[(&str, &str, &str)] = &[
         "scene focus: the other scenes fold",
     ),
     ("F5", "imleç dışını soldur", "dim all but the cursor's line"),
+    ("F6", "kâğıt sayfa ya da koyu", "paper page or dark"),
     (
         "Alt+P",
         "kişi tanımları ve oyun bilgisi satırlarını aç",
@@ -422,8 +506,14 @@ pub const HELP: &[(&str, &str, &str)] = &[
 ];
 
 pub fn draw_help(f: &mut Frame, area: Rect) {
-    let r = big(area);
-    f.render_widget(Clear, r);
+    let w = HELP
+        .iter()
+        .map(|(_, tr, en)| 18 + tr.width().max(en.width()))
+        .max()
+        .unwrap_or(60) as u16
+        + 4;
+    let r = centered(area, w, HELP.len() as u16 + 2);
+    float(f, r);
     f.render_widget(
         panel(lang::l(
             "yardım — F1 ya da Esc kapatır",
@@ -442,7 +532,7 @@ pub fn draw_help(f: &mut Frame, area: Rect) {
             };
             if k.is_empty() {
                 Line::from(Span::styled(
-                    what.to_string(),
+                    format!(" {what}"),
                     Style::default().fg(CLARET).add_modifier(Modifier::BOLD),
                 ))
             } else {
@@ -485,7 +575,7 @@ pub fn draw_suggest(
         width: w,
         height: rows + 2,
     };
-    f.render_widget(Clear, r);
+    float(f, r);
     f.render_widget(panel(word), r);
     let lines: Vec<Line> = items
         .iter()
@@ -494,22 +584,23 @@ pub fn draw_suggest(
         .map(|(i, s)| {
             let is_sel = i == sel;
             let add = s.starts_with('+');
-            Line::from(vec![
-                Span::styled(
-                    if is_sel { "▸ " } else { "  " },
-                    Style::default().fg(CLARET),
-                ),
-                Span::styled(
-                    s.clone(),
-                    Style::default().fg(if add {
-                        WARN
-                    } else if is_sel {
-                        BEIGE
-                    } else {
-                        FG
-                    }),
-                ),
-            ])
+            row(
+                vec![
+                    mark(is_sel),
+                    Span::styled(
+                        s.clone(),
+                        Style::default().fg(if add {
+                            WARN
+                        } else if is_sel {
+                            BEIGE
+                        } else {
+                            FG
+                        }),
+                    ),
+                ],
+                is_sel,
+                inner(r).width,
+            )
         })
         .collect();
     f.render_widget(Paragraph::new(lines).style(theme::base()), inner(r));

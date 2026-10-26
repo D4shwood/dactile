@@ -15,6 +15,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use std::path::PathBuf;
+use unicode_width::UnicodeWidthStr;
 
 pub enum Action {
     Stay,
@@ -241,26 +242,80 @@ impl Home {
             ratatui::widgets::Block::default().style(theme::base()),
             area,
         );
-        let header = Line::from(vec![
-            Span::styled(
-                " dactile",
-                Style::default().fg(BEIGE).add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(" — Dynamic Stagewright", Style::default().fg(MUTED)),
-        ]);
+        let side = 3u16.min(area.width / 10);
+        let inner_w = area.width.saturating_sub(side * 2);
+        // The masthead: the name spaced out, what it is, and a rule.
+        let spaced: String = "DACTILE".chars().map(|c| format!("{c} ")).collect();
+        let folder = config::tilde(&cfg.plays_dir());
+        let left = Line::from(Span::styled(
+            spaced.trim_end().to_string(),
+            Style::default().fg(BEIGE).add_modifier(Modifier::BOLD),
+        ));
         f.render_widget(
-            Paragraph::new(header).style(theme::base()),
-            Rect { height: 1, ..area },
+            Paragraph::new(left).style(theme::base()),
+            Rect {
+                x: side,
+                y: area.y + 1,
+                width: inner_w,
+                height: 1,
+            },
+        );
+        f.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled("Dynamic Stagewright", Style::default().fg(MUTED)),
+                Span::styled(
+                    format!(
+                        "   {}",
+                        lang::l("tiyatro oyunu yazmak için", "for writing stage plays")
+                    ),
+                    Style::default().fg(FAINT),
+                ),
+            ]))
+            .style(theme::base()),
+            Rect {
+                x: side,
+                y: area.y + 2,
+                width: inner_w,
+                height: 1,
+            },
+        );
+        // Only as wide as itself, so it leaves the line's left part alone.
+        let label = lang::l("oyunlar  ", "plays  ");
+        let fw = (label.width() + folder.width()) as u16;
+        if fw + 40 < inner_w {
+            f.render_widget(
+                Paragraph::new(Line::from(vec![
+                    Span::styled(label, Style::default().fg(FAINT)),
+                    Span::styled(folder, Style::default().fg(MUTED)),
+                ]))
+                .style(theme::base()),
+                Rect {
+                    x: side + inner_w - fw,
+                    y: area.y + 2,
+                    width: fw,
+                    height: 1,
+                },
+            );
+        }
+        f.render_widget(
+            Paragraph::new("─".repeat(inner_w as usize)).style(theme::base().fg(CLARET)),
+            Rect {
+                x: side,
+                y: area.y + 3,
+                width: inner_w,
+                height: 1,
+            },
         );
         let body = Rect {
-            y: area.y + 2,
-            height: area.height.saturating_sub(5),
-            ..area
+            x: side,
+            y: area.y + 5,
+            width: inner_w,
+            height: area.height.saturating_sub(9),
         };
         if self.first_run {
             let hello = lang::l(
-                "  Hoş geldin. Önce birkaç şey: dil, oyunların duracağı klasör ve adın.",
-                "  Welcome. A few things first: language, where plays live, your name.",
+                "Hoş geldin. Önce birkaç şey: dil, oyunların duracağı klasör ve adın.",
+                "Welcome. A few things first: language, where plays live, your name.",
             );
             f.render_widget(
                 Paragraph::new(hello).style(theme::base().fg(MUTED)),
@@ -269,107 +324,222 @@ impl Home {
         } else if self.plays.is_empty() {
             let lines = vec![
                 Line::from(Span::styled(
-                    lang::l("  Henüz oyun yok.", "  No plays yet."),
-                    Style::default().fg(FG),
+                    lang::l("Henüz oyun yok.", "No plays yet."),
+                    Style::default().fg(FG).add_modifier(Modifier::BOLD),
                 )),
-                Line::from(Span::styled(
-                    lang::f(
-                        "  n ile yeni bir oyun başlat; oyunlar {} içinde durur.",
-                        "  n starts a new play; plays live in {}.",
-                        &[&config::tilde(&cfg.plays_dir())],
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled("n", Style::default().fg(BEIGE)),
+                    Span::styled(
+                        lang::l("  yeni bir oyun başlat", "  start a new play"),
+                        Style::default().fg(MUTED),
                     ),
-                    Style::default().fg(MUTED),
-                )),
+                ]),
+                Line::from(vec![
+                    Span::styled("o", Style::default().fg(BEIGE)),
+                    Span::styled(
+                        lang::l(
+                            "  başka bir yerdeki bir .tex dosyasını aç",
+                            "  open a .tex file from somewhere else",
+                        ),
+                        Style::default().fg(MUTED),
+                    ),
+                ]),
             ];
             f.render_widget(Paragraph::new(lines).style(theme::base()), body);
         } else {
-            let rows = (body.height / 2) as usize;
-            let start = self.sel.saturating_sub(rows.saturating_sub(1));
-            let mut lines = Vec::new();
-            for (i, p) in self.plays.iter().enumerate().skip(start).take(rows) {
-                let sel = i == self.sel;
-                let size = lang::f(
-                    "{} perde · {} sahne · ≈ {}",
-                    "{} acts · {} scenes · ≈ {}",
-                    &[&p.acts, &p.scenes, &timing::format(p.secs)],
-                );
-                lines.push(Line::from(vec![
-                    Span::styled(if sel { " ▸ " } else { "   " }, Style::default().fg(CLARET)),
-                    Span::styled(
-                        format!("{:<28}", p.title),
-                        Style::default()
-                            .fg(if sel { BEIGE } else { FG })
-                            .add_modifier(if sel {
-                                Modifier::BOLD
-                            } else {
-                                Modifier::empty()
-                            }),
-                    ),
-                    Span::styled(format!("{:<22}", p.author), Style::default().fg(MUTED)),
-                    Span::styled(format!("{size:<34}"), Style::default().fg(MUTED)),
-                    Span::styled(when(p.modified), Style::default().fg(FAINT)),
-                ]));
-                lines.push(Line::from(Span::styled(
-                    format!("     {}", config::tilde(&p.path)),
-                    Style::default().fg(FAINT),
-                )));
+            // The list, and a card for the chosen play when there is room.
+            let card_w = if body.width >= 90 { 40 } else { 0 };
+            let list = Rect {
+                width: body
+                    .width
+                    .saturating_sub(card_w + if card_w > 0 { 4 } else { 0 }),
+                ..body
+            };
+            self.draw_list(f, list);
+            if card_w > 0
+                && let Some(p) = self.plays.get(self.sel)
+            {
+                let card = Rect {
+                    x: body.x + body.width - card_w,
+                    width: card_w,
+                    height: body.height.min(16),
+                    ..body
+                };
+                draw_card(f, card, p, cfg.paper);
             }
-            f.render_widget(Paragraph::new(lines).style(theme::base()), body);
         }
         // The spell checker, so a missing dictionary is noticed here.
         let dict = match spell::find() {
             Some((aff, _)) => Span::styled(
                 lang::f(
-                    "  Yazım denetimi: {}",
-                    "  Spell check: {}",
+                    "yazım denetimi: {}",
+                    "spell check: {}",
                     &[&config::tilde(&aff.with_extension(""))],
                 ),
                 Style::default().fg(FAINT),
             ),
             None => Span::styled(
                 lang::l(
-                    "  Türkçe sözlük yok, yazım denetimi kapalı: paru -S hunspell-tr",
-                    "  No Turkish dictionary, spell check off: install hunspell-tr",
+                    "Türkçe sözlük yok, yazım denetimi kapalı: paru -S hunspell-tr",
+                    "No Turkish dictionary, spell check off: install hunspell-tr",
                 ),
                 Style::default().fg(WARN),
             ),
         };
         let y = area.y + area.height.saturating_sub(3);
+        let status = match &self.message {
+            Some((msg, warn)) => Span::styled(
+                msg.clone(),
+                Style::default().fg(if *warn { WARN } else { MUTED }),
+            ),
+            None => dict,
+        };
         f.render_widget(
-            Paragraph::new(Line::from(dict)).style(theme::base()),
+            Paragraph::new(Line::from(status)).style(theme::base()),
             Rect {
+                x: side,
                 y,
+                width: inner_w,
                 height: 1,
-                ..area
             },
         );
-        if let Some((msg, warn)) = &self.message {
-            let style = theme::base().fg(if *warn { WARN } else { MUTED });
-            f.render_widget(
-                Paragraph::new(format!("  {msg}")).style(style),
-                Rect {
-                    y: y + 1,
-                    height: 1,
-                    ..area
-                },
-            );
+        let keys = [
+            ("⏎", lang::l("aç", "open")),
+            ("n", lang::l("yeni oyun", "new play")),
+            ("o", lang::l("dosya aç", "open a file")),
+            ("s", lang::l("ayarlar", "settings")),
+            ("q", lang::l("çık", "quit")),
+        ];
+        let mut spans = Vec::new();
+        for (k, what) in keys {
+            spans.push(Span::styled(k, Style::default().fg(MUTED)));
+            spans.push(Span::styled(
+                format!(" {what}   "),
+                Style::default().fg(FAINT),
+            ));
         }
-        let keys = lang::l(
-            " ⏎ aç   n yeni oyun   o dosya aç   s ayarlar   q çık",
-            " ⏎ open   n new play   o open a file   s settings   q quit",
-        );
         f.render_widget(
-            Paragraph::new(keys).style(theme::base().fg(FAINT)),
+            Paragraph::new(Line::from(spans)).style(theme::base()),
             Rect {
+                x: side,
                 y: area.y + area.height.saturating_sub(1),
+                width: inner_w,
                 height: 1,
-                ..area
             },
         );
         if let Some(form) = &self.form {
             popup::draw_form(f, area, form);
         }
     }
+
+    /// The plays, two rows each: the title and when, then who and how long.
+    fn draw_list(&self, f: &mut Frame, area: Rect) {
+        let per = 3usize;
+        let rows = (area.height as usize / per).max(1);
+        let start = self.sel.saturating_sub(rows.saturating_sub(1));
+        let mut lines = Vec::new();
+        for (i, p) in self.plays.iter().enumerate().skip(start).take(rows) {
+            let sel = i == self.sel;
+            let w = area.width as usize;
+            let stamp = when(p.modified);
+            let title = popup::fit(&p.title, w.saturating_sub(stamp.width() + 6));
+            let gap = w.saturating_sub(2 + title.width() + stamp.width());
+            lines.push(popup::row(
+                vec![
+                    popup::mark(sel),
+                    Span::styled(
+                        title,
+                        Style::default()
+                            .fg(if sel { BEIGE } else { FG })
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw(" ".repeat(gap)),
+                    Span::styled(stamp, Style::default().fg(FAINT)),
+                ],
+                sel,
+                area.width,
+            ));
+            let mut about = Vec::new();
+            if !p.author.is_empty() {
+                about.push(p.author.clone());
+            }
+            about.push(lang::f(
+                "{} perde · {} sahne · ≈ {}",
+                "{} acts · {} scenes · ≈ {}",
+                &[&p.acts, &p.scenes, &timing::format(p.secs)],
+            ));
+            if p.elsewhere {
+                about.push(config::tilde(&p.path));
+            }
+            lines.push(popup::row(
+                vec![
+                    Span::raw("  "),
+                    Span::styled(
+                        popup::fit(&about.join("  ·  "), w.saturating_sub(2)),
+                        Style::default().fg(MUTED),
+                    ),
+                ],
+                sel,
+                area.width,
+            ));
+            lines.push(Line::from(""));
+        }
+        f.render_widget(Paragraph::new(lines).style(theme::base()), area);
+    }
+}
+
+/// The chosen play's cover in miniature, on a page like the writer's, with
+/// its numbers under it.
+fn draw_card(f: &mut Frame, area: Rect, p: &Play, paper: bool) {
+    let pal = if paper { &theme::PAPER } else { &theme::DARK };
+    let base = Style::default().fg(pal.fg).bg(pal.bg);
+    let w = area.width.saturating_sub(4) as usize;
+    let center = |s: String, st: Style| Line::from(Span::styled(popup::fit(&s, w), st)).centered();
+    let mut lines = vec![
+        Line::from(""),
+        Line::from(""),
+        center(
+            dactile::cast::upper_tr(&p.title),
+            base.add_modifier(Modifier::BOLD),
+        ),
+        center(p.author.clone(), base),
+    ];
+    if p.final_mode {
+        if !p.starred.is_empty() {
+            lines.push(Line::from(""));
+            lines.push(center(
+                p.starred.join(", "),
+                base.fg(pal.star).add_modifier(Modifier::BOLD),
+            ));
+        }
+    } else {
+        let draft = match &p.draft {
+            Some(d) => format!("{} {d}", lang::l("TASLAK", "DRAFT")),
+            None => lang::l("TASLAK", "DRAFT").to_string(),
+        };
+        lines.push(center(draft, base.fg(pal.muted)));
+    }
+    lines.push(Line::from(""));
+    lines.push(center("─".repeat(w / 2), base.fg(pal.faint)));
+    lines.push(Line::from(""));
+    let fact = |s: String| center(s, base.fg(pal.muted));
+    lines.push(fact(lang::f(
+        "{} perde · {} sahne",
+        "{} acts · {} scenes",
+        &[&p.acts, &p.scenes],
+    )));
+    lines.push(fact(lang::f(
+        "{} kişi · {} kelime",
+        "{} characters · {} words",
+        &[&p.characters, &p.words],
+    )));
+    lines.push(fact(lang::f(
+        "≈ {} oynanır",
+        "plays ≈ {}",
+        &[&timing::format(p.secs)],
+    )));
+    f.render_widget(Paragraph::new(lines).style(base), area);
 }
 
 /// A path typed in a form: `~/…`, absolute, or inside the plays folder.

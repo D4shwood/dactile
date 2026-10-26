@@ -91,6 +91,7 @@ line's source until you leave it. F2 shows the whole play as source.
 | Alt+S | spelling suggestions for the word at the cursor |
 | Alt+P | show the cast and cover lines of the source |
 | F3 / F4 / F5 | typewriter, scene focus, dim the rest |
+| F6 | the play on a paper page, or dark |
 | ^Z ^Y, ^C ^X ^V | undo, redo, copy, cut, paste |
 | ^S, ^Q | save (it saves by itself anyway), quit |
 | F1 | all of the above |

@@ -7,6 +7,7 @@
 //! Blocks the app doesn't understand are always shown raw.
 
 use crate::cast::{self, Cast};
+use crate::info;
 use crate::lang;
 use crate::lex::{self, Block, Inline, Kind};
 use crate::outline::{self, Outline};
@@ -116,6 +117,8 @@ pub enum Style {
     Ref,
     Under,
     Heading,
+    /// The play's title on the cover preview.
+    Title,
     SceneCast,
     Faint,
     Raw,
@@ -746,9 +749,193 @@ impl Builder<'_> {
             Kind::Unknown { .. } => {
                 self.raw(b, Style::Warn);
             }
-            Kind::Comment | Kind::Other => return false,
+            Kind::Other => match self.text[span.clone()].trim() {
+                "\\maketitle" => self.cover(b, lead, span.end),
+                "\\kisiler" => self.cast_table(b, lead, span.end),
+                _ => return false,
+            },
+            Kind::Comment => return false,
         }
         true
+    }
+
+    /// Rows of decoration for a chip block: one stop at `lead` before the first
+    /// character, one at `end` after the last row.
+    fn chip_rows(
+        &mut self,
+        b: usize,
+        rows: Vec<(Vec<Glyph>, Align, u16)>,
+        lead: usize,
+        end: usize,
+    ) {
+        let mut row = self.out.rows.len();
+        let mut first = true;
+        for (mut glyphs, align, indent) in rows {
+            if first {
+                match glyphs.first_mut() {
+                    Some(g) => g.stop = Some(lead),
+                    None => glyphs.push(Glyph::deco(' ', Style::Faint, Some(lead))),
+                }
+                first = false;
+            }
+            if glyphs.is_empty() {
+                self.ensure_row(row, b);
+                row += 1;
+                continue;
+            }
+            let width = self.width;
+            row += self.flow(b, &glyphs, indent, width, align, None, row);
+        }
+        let (r, col) = self.last_pos(self.out.rows.len().saturating_sub(1));
+        self.stop(end, r, col);
+    }
+
+    /// `\maketitle`: the cover in miniature, as the PDF prints it.
+    fn cover(&mut self, b: usize, lead: usize, end: usize) {
+        let get = |name| {
+            info::get(self.text, name)
+                .map(|v| v.replace("\\\\", " ").trim().to_string())
+                .filter(|v| !v.is_empty())
+        };
+        let text = |s: &str, style| -> Vec<Glyph> {
+            s.chars().map(|c| Glyph::deco(c, style, None)).collect()
+        };
+        let mut rows = vec![(Vec::new(), Align::Center, 0)];
+        let title = self
+            .doc
+            .title(self.text)
+            .unwrap_or_else(|| lang::l("(başlıksız)", "(untitled)").into());
+        rows.push((
+            text(&cast::upper_tr(&title), Style::Title),
+            Align::Center,
+            0,
+        ));
+        if let Some(a) = get("author") {
+            rows.push((text(&a, Style::Text), Align::Center, 0));
+        }
+        if info::is_final(self.text) {
+            let starred: Vec<String> = self
+                .doc
+                .cast
+                .characters
+                .iter()
+                .filter(|c| c.star)
+                .map(|c| c.display_name().to_string())
+                .collect();
+            if !starred.is_empty() {
+                rows.push((Vec::new(), Align::Center, 0));
+                rows.push((text(&starred.join(", "), Style::Name), Align::Center, 0));
+            }
+        } else {
+            let mut d = lang::l("TASLAK", "DRAFT").to_string();
+            if let Some(n) = get("draft") {
+                d = format!("{d} {n}");
+            }
+            rows.push((text(&d, Style::SceneCast), Align::Center, 0));
+        }
+        let small: Vec<String> = [
+            get("copyrightnotice").map(|c| format!("© {c}")),
+            get("address"),
+            get("telephone"),
+            get("email"),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        if !small.is_empty() {
+            rows.push((Vec::new(), Align::Center, 0));
+            rows.push((text(&small.join(" · "), Style::Faint), Align::Right, 0));
+        }
+        rows.push((
+            text(&"─".repeat(self.width as usize), Style::Faint),
+            Align::Left,
+            0,
+        ));
+        self.chip_rows(b, rows, lead, end);
+    }
+
+    /// `\kisiler`: the cast table, names in a column, groups braced.
+    fn cast_table(&mut self, b: usize, lead: usize, end: usize) {
+        let cast = &self.doc.cast;
+        let text = |s: &str, style| -> Vec<Glyph> {
+            s.chars().map(|c| Glyph::deco(c, style, None)).collect()
+        };
+        let name_style = |c: &cast::Character| if c.star { Style::NameStar } else { Style::Name };
+        // (name, its style, brace, description)
+        let mut lines: Vec<(String, Style, Option<char>, String)> = Vec::new();
+        for row in cast.rows() {
+            match row {
+                cast::Row::Character(i) => {
+                    let c = &cast.characters[i];
+                    let desc = c.desc.clone().unwrap_or_default();
+                    lines.push((c.display_name().to_string(), name_style(c), None, desc));
+                }
+                cast::Row::Group(g) => {
+                    let group = &cast.groups[g];
+                    let n = group.members.len();
+                    for (k, &m) in group.members.iter().enumerate() {
+                        let c = &cast.characters[m];
+                        let brace = match (n, k) {
+                            (1, _) => '}',
+                            (_, 0) => '┐',
+                            (_, k) if k + 1 == n => '┘',
+                            _ => '┤',
+                        };
+                        let desc = if k == (n - 1) / 2 {
+                            group.desc.clone()
+                        } else {
+                            String::new()
+                        };
+                        lines.push((
+                            c.display_name().to_string(),
+                            name_style(c),
+                            Some(brace),
+                            desc,
+                        ));
+                    }
+                }
+            }
+        }
+        let names_w = lines.iter().map(|l| l.0.width()).max().unwrap_or(0) as u16;
+        let col = (names_w + 3).min(self.width / 2);
+        let descs_w = lines.iter().map(|l| l.3.width()).max().unwrap_or(0) as u16;
+        let table_w = (col + descs_w).min(self.width);
+        let indent = (self.width - table_w) / 2;
+        let mut rows = vec![
+            (Vec::new(), Align::Center, 0),
+            (
+                text(lang::l("KİŞİLER", "CAST"), Style::Heading),
+                Align::Center,
+                0,
+            ),
+            (Vec::new(), Align::Center, 0),
+        ];
+        for (name, style, brace, desc) in lines {
+            let mut g = text(&name, style);
+            let pad = (col as usize).saturating_sub(name.width() + 2);
+            g.extend(text(&" ".repeat(pad.max(1)), Style::Text));
+            match brace {
+                Some(c) => g.push(Glyph::deco(c, Style::Faint, None)),
+                None => g.push(Glyph::deco(' ', Style::Faint, None)),
+            }
+            g.push(Glyph::deco(' ', Style::Faint, None));
+            // Spaces would let the row wrap anywhere: keep the columns with
+            // non-breaking ones and let only the description wrap.
+            for x in g.iter_mut() {
+                if x.ch == ' ' {
+                    x.ch = '\u{a0}';
+                }
+            }
+            g.extend(text(&desc, Style::SceneCast));
+            rows.push((g, Align::Left, indent));
+        }
+        rows.push((Vec::new(), Align::Center, 0));
+        rows.push((
+            text(&"─".repeat(self.width as usize), Style::Faint),
+            Align::Left,
+            0,
+        ));
+        self.chip_rows(b, rows, lead, end);
     }
 
     /// Text in the column right of the names, aligned with the first name row.
@@ -819,6 +1006,54 @@ mod tests {
             },
         );
         (doc, l)
+    }
+
+    #[test]
+    fn cover_and_cast_table_preview() {
+        let (doc, l) = lay(70);
+        let title = find_row(&l, "KAR MASALI");
+        assert!(row_text(&l, title + 1).contains("Örnek Yazar"));
+        assert!(row_text(&l, title + 2).contains("TASLAK 0.1"));
+        let cast = find_row(&l, "KİŞİLER");
+        assert!(cast > title);
+        // Full names from the cast table, descriptions in their own column.
+        // Names keep their spaces unbreakable, so they never wrap.
+        let ozan = find_row(&l, "Değirmenci, Selin");
+        assert!(row_text(&l, ozan).contains("Ozan\u{a0}Usta"));
+        let selin = find_row(&l, "Köy öğretmeni");
+        let col = |r: usize, s: &str| {
+            let t = row_text(&l, r);
+            t[..t.find(s).unwrap()].chars().count()
+        };
+        assert_eq!(col(selin, "Köy"), col(ozan, "Değirmenci"));
+        // A group: its members braced, its name beside them.
+        let kadin = find_row(&l, "Köylüler");
+        assert!(row_text(&l, kadin).contains("Köylüler"));
+        assert!(row_text(&l, kadin + 1).contains("ÇOBAN"));
+        // Hidden characters stay out, as in the PDF.
+        assert!((cast..find_row(&l, "PERDE")).all(|r| !row_text(&l, r).contains("HERKES")));
+        // Each is one chip: one stop at its start and one at its end.
+        let mk = doc.parts.body.start + PLAY[doc.parts.body.clone()].find("\\maketitle").unwrap();
+        let stops: Vec<_> = l
+            .stops
+            .iter()
+            .filter(|s| s.byte >= mk && s.byte < mk + 10)
+            .collect();
+        assert_eq!(stops.len(), 1);
+        // In final mode the cover names the starred characters instead.
+        let fin = PLAY.replace("[draft]{tiyatro}", "[final]{tiyatro}");
+        let d = Doc::new(&fin);
+        let l = layout(
+            &fin,
+            &d,
+            Options {
+                width: 70,
+                ..Options::default()
+            },
+        );
+        let t = find_row(&l, "KAR MASALI");
+        assert!((t..t + 4).any(|r| row_text(&l, r).trim() == "Selin"));
+        assert!((0..l.rows.len()).all(|r| !row_text(&l, r).contains("TASLAK")));
     }
 
     #[test]

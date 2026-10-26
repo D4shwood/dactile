@@ -2,7 +2,7 @@
 
 use super::panels::{self, CastPanel, Entry};
 use super::popup::{self, Field, Form, FormKind, Menu, Verbs};
-use super::theme::{self, BEIGE, CLARET, FAINT, MUTED, SELECTION, WARN};
+use super::theme::{self, BEIGE, CLARET, FAINT, MUTED, WARN};
 use anyhow::Result;
 use dactile::buffer::{self, Buffer};
 use dactile::cast::{self as dcast, Spec};
@@ -32,8 +32,21 @@ use std::time::{Duration, Instant, SystemTime};
 const AUTOSAVE_AFTER: Duration = Duration::from_secs(2);
 /// How often the file on disk is checked for changes from elsewhere.
 const CHECK_EVERY: Duration = Duration::from_secs(2);
-/// Columns left of the text: the draft line numbers.
-const MARGIN: u16 = 6;
+/// Columns left of the text on the page: the draft line numbers.
+const MARGIN: u16 = 7;
+/// Air right of the text on the page.
+const PAGE_RIGHT: u16 = 3;
+/// The widest the text gets: about a typed page.
+const PAGE_TEXT: u16 = 66;
+
+/// Where the page sits on the screen.
+struct Sheet {
+    x: u16,
+    width: u16,
+    /// The text's first column.
+    text_x: u16,
+    text_w: u16,
+}
 
 pub struct Writer {
     path: PathBuf,
@@ -68,6 +81,8 @@ pub struct Writer {
     focus: bool,
     /// Everything but the cursor's block in the background.
     dim: bool,
+    /// The play on a paper page; dark otherwise.
+    paper: bool,
     /// Suggestions only with ^K, not on every backslash.
     menu_manual: bool,
     default_wpm: u32,
@@ -156,6 +171,7 @@ impl Writer {
             typewriter: cfg.typewriter,
             focus: cfg.focus,
             dim: cfg.dim,
+            paper: cfg.paper,
             menu_manual: cfg.menu == "manual",
             default_wpm: cfg.wpm,
             text_top: 1,
@@ -202,7 +218,37 @@ impl Writer {
     }
 
     fn text_width(&self) -> u16 {
-        self.width.saturating_sub(MARGIN + 2).max(20)
+        self.sheet().text_w
+    }
+
+    /// A page of `PAGE_TEXT` columns in the middle, or the whole screen when
+    /// that doesn't fit.
+    fn sheet(&self) -> Sheet {
+        let full = MARGIN + PAGE_TEXT + PAGE_RIGHT;
+        if self.width >= full + 4 {
+            let x = (self.width - full) / 2;
+            Sheet {
+                x,
+                width: full,
+                text_x: x + MARGIN,
+                text_w: PAGE_TEXT,
+            }
+        } else {
+            Sheet {
+                x: 0,
+                width: self.width,
+                text_x: MARGIN,
+                text_w: self.width.saturating_sub(MARGIN + 1).max(20),
+            }
+        }
+    }
+
+    fn palette(&self) -> &'static theme::Palette {
+        if self.paper {
+            &theme::PAPER
+        } else {
+            &theme::DARK
+        }
     }
 
     /// Rebuilds the model and the layout from the text.
@@ -389,6 +435,9 @@ impl Writer {
             }
             KeyCode::F(5) => {
                 self.dim = !self.dim;
+            }
+            KeyCode::F(6) => {
+                self.paper = !self.paper;
             }
             KeyCode::Char('o') if ctrl => {
                 self.popup = Popup::Cast(CastPanel {
@@ -1861,7 +1910,7 @@ impl Writer {
                     return;
                 }
                 let row = self.scroll + (m.row - self.text_top) as usize;
-                let col = m.column.saturating_sub(MARGIN);
+                let col = m.column.saturating_sub(self.sheet().text_x);
                 let hit = (row..self.lay.rows.len())
                     .chain((0..row).rev())
                     .find_map(|r| self.lay.stop_near(r, col));
@@ -1973,9 +2022,9 @@ impl Writer {
         }
     }
 
-    /// The view toggles, for the settings: typewriter, scene focus, dim.
-    pub fn view(&self) -> (bool, bool, bool) {
-        (self.typewriter, self.focus, self.dim)
+    /// The view toggles, for the settings: typewriter, scene focus, dim, paper.
+    pub fn view(&self) -> (bool, bool, bool, bool) {
+        (self.typewriter, self.focus, self.dim, self.paper)
     }
 
     /// On quit: save what's left and keep a version.
@@ -2030,6 +2079,7 @@ impl Writer {
             ..area
         };
         self.text_top = body.y;
+        self.draw_sheet(f, body);
         self.mark_misspelt();
         self.draw_text(f, body);
         let status = Rect {
@@ -2049,7 +2099,7 @@ impl Writer {
             .filter(|c| c.row >= self.scroll)
             .map(|c| {
                 Position::new(
-                    body.x + MARGIN + c.col,
+                    body.x + self.sheet().text_x + c.col,
                     body.y + (c.row - self.scroll) as u16,
                 )
             })
@@ -2118,8 +2168,41 @@ impl Writer {
         );
     }
 
+    /// The desk and the page on it.
+    fn draw_sheet(&self, f: &mut Frame, area: Rect) {
+        let sheet = self.sheet();
+        let p = self.palette();
+        let buf = f.buffer_mut();
+        for y in area.y..area.y + area.height {
+            for x in area.x..area.x + area.width {
+                let on_page = x >= sheet.x && x < sheet.x + sheet.width;
+                let shadow = self.paper && x == sheet.x + sheet.width && y > area.y;
+                let bg = if on_page {
+                    p.bg
+                } else if shadow {
+                    theme::SHADOW
+                } else {
+                    theme::BG
+                };
+                buf[(x, y)].set_char(' ').set_style(Style::default().bg(bg));
+            }
+        }
+    }
+
     fn draw_text(&self, f: &mut Frame, area: Rect) {
         let sel = self.buf.selection();
+        let sheet = self.sheet();
+        let p = self.palette();
+        let left = area.x + sheet.text_x;
+        let right = area.x + (sheet.x + sheet.width).min(area.width);
+        // Panels cover the text; forms and search type somewhere else.
+        let covered = matches!(
+            self.popup,
+            Popup::Cast(_) | Popup::Scenes(_) | Popup::Help | Popup::Form(_) | Popup::Search(..)
+        );
+        let cursor = self.cursor_stop().filter(|c| {
+            !covered && c.row >= self.scroll && c.row < self.scroll + area.height as usize
+        });
         let buf = f.buffer_mut();
         for (i, row) in self
             .lay
@@ -2133,46 +2216,52 @@ impl Writer {
             let here = row.block.is_some() && row.block == self.block();
             if let Some(n) = row.number {
                 let label = format!("{n:>4}");
-                let style = theme::base().fg(if here { MUTED } else { FAINT });
+                let style = Style::default()
+                    .bg(p.bg)
+                    .fg(if here { p.muted } else { p.faint });
+                let x0 = left.saturating_sub(MARGIN) + 1;
                 for (k, ch) in label.chars().enumerate() {
-                    if (k as u16) < area.width {
-                        buf[(area.x + k as u16, y)].set_char(ch).set_style(style);
+                    let x = x0 + k as u16;
+                    if x < right {
+                        buf[(x, y)].set_char(ch).set_style(style);
                     }
                 }
             }
             for c in &row.cells {
-                let x = area.x + MARGIN + c.col;
-                if x >= area.x + area.width {
+                let x = left + c.col;
+                if x >= right {
                     continue;
                 }
-                let mut style = theme::of(c.style);
+                let mut style = theme::on(c.style, p);
                 if self.dim && !here {
-                    style = style.fg(FAINT);
+                    style = style.fg(p.faint);
                 }
                 if let Some(b) = c.byte
                     && self.misspelt.iter().any(|r| r.contains(&b))
                 {
                     style = style
                         .add_modifier(Modifier::UNDERLINED)
-                        .underline_color(WARN);
+                        .underline_color(p.warn);
                 }
                 if let (Some(s), Some(b)) = (&sel, c.byte)
                     && s.contains(&b)
                 {
-                    style = style.bg(SELECTION);
+                    style = style.bg(p.selection);
                 }
                 buf[(x, y)].set_char(c.ch).set_style(style);
             }
         }
-        // The cursor, unless a full panel covers the text.
-        let covered = matches!(self.popup, Popup::Cast(_) | Popup::Scenes(_) | Popup::Help);
-        if !covered
-            && let Some(cur) = self.cursor_stop()
-            && cur.row >= self.scroll
-            && cur.row < self.scroll + area.height as usize
-        {
-            let x = (area.x + MARGIN + cur.col).min(area.x + area.width.saturating_sub(1));
-            f.set_cursor_position(Position::new(x, area.y + (cur.row - self.scroll) as u16));
+        // The cursor, unless a full panel covers the text. On paper the
+        // terminal's own cursor can vanish, so the page draws its own.
+        if let Some(cur) = cursor {
+            let x = (left + cur.col).min(right.saturating_sub(1));
+            let y = area.y + (cur.row - self.scroll) as u16;
+            if self.paper {
+                let cell = &mut buf[(x, y)];
+                cell.set_style(Style::default().fg(p.bg).bg(p.fg));
+            } else {
+                f.set_cursor_position(Position::new(x, y));
+            }
         }
     }
 
@@ -2232,22 +2321,72 @@ impl Writer {
             parts.push(Span::styled(" ", Style::default()));
         }
         f.render_widget(Paragraph::new(Line::from(parts)).style(theme::base()), area);
+        // The view's modes on the right, while they are on.
+        let mut tags: Vec<&str> = Vec::new();
+        if self.typewriter {
+            tags.push(lang::l("daktilo", "typewriter"));
+        }
+        if self.focus {
+            tags.push(lang::l("odak", "focus"));
+        }
+        if self.dim {
+            tags.push(lang::l("soluk", "dim"));
+        }
+        let misspelt = self.misspelt.len();
+        let spell = (misspelt > 0).then(|| lang::f("{} yazım", "{} spelling", &[&misspelt]));
+        let mut right: Vec<Span> = Vec::new();
+        if let Some(sp) = spell {
+            right.push(Span::styled(sp, Style::default().fg(WARN)));
+            right.push(Span::raw("  "));
+        }
+        for t in tags {
+            right.push(Span::styled(
+                format!(" {t} "),
+                Style::default().fg(BEIGE).bg(theme::SELECTION),
+            ));
+            right.push(Span::raw(" "));
+        }
+        let w: usize = right.iter().map(|s| s.content.chars().count()).sum();
+        if w > 0 && (w as u16) < area.width / 2 {
+            let r = Rect {
+                x: area.x + area.width - w as u16,
+                width: w as u16,
+                ..area
+            };
+            f.render_widget(Paragraph::new(Line::from(right)).style(theme::base()), r);
+        }
     }
 
     fn draw_keys(&self, f: &mut Frame, area: Rect) {
+        // (key, what, how much it matters): the least needed go first when
+        // the screen is narrow.
         let keys = [
-            ("^S", lang::l("kaydet", "save")),
-            ("^Z", lang::l("geri al", "undo")),
-            ("^C/^X/^V", lang::l("kopyala", "copy")),
-            ("F1", lang::l("yardım", "help")),
-            ("\\", lang::l("öneri", "suggest")),
-            ("^O", lang::l("kişiler", "cast")),
-            ("^G", lang::l("sahneler", "scenes")),
-            ("^F", lang::l("bul", "find")),
-            ("^Q", lang::l("çık", "quit")),
+            ("F1", lang::l("yardım", "help"), 9),
+            ("\\", lang::l("öneri", "suggest"), 7),
+            ("^O", lang::l("kişiler", "cast"), 8),
+            ("^G", lang::l("sahneler", "scenes"), 6),
+            ("^F", lang::l("bul", "find"), 4),
+            ("^K", lang::l("ara", "search"), 3),
+            ("^Z", lang::l("geri al", "undo"), 2),
+            ("F6", lang::l("sayfa", "page"), 1),
+            ("^S", lang::l("kaydet", "save"), 5),
+            ("^Q", lang::l("çık", "quit"), 10),
         ];
+        let len = |k: &str, w: &str| k.chars().count() + w.chars().count() + 4;
+        let mut shown: Vec<_> = keys.to_vec();
+        while shown.iter().map(|(k, w, _)| len(k, w)).sum::<usize>() + 1 > area.width as usize {
+            let Some(least) = shown
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, k)| k.2)
+                .map(|(i, _)| i)
+            else {
+                break;
+            };
+            shown.remove(least);
+        }
         let mut spans = vec![Span::raw(" ")];
-        for (k, what) in keys {
+        for (k, what, _) in shown {
             spans.push(Span::styled(k, Style::default().fg(MUTED)));
             spans.push(Span::styled(
                 format!(" {what}   "),

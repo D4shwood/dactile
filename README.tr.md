@@ -93,6 +93,7 @@ olarak gösterir.
 | Alt+S | imleçteki kelime için yazım önerileri |
 | Alt+P | kaynaktaki kişi ve oyun bilgisi satırlarını aç |
 | F3 / F4 / F5 | daktilo, sahne odağı, gerisini soldur |
+| F6 | oyun kâğıt sayfada ya da koyu |
 | ^Z ^Y, ^C ^X ^V | geri al, yinele, kopyala, kes, yapıştır |
 | ^S, ^Q | kaydet (zaten kendiliğinden kaydeder), çık |
 | F1 | hepsi |

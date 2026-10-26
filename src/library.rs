@@ -19,6 +19,14 @@ pub struct Play {
     pub acts: usize,
     pub scenes: usize,
     pub secs: u32,
+    /// Characters declared, and words spoken.
+    pub characters: usize,
+    pub words: usize,
+    /// `\draft{…}`, and whether the class is in final mode.
+    pub draft: Option<String>,
+    pub final_mode: bool,
+    /// The starred characters, as the cover names them.
+    pub starred: Vec<String>,
     pub modified: Option<SystemTime>,
     /// Only in the recent list, not in the plays folder.
     pub elsewhere: bool,
@@ -52,6 +60,16 @@ pub fn read(path: &Path, wpm: u32) -> Option<Play> {
         acts: o.acts.len(),
         scenes: o.scenes.len(),
         secs: o.scenes.iter().map(|s| timing::scene_secs(s, wpm)).sum(),
+        characters: cast.characters.len(),
+        words: o.scenes.iter().map(|s| s.words).sum(),
+        draft: info::get(&text, "draft").filter(|d| !d.trim().is_empty()),
+        final_mode: info::is_final(&text),
+        starred: cast
+            .characters
+            .iter()
+            .filter(|c| c.star)
+            .map(|c| c.display_name().to_string())
+            .collect(),
         modified: crate::file::modified(path),
         elsewhere: false,
     })

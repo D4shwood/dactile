@@ -114,9 +114,10 @@ fn open(path: &Path, cfg: &mut Config) -> Result<Writer> {
 /// Saves the play and remembers the view toggles.
 fn close(w: &mut Writer, cfg: &mut Config) -> Result<()> {
     w.close()?;
-    let (typewriter, focus, dim) = w.view();
+    let (typewriter, focus, dim, paper) = w.view();
     cfg.typewriter = typewriter;
     cfg.focus = focus;
     cfg.dim = dim;
+    cfg.paper = paper;
     cfg.save()
 }
