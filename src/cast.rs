@@ -498,6 +498,49 @@ pub fn rename(text: &str, cast: &Cast, old: &str, new: &str) -> Vec<Edit> {
 
 /// How many times an alias is used: lines spoken (`\alias` starting a line
 /// or inline) and directions (`\aliasdo`).
+/// In `range`, `\\old`, `\\olddo` and `\\oldfont` become `new`'s.
+fn renames_in(text: &str, old: &str, new: &str, range: Range<usize>) -> Vec<Edit> {
+    tex::commands(text, range)
+        .into_iter()
+        .filter_map(|cmd| {
+            let suffix = if cmd.name == old {
+                ""
+            } else if cmd.name.strip_prefix(old) == Some("do") {
+                "do"
+            } else if cmd.name.strip_prefix(old) == Some("font") {
+                "font"
+            } else {
+                return None;
+            };
+            Some(Edit::new(
+                cmd.span.start + 1..cmd.span.end,
+                format!("{new}{suffix}"),
+            ))
+        })
+        .collect()
+}
+
+/// Merges `from` into `into`: what `from` says and does becomes `into`'s,
+/// and `from` is declared no more.
+pub fn merge(text: &str, cast: &Cast, from: &str, into: &str) -> Vec<Edit> {
+    let mut edits = renames_in(text, from, into, source::split(text).body);
+    if let Some(e) = remove(text, cast, from) {
+        edits.push(e);
+    }
+    for i in cast.inline.iter().filter(|i| i.alias == from) {
+        edits.push(Edit::new(whole_line_or(text, i.span.clone()), ""));
+    }
+    edits
+}
+
+/// Splits a character: in `ranges` (the scenes chosen), `from` becomes `new`.
+pub fn split(text: &str, from: &str, new: &str, ranges: &[Range<usize>]) -> Vec<Edit> {
+    ranges
+        .iter()
+        .flat_map(|r| renames_in(text, from, new, r.clone()))
+        .collect()
+}
+
 pub fn uses(text: &str, range: Range<usize>, alias: &str) -> (usize, usize) {
     let do_name = format!("{alias}do");
     tex::commands(text, range).iter().fold((0, 0), |(a, d), c| {
@@ -634,6 +677,42 @@ mod tests {
     use crate::tex::apply;
 
     const PLAY: &str = include_str!("../examples/ornek-oyun.tex");
+
+    #[test]
+    fn merging_and_splitting() {
+        let cast = Cast::of_play(PLAY);
+        // ÇOBAN's lines become KADIN's; ÇOBAN is gone.
+        let m = apply(PLAY, &merge(PLAY, &cast, "co", "ka"));
+        let c = Cast::of_play(&m);
+        assert!(c.get("co").is_none());
+        assert!(m.contains("\\ka Sürü ağılda"));
+        assert!(!m.contains("\\co "));
+        // OZAN's inline name goes with him.
+        let m = apply(PLAY, &merge(PLAY, &cast, "oz", "se"));
+        assert!(!m.contains("setinlinename{oz}"));
+        assert!(m.contains("\\se Durdu kızım."));
+        assert!(m.contains("\\sedo\\sedo"));
+        // Only the chosen scene's lines move to a new character.
+        let doc = crate::render::Doc::new(PLAY);
+        let sc = &doc.outline.scenes[2];
+        let r = doc.blocks[sc.block + doc.body.start].span.start
+            ..doc.blocks[sc.end - 1 + doc.body.start].span.end;
+        let spec = Spec {
+            alias: "ya".into(),
+            script: "YAŞLI".into(),
+            full: String::new(),
+            desc: String::new(),
+            star: false,
+            kind: Kind::Cast,
+        };
+        let mut edits = split(PLAY, "ih", "ya", &[r]);
+        edits.push(add(PLAY, &cast, &spec, None));
+        let s = apply(PLAY, &edits);
+        assert!(s.contains("\\ih Yolcuyum."));
+        assert!(s.contains("\\ya Ben gidiyorum artık."));
+        assert!(s.contains("\\yado Çıkar."));
+        assert!(Cast::of_play(&s).get("ya").is_some());
+    }
 
     #[test]
     fn example_play() {

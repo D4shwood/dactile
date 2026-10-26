@@ -98,7 +98,7 @@ durur; tıklayınca oraya gider.
 
 | Tuş | |
 |---|---|
-| ^O | kişiler: düzenle, kısaltmayı her yerde değiştir, sıra, karakter kartları |
+| ^O | kişiler: düzenle, kısaltmayı her yerde değiştir, sıra, karakter kartları; m birini ötekiyle birleştirir, b birini böler (seçtiğin sahneler yeni karaktere geçer) |
 | ^G | perdeler ve sahneler: oraya git; ␣ işaretler, h gizler (`%~` satırları, PDF'te yok), t oyunun çöp kutusuna atar; Tab çöp kutusu: r geri koyar, x x yok eder |
 | ^K | karakter ve komut ara |
 | ^F | bul ve değiştir |

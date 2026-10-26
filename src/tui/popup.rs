@@ -121,6 +121,10 @@ pub enum FormKind {
     Copy(std::path::PathBuf),
     /// A new draft of this play, next to it.
     Fork(std::path::PathBuf),
+    /// This character's lines go to another one.
+    Merge(String),
+    /// A new character takes some of this one's scenes.
+    Split(String),
 }
 
 pub struct Field {
@@ -564,6 +568,7 @@ pub fn label_of(key: &str) -> &str {
         "Öneri menüsü" => "Suggestion menu",
         "Dakikada kelime" => "Words a minute",
         "Klavye" => "Keyboard",
+        "Şununla birleştir" => "Merge into",
         "Dosya" => "File",
         other => other,
     }

@@ -282,13 +282,13 @@ pub fn draw_cast(f: &mut Frame, area: Rect, doc: &Doc, text: &str, side: &Sideca
     }
     let keys = if p.by_lines {
         lang::l(
-            "⏎ kart   e düzenle   n yeni   d sil   s sıra   Esc kapat",
-            "⏎ card   e edit   n new   d delete   s order   Esc close",
+            "⏎ kart   e düzenle   n yeni   m birleştir   b böl   d sil   s sıra   Esc kapat",
+            "⏎ card   e edit   n new   m merge   b split   d delete   s order   Esc close",
         )
     } else {
         lang::l(
-            "⏎ kart   e düzenle   n yeni   d sil   Alt+↑↓ taşı   s sıra   Esc kapat",
-            "⏎ card   e edit   n new   d delete   Alt+↑↓ move   s order   Esc close",
+            "⏎ kart  e düzenle  n yeni  m birleştir  b böl  d sil  Alt+↑↓ taşı  s sıra  Esc",
+            "⏎ card  e edit  n new  m merge  b split  d delete  Alt+↑↓ move  s order  Esc",
         )
     };
     keys_line(f, inn, keys);
@@ -495,6 +495,101 @@ pub fn draw_scenes(
         )
     };
     keys_line(f, inn, &keys);
+}
+
+/// Splitting a character: its scenes, the picked ones going to the new one.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_split(
+    f: &mut Frame,
+    area: Rect,
+    doc: &Doc,
+    from: &str,
+    new: &str,
+    scenes: &[usize],
+    picked: &std::collections::BTreeSet<usize>,
+    sel: usize,
+) {
+    let r = centered(area, 90, scenes.len() as u16 + 6);
+    float(f, r);
+    let old = doc
+        .cast
+        .get(from)
+        .map_or(from.to_string(), |c| c.script.clone());
+    f.render_widget(
+        panel(&lang::f(
+            "{} → {}: hangi sahneler?",
+            "{} → {}: which scenes?",
+            &[&old, &new],
+        )),
+        r,
+    );
+    let inn = inner(r);
+    let mut lines: Vec<Line> = Vec::new();
+    if scenes.is_empty() {
+        lines.push(Line::from(Span::styled(
+            lang::l(
+                "Bu karakter hiçbir sahnede konuşmuyor.",
+                "This character speaks in no scene.",
+            ),
+            Style::default().fg(MUTED),
+        )));
+    }
+    let rows = inn.height.saturating_sub(3) as usize;
+    let start = sel.saturating_sub(rows.saturating_sub(1));
+    for (n, &i) in scenes.iter().enumerate().skip(start).take(rows) {
+        let sc = &doc.outline.scenes[i];
+        let is_sel = n == sel;
+        let on = picked.contains(&i);
+        let act = sc
+            .act
+            .map(|a| format!("{}. ", dactile::outline::roman(doc.outline.acts[a].number)))
+            .unwrap_or_default();
+        let mut name = format!("{act}{} {}", lang::l("Sahne", "Scene"), sc.label);
+        if !sc.place.trim().is_empty() {
+            name.push_str(&format!(" · {}", sc.place.trim()));
+        }
+        let base = doc.body.start;
+        let said = doc.blocks[sc.block + base..sc.end + base]
+            .iter()
+            .filter(|b| matches!(&b.kind, Kind::Line { alias, .. } if alias == from))
+            .count();
+        let count = lang::f("{} replik", "{} lines", &[&said]);
+        lines.push(row(
+            vec![
+                mark(is_sel),
+                Span::styled(
+                    if on { "■ " } else { "□ " },
+                    Style::default().fg(if on { WARN } else { FAINT }),
+                ),
+                Span::styled(
+                    {
+                        let w = (inn.width as usize).saturating_sub(18);
+                        format!("{:<w$}", fit(&name, w))
+                    },
+                    Style::default().fg(if is_sel { BEIGE } else { FG }),
+                ),
+                Span::styled(count, Style::default().fg(MUTED)),
+            ],
+            is_sel,
+            inn.width,
+        ));
+    }
+    f.render_widget(
+        Paragraph::new(lines).style(theme::base()),
+        Rect {
+            height: inn.height.saturating_sub(2),
+            ..inn
+        },
+    );
+    keys_line(
+        f,
+        inn,
+        &lang::f(
+            "␣ seç   ⏎ seçilen {} sahne → {}   Esc vazgeç",
+            "␣ pick   ⏎ give the {} picked scenes to {}   Esc cancel",
+            &[&picked.len(), &new],
+        ),
+    );
 }
 
 // ------------------------------------------------------------------ spelling

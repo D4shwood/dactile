@@ -113,6 +113,16 @@ pub struct Writer {
     pub quit: bool,
 }
 
+/// The scenes a character speaks in, to give some to a new character.
+pub struct SplitPanel {
+    pub from: String,
+    pub spec: Spec,
+    /// Indexes into the outline's scenes.
+    pub scenes: Vec<usize>,
+    pub picked: std::collections::BTreeSet<usize>,
+    pub sel: usize,
+}
+
 /// The view toggles, kept in the settings between sessions.
 pub struct View {
     pub typewriter: bool,
@@ -135,6 +145,8 @@ enum Popup {
     Cast(CastPanel),
     /// ^G: the acts and scenes, and the trash.
     Scenes(ScenesPanel),
+    /// Splitting a character: which of its scenes the new one takes.
+    Split(SplitPanel),
     /// F1: the keyboard, with the last key pressed on it.
     Help(Option<keys::Pressed>),
     /// Alt+S: spelling suggestions for the word at `range`.
@@ -1187,6 +1199,31 @@ impl Writer {
                 }
                 true
             }
+            Popup::Split(p) => {
+                let n = p.scenes.len();
+                match k.code {
+                    KeyCode::Esc => self.popup = Popup::None,
+                    KeyCode::Up => p.sel = p.sel.saturating_sub(1),
+                    KeyCode::Down => p.sel = (p.sel + 1).min(n.saturating_sub(1)),
+                    KeyCode::Char(' ') => {
+                        if let Some(&sc) = p.scenes.get(p.sel)
+                            && !p.picked.remove(&sc)
+                        {
+                            p.picked.insert(sc);
+                        }
+                        p.sel = (p.sel + 1).min(n.saturating_sub(1));
+                    }
+                    KeyCode::Enter => {
+                        let Popup::Split(p) = std::mem::replace(&mut self.popup, Popup::None)
+                        else {
+                            return true;
+                        };
+                        self.split_into(p);
+                    }
+                    _ => {}
+                }
+                true
+            }
             Popup::Help(p) => {
                 // Keys light up here instead of acting; Esc and F1 close.
                 match k.code {
@@ -1424,7 +1461,7 @@ impl Writer {
             _ => {}
         }
         // The alias follows the name until it is edited by hand.
-        if form.kind == FormKind::Character {
+        if matches!(form.kind, FormKind::Character | FormKind::Split(_)) {
             let name = form.get("Ad").to_string();
             let cast = &self.doc.cast;
             if let Some(a) = form.field_mut("Kısaltma")
@@ -1530,6 +1567,103 @@ impl Writer {
                         false,
                     );
                 }
+            }
+            FormKind::Merge(from) => {
+                let into = form
+                    .get("Şununla birleştir")
+                    .split_whitespace()
+                    .next()
+                    .unwrap_or("")
+                    .trim_start_matches('\\')
+                    .to_string();
+                if into == from || self.doc.cast.get(&into).is_none() {
+                    return Err(Box::new((
+                        form,
+                        lang::l(
+                            "Oyundaki bir karakterin kısaltmasını yaz (Tab listeyi gezer).",
+                            "Type the alias of a character in the play (Tab goes through them).",
+                        )
+                        .into(),
+                    )));
+                }
+                if !form.confirmed {
+                    let (lines, dos) =
+                        dcast::uses(&self.buf.text, self.doc.parts.body.clone(), &from);
+                    let mut form = form;
+                    form.confirmed = true;
+                    return Err(Box::new((
+                        form,
+                        lang::f(
+                            "\\{} → \\{}: {} yer geçer, \\{} silinir. ⏎ onaylar.",
+                            "\\{} → \\{}: {} places move, \\{} goes. ⏎ confirms.",
+                            &[&from, &into, &(lines + dos), &from],
+                        ),
+                    )));
+                }
+                if !self.editable() {
+                    return Ok(());
+                }
+                let edits = dcast::merge(&self.buf.text, &self.doc.cast, &from, &into);
+                let cursor = self.buf.cursor.min(self.doc.parts.body.start);
+                self.buf.apply(&edits, cursor);
+                // The card: what was known about both.
+                if let Some(old) = self.sidecar.cards.remove(&from) {
+                    let card = self.sidecar.cards.entry(into.clone()).or_default();
+                    for (mine, theirs) in [
+                        (&mut card.age, old.age),
+                        (&mut card.relations, old.relations),
+                        (&mut card.notes, old.notes),
+                    ] {
+                        if mine.is_empty() {
+                            *mine = theirs;
+                        } else if !theirs.is_empty() {
+                            mine.push_str(&format!(" / {theirs}"));
+                        }
+                    }
+                    let _ = self.sidecar.save(&self.path);
+                }
+                self.edited();
+                self.say(
+                    &lang::f(
+                        "\\{} artık \\{} (^Z geri alır).",
+                        "\\{} is now \\{} (^Z undoes).",
+                        &[&from, &into],
+                    ),
+                    false,
+                );
+            }
+            FormKind::Split(from) => {
+                let spec = match self.spec_from(&form, None) {
+                    Ok(s) => s,
+                    Err(e) => return Err(Box::new((form, e))),
+                };
+                if self.doc.cast.alias_taken(&spec.alias) {
+                    let alias = spec.alias.clone();
+                    return Err(Box::new((
+                        form,
+                        lang::f(
+                            "\\{} kullanılıyor; başka bir kısaltma seç.",
+                            "\\{} is taken; choose another alias.",
+                            &[&alias],
+                        ),
+                    )));
+                }
+                let scenes: Vec<usize> = self
+                    .doc
+                    .outline
+                    .scenes
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, s)| s.cast.contains(&from))
+                    .map(|(i, _)| i)
+                    .collect();
+                self.popup = Popup::Split(SplitPanel {
+                    from,
+                    spec,
+                    scenes,
+                    picked: Default::default(),
+                    sel: 0,
+                });
             }
             FormKind::EditCharacter(old) => {
                 let spec = match self.spec_from(&form, Some(&old)) {
@@ -1924,6 +2058,39 @@ impl Writer {
                 }
             }
             KeyCode::Char('n') => self.popup = Popup::Form(self.character_form("", None)),
+            KeyCode::Char('m') => {
+                if let Some(a) = alias {
+                    let others: Vec<String> = self
+                        .doc
+                        .cast
+                        .characters
+                        .iter()
+                        .filter(|c| c.alias != a)
+                        .map(|c| format!("{} — {}", c.alias, c.script))
+                        .collect();
+                    self.popup = Popup::Form(Form {
+                        kind: FormKind::Merge(a.clone()),
+                        title: lang::f("\\{} birleştir", "merge \\{}", &[&a]),
+                        fields: vec![Field::text("Şununla birleştir", "", others)],
+                        focus: 0,
+                        at: 0..0,
+                        error: None,
+                        confirmed: false,
+                    });
+                }
+            }
+            KeyCode::Char('b') => {
+                if let Some(a) = alias {
+                    let mut form = self.character_form("", None);
+                    form.kind = FormKind::Split(a.clone());
+                    form.title = lang::f(
+                        "\\{} böl: yeni karakter",
+                        "split \\{}: the new character",
+                        &[&a],
+                    );
+                    self.popup = Popup::Form(form);
+                }
+            }
             KeyCode::Enter => {
                 if let Some(a) = alias {
                     self.popup = Popup::Form(self.card_form(&a));
@@ -1973,6 +2140,47 @@ impl Writer {
             }
             _ => {}
         }
+    }
+
+    /// The new character takes the picked scenes' lines of the old one.
+    fn split_into(&mut self, p: SplitPanel) {
+        if p.picked.is_empty() {
+            self.say(
+                lang::l(
+                    "Hiç sahne seçilmedi; bir şey değişmedi.",
+                    "No scene chosen; nothing changed.",
+                ),
+                false,
+            );
+            return;
+        }
+        if !self.editable() {
+            return;
+        }
+        let base = self.doc.body.start;
+        let ranges: Vec<std::ops::Range<usize>> = p
+            .picked
+            .iter()
+            .map(|&i| {
+                let sc = &self.doc.outline.scenes[i];
+                self.doc.blocks[sc.block + base].span.start
+                    ..self.doc.blocks[sc.end - 1 + base].span.end
+            })
+            .collect();
+        let mut edits = dcast::split(&self.buf.text, &p.from, &p.spec.alias, &ranges);
+        let moved = edits.len();
+        edits.push(dcast::add(&self.buf.text, &self.doc.cast, &p.spec, None));
+        let cursor = self.buf.cursor.min(self.doc.parts.body.start);
+        self.buf.apply(&edits, cursor);
+        self.edited();
+        self.say(
+            &lang::f(
+                "{} eklendi; {} sahnede {} yer → \\{} (^Z geri alır).",
+                "{} added; {} places in {} scenes moved to \\{} (^Z undoes).",
+                &[&p.spec.script, &p.picked.len(), &moved, &p.spec.alias],
+            ),
+            false,
+        );
     }
 
     // ------------------------------------------------------------ putting away
@@ -2605,6 +2813,16 @@ impl Writer {
                 );
             }
             Popup::Help(p) => keys::draw_help(f, area, &self.keyboard, p.as_ref()),
+            Popup::Split(p) => panels::draw_split(
+                f,
+                area,
+                &self.doc,
+                &p.from,
+                &p.spec.script,
+                &p.scenes,
+                &p.picked,
+                p.sel,
+            ),
             Popup::Suggest(range, items, sel) => {
                 let word = self.buf.text.get(range.clone()).unwrap_or("");
                 panels::draw_suggest(f, body, at, word, items, *sel);
@@ -2771,7 +2989,12 @@ impl Writer {
         // Panels cover the text; forms and search type somewhere else.
         let covered = matches!(
             self.popup,
-            Popup::Cast(_) | Popup::Scenes(_) | Popup::Help(_) | Popup::Form(_) | Popup::Search(..)
+            Popup::Cast(_)
+                | Popup::Scenes(_)
+                | Popup::Split(_)
+                | Popup::Help(_)
+                | Popup::Form(_)
+                | Popup::Search(..)
         );
         let cursor = self.cursor_stop().filter(|c| {
             !covered && c.row >= self.scroll && c.row < self.scroll + area.height as usize
