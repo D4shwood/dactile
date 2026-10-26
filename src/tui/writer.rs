@@ -1337,9 +1337,10 @@ impl Writer {
         let nl = source::line_ending(&self.buf.text).to_string();
         match form.kind.clone() {
             FormKind::Scene => {
-                let parts: Vec<&str> = [form.get("Yer"), form.get("Zaman")]
+                let parts: Vec<String> = [form.get("Yer"), form.get("Zaman")]
                     .into_iter()
                     .filter(|s| !s.is_empty())
+                    .map(dactile::tex::escape_text)
                     .collect();
                 let hash = !info::has_option(&self.buf.text, "nohash");
                 let text = match (hash, parts.is_empty()) {
@@ -1351,7 +1352,7 @@ impl Writer {
                 self.write_line(form.at.start, &text, &nl);
             }
             FormKind::Act => {
-                let title = form.get("Başlık");
+                let title = dactile::tex::escape_text(form.get("Başlık"));
                 let hash = !info::has_option(&self.buf.text, "nohash");
                 let text = match (hash, title.is_empty()) {
                     (true, true) => "#perde".to_string(),
@@ -1391,7 +1392,8 @@ impl Writer {
             FormKind::Info => {
                 let mut t = self.buf.text.clone();
                 for (cmd, label) in info::FIELDS {
-                    if let Some(e) = info::set(&t, cmd, form.get(label)) {
+                    let value = dactile::tex::escape_text(form.get(label));
+                    if let Some(e) = info::set(&t, cmd, &value) {
                         t = dactile::tex::apply(&t, &[e]);
                     }
                 }
@@ -1509,9 +1511,9 @@ impl Writer {
                     .is_some_and(Field::on);
                 let spec = Spec {
                     alias: alias.clone(),
-                    script,
-                    full: form.get("Tam ad").to_string(),
-                    desc: form.get("Açıklama").to_string(),
+                    script: dactile::tex::escape_text(&script),
+                    full: dactile::tex::escape_text(form.get("Tam ad")),
+                    desc: dactile::tex::escape_text(form.get("Açıklama")),
                     star,
                     kind: if hidden {
                         dcast::Kind::Hidden
@@ -1574,9 +1576,9 @@ impl Writer {
             .is_some_and(|c| c.kind == dcast::Kind::Member);
         Ok(Spec {
             alias,
-            script,
-            full: form.get("Tam ad").to_string(),
-            desc: form.get("Açıklama").to_string(),
+            script: dactile::tex::escape_text(&script),
+            full: dactile::tex::escape_text(form.get("Tam ad")),
+            desc: dactile::tex::escape_text(form.get("Açıklama")),
             star: flag("Yıldızlı"),
             kind: if member {
                 dcast::Kind::Member
@@ -1873,9 +1875,10 @@ impl Writer {
             }
         };
         if let Some(c) = c {
-            set(&mut f, "Ad", c.script.clone());
-            set(&mut f, "Tam ad", c.full.clone().unwrap_or_default());
-            set(&mut f, "Açıklama", c.desc.clone().unwrap_or_default());
+            let plain = |v: Option<&String>| dactile::tex::unescape_text(v.map_or("", |s| s));
+            set(&mut f, "Ad", plain(Some(&c.script)));
+            set(&mut f, "Tam ad", plain(c.full.as_ref()));
+            set(&mut f, "Açıklama", plain(c.desc.as_ref()));
             let on = |b: bool| if b { "evet" } else { "hayır" }.to_string();
             set(
                 &mut f,
@@ -1929,7 +1932,7 @@ impl Writer {
             .iter()
             .map(|(cmd, label)| {
                 let v = info::get(&self.buf.text, cmd).unwrap_or_default();
-                Field::text(label, &v, Vec::new())
+                Field::text(label, &dactile::tex::unescape_text(&v), Vec::new())
             })
             .collect();
         fields.push(Field::flag("Final (baskı)", info::is_final(&self.buf.text)));

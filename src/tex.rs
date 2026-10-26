@@ -9,6 +9,36 @@ pub fn is_letter(c: char) -> bool {
     c.is_alphabetic()
 }
 
+/// Text typed into a form, as it goes into the source: `&`, `%`, `$`, `#`
+/// and `_` escaped unless they already are. Backslashes stay, so `\\` and
+/// a command typed on purpose still work.
+pub fn escape_text(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for (i, c) in s.char_indices() {
+        if matches!(c, '&' | '%' | '$' | '#' | '_') && !is_escaped(s, i) {
+            out.push('\\');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// The other way: a value from the source as a form shows it.
+pub fn unescape_text(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\\'
+            && let Some(&n) = chars.peek()
+            && matches!(n, '&' | '%' | '$' | '#' | '_')
+        {
+            continue;
+        }
+        out.push(c);
+    }
+    out
+}
+
 /// Whether the byte at `at` is escaped by an odd run of backslashes before it.
 pub fn is_escaped(text: &str, at: usize) -> bool {
     text.as_bytes()[..at]
@@ -242,6 +272,19 @@ pub fn apply(text: &str, edits: &[Edit]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn form_text() {
+        assert_eq!(
+            escape_text("Ad & Kadro %100 #3 a_b"),
+            "Ad \\& Kadro \\%100 \\#3 a\\_b"
+        );
+        // Already escaped stays as it is; a line break stays a line break.
+        assert_eq!(escape_text("A \\& B\\\\C"), "A \\& B\\\\C");
+        for s in ["Ad & Kadro %100", "düz", "a_b #1 $5"] {
+            assert_eq!(unescape_text(&escape_text(s)), s);
+        }
+    }
 
     #[test]
     fn control_words_take_unicode_letters() {

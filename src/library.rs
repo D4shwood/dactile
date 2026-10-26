@@ -126,6 +126,8 @@ pub fn file_name(title: &str) -> String {
 /// A new play: the class, the cover, one act and one scene, and three lines
 /// of help as comments.
 pub fn template(title: &str, author: &str, lang: Lang) -> String {
+    let title = crate::tex::escape_text(title);
+    let author = crate::tex::escape_text(author);
     let (help, words, act, place, first, kw) = match lang {
         Lang::Tr => (
             "% Dactile ile yazılıyor. \\ yazınca öneriler açılır; \\kisaltma ve boşluk bir\n\
