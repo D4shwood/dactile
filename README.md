@@ -97,7 +97,7 @@ screen the play's outline sits in the margin; a click goes there.
 | Key | |
 |---|---|
 | ^O | the cast: edit, rename an alias everywhere, order, character cards |
-| ^G | the scenes, who is in each, running times |
+| ^G | the acts and scenes: go there; ␣ marks, h hides (out of the PDF, as `%~` lines), t moves to the play's trash; Tab shows the trash: r puts back, x x destroys |
 | ^K | search characters and commands |
 | ^F | find and replace |
 | Alt+I | cover details (title, author, draft number…) and draft/final |

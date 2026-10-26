@@ -99,7 +99,7 @@ durur; tıklayınca oraya gider.
 | Tuş | |
 |---|---|
 | ^O | kişiler: düzenle, kısaltmayı her yerde değiştir, sıra, karakter kartları |
-| ^G | sahneler, her sahnede kimler var, süreler |
+| ^G | perdeler ve sahneler: oraya git; ␣ işaretler, h gizler (`%~` satırları, PDF'te yok), t oyunun çöp kutusuna atar; Tab çöp kutusu: r geri koyar, x x yok eder |
 | ^K | karakter ve komut ara |
 | ^F | bul ve değiştir |
 | Alt+I | oyun bilgisi (başlık, yazar, taslak no…) ve taslak/final |

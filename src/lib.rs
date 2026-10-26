@@ -14,6 +14,7 @@ pub mod lex;
 pub mod library;
 pub mod outline;
 pub mod render;
+pub mod shelf;
 pub mod sidecar;
 pub mod source;
 pub mod spell;

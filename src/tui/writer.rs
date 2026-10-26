@@ -1,7 +1,7 @@
 //! The writing screen: the play as it will read, edited in place.
 
 use super::keys;
-use super::panels::{self, CastPanel, Entry};
+use super::panels::{self, CastPanel, Entry, ScenesPanel};
 use super::popup::{self, Field, Form, FormKind, Menu, Verbs};
 use super::theme::{self, BEIGE, CLARET, FAINT, MUTED, WARN};
 use anyhow::Result;
@@ -15,7 +15,7 @@ use dactile::render::{self, Doc, Layout, Options, Stop};
 use dactile::sidecar::Sidecar;
 use dactile::source;
 use dactile::spell::{self, Speller};
-use dactile::{info, lang, timing};
+use dactile::{info, lang, shelf, timing};
 use ratatui::Frame;
 use ratatui::crossterm::event::{
     KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
@@ -92,6 +92,11 @@ pub struct Writer {
     keyboard: String,
     /// The margin map's rows on screen and the block each one opens.
     map_hits: Vec<(u16, usize)>,
+    /// Acts and scenes marked to hide or throw away, by where they start.
+    /// Any edit clears them.
+    marks: std::collections::BTreeSet<usize>,
+    /// The play's trash, as last read.
+    trash: Vec<shelf::Trashed>,
     /// Suggestions only with ^K, not on every backslash.
     menu_manual: bool,
     default_wpm: u32,
@@ -128,8 +133,8 @@ enum Popup {
     Form(Form),
     /// ^O: the cast.
     Cast(CastPanel),
-    /// ^G: the scenes.
-    Scenes(usize),
+    /// ^G: the acts and scenes, and the trash.
+    Scenes(ScenesPanel),
     /// F1: the keyboard, with the last key pressed on it.
     Help(Option<keys::Pressed>),
     /// Alt+S: spelling suggestions for the word at `range`.
@@ -195,6 +200,8 @@ impl Writer {
             eat_space: false,
             keyboard: cfg.keyboard.clone(),
             map_hits: Vec::new(),
+            marks: Default::default(),
+            trash: Vec::new(),
             menu_manual: cfg.menu == "manual",
             default_wpm: cfg.wpm,
             text_top: 1,
@@ -292,6 +299,7 @@ impl Writer {
 
     /// Lays out again after an edit; the cursor lands on a stop.
     fn edited(&mut self) {
+        self.marks.clear();
         self.relayout();
         self.snap_back();
     }
@@ -502,8 +510,15 @@ impl Writer {
                 });
             }
             KeyCode::Char('g') if ctrl => {
-                let sel = self.block().and_then(|b| self.doc.scene_of(b)).unwrap_or(0);
-                self.popup = Popup::Scenes(sel);
+                // On the act or scene the cursor is in.
+                let units = shelf::units(&self.buf.text, &self.doc);
+                let at = self.buf.cursor;
+                let sel = units.iter().rposition(|u| u.span.start <= at).unwrap_or(0);
+                self.trash = shelf::load(&shelf::trash_path(&self.path));
+                self.popup = Popup::Scenes(ScenesPanel {
+                    sel,
+                    ..Default::default()
+                });
             }
             KeyCode::Char('f') if ctrl => {
                 let q = self
@@ -1092,32 +1107,83 @@ impl Writer {
                 self.cast_key(k);
                 true
             }
-            Popup::Scenes(sel) => {
-                let n = self.doc.outline.scenes.len();
+            Popup::Scenes(p) => {
+                let units = shelf::units(&self.buf.text, &self.doc);
+                if p.trash {
+                    let n = self.trash.len();
+                    if k.code != KeyCode::Char('x') {
+                        p.confirm = false;
+                    }
+                    match k.code {
+                        KeyCode::Esc => self.popup = Popup::None,
+                        KeyCode::Char('g') if ctrl => self.popup = Popup::None,
+                        KeyCode::Tab => p.trash = false,
+                        KeyCode::Up => p.trash_sel = p.trash_sel.saturating_sub(1),
+                        KeyCode::Down => p.trash_sel = (p.trash_sel + 1).min(n.saturating_sub(1)),
+                        KeyCode::Char('r') if n > 0 => {
+                            let i = p.trash_sel;
+                            self.put_back(i);
+                        }
+                        KeyCode::Char('x') if n > 0 => {
+                            if p.confirm {
+                                let i = p.trash_sel;
+                                p.confirm = false;
+                                self.destroy(i);
+                            } else {
+                                p.confirm = true;
+                            }
+                        }
+                        _ => {}
+                    }
+                    if let Popup::Scenes(p) = &mut self.popup {
+                        p.trash_sel = p.trash_sel.min(self.trash.len().saturating_sub(1));
+                    }
+                    return true;
+                }
+                let n = units.len();
                 match k.code {
                     KeyCode::Esc => self.popup = Popup::None,
                     KeyCode::Char('g') if ctrl => self.popup = Popup::None,
-                    KeyCode::Up => *sel = sel.saturating_sub(1),
-                    KeyCode::Down => *sel = (*sel + 1).min(n.saturating_sub(1)),
+                    KeyCode::Tab => p.trash = true,
+                    KeyCode::Up => p.sel = p.sel.saturating_sub(1),
+                    KeyCode::Down => p.sel = (p.sel + 1).min(n.saturating_sub(1)),
+                    KeyCode::Char(' ') => {
+                        if let Some(u) = units.get(p.sel) {
+                            if !self.marks.remove(&u.span.start) {
+                                self.marks.insert(u.span.start);
+                            }
+                            p.sel = (p.sel + 1).min(n.saturating_sub(1));
+                        }
+                    }
+                    KeyCode::Char('h') => {
+                        let sel = p.sel;
+                        self.hide_or_show(&units, sel);
+                    }
+                    KeyCode::Char('t') => {
+                        let sel = p.sel;
+                        self.throw_away(&units, sel);
+                    }
                     KeyCode::Enter => {
-                        let target = self
-                            .doc
-                            .outline
-                            .scenes
-                            .get(*sel)
-                            .map(|s| s.block + self.doc.body.start);
+                        let target = units.get(p.sel).map(|u| (u.span.start, u.hidden));
                         self.popup = Popup::None;
-                        if let Some(b) = target {
-                            let at = self.doc.blocks[b].span.start;
+                        if let Some((at, hidden)) = target
+                            && let Some(b) = self.doc.block_at(at)
+                        {
                             self.go(at, false);
                             self.relayout();
                             // The first line after the heading.
-                            if let Some(s) = self.lay.next_stop(self.doc.blocks[b].span.end) {
+                            if !hidden
+                                && let Some(s) = self.lay.next_stop(self.doc.blocks[b].span.end)
+                            {
                                 self.go(s.byte, false);
                             }
                         }
                     }
                     _ => {}
+                }
+                if let Popup::Scenes(p) = &mut self.popup {
+                    let n = shelf::units(&self.buf.text, &self.doc).len();
+                    p.sel = p.sel.min(n.saturating_sub(1));
                 }
                 true
             }
@@ -1909,6 +1975,182 @@ impl Writer {
         }
     }
 
+    // ------------------------------------------------------------ putting away
+
+    /// The marked units, or the chosen one; a scene inside a chosen act goes
+    /// with the act.
+    fn targets(&self, units: &[shelf::Unit], sel: usize) -> Vec<shelf::Unit> {
+        let mut out: Vec<shelf::Unit> = if self.marks.is_empty() {
+            units.get(sel).cloned().into_iter().collect()
+        } else {
+            units
+                .iter()
+                .filter(|u| self.marks.contains(&u.span.start))
+                .cloned()
+                .collect()
+        };
+        let all = out.clone();
+        out.retain(|u| {
+            !all.iter().any(|o| {
+                o.span != u.span && o.span.start <= u.span.start && u.span.end <= o.span.end
+            })
+        });
+        out
+    }
+
+    /// Hides the chosen acts and scenes; when they all are hidden already,
+    /// brings them back.
+    fn hide_or_show(&mut self, units: &[shelf::Unit], sel: usize) {
+        if !self.editable() {
+            return;
+        }
+        let targets = self.targets(units, sel);
+        if targets.is_empty() {
+            return;
+        }
+        let show = targets.iter().all(|u| u.hidden);
+        let edits: Vec<dactile::tex::Edit> = targets
+            .iter()
+            .filter(|u| u.hidden == show)
+            .map(|u| {
+                if show {
+                    shelf::unhide(&self.buf.text, u.span.clone())
+                } else {
+                    shelf::hide(&self.buf.text, u.span.clone())
+                }
+            })
+            .collect();
+        let n = edits.len();
+        let cursor = self.buf.cursor;
+        self.buf.apply(&edits, cursor);
+        self.raw_here = false;
+        self.edited();
+        self.say(
+            &if show {
+                lang::f("{} parça geri geldi.", "{} brought back.", &[&n])
+            } else {
+                lang::f(
+                    "{} parça gizlendi: PDF'te yok, h ile geri gelir.",
+                    "{} hidden: out of the PDF, h brings them back.",
+                    &[&n],
+                )
+            },
+            false,
+        );
+    }
+
+    /// Moves the chosen acts and scenes to the play's trash.
+    fn throw_away(&mut self, units: &[shelf::Unit], sel: usize) {
+        if !self.editable() {
+            return;
+        }
+        let targets = self.targets(units, sel);
+        if targets.is_empty() {
+            return;
+        }
+        let when = chrono::Local::now().format("%Y-%m-%d %H:%M").to_string();
+        let text = self.buf.text.clone();
+        let mut items: Vec<shelf::Trashed> = Vec::new();
+        let mut edits = Vec::new();
+        for u in &targets {
+            let (after, before) = shelf::neighbours(&text, u.span.clone());
+            items.push(shelf::Trashed {
+                when: when.clone(),
+                what: if u.hidden {
+                    format!("{} ({})", u.name(), lang::l("gizliydi", "was hidden"))
+                } else {
+                    u.name()
+                },
+                after,
+                before,
+                text: text[u.span.clone()].to_string(),
+            });
+            edits.push(shelf::cut(&text, u.span.clone()));
+        }
+        let path = shelf::trash_path(&self.path);
+        let mut trash = shelf::load(&path);
+        trash.extend(items);
+        if let Err(e) = shelf::save(&path, &trash) {
+            self.say(&format!("{e:#}"), true);
+            return;
+        }
+        self.trash = trash;
+        let first = targets.iter().map(|u| u.span.start).min().unwrap_or(0);
+        let cursor = self.buf.cursor.min(first);
+        self.buf.apply(&edits, cursor);
+        self.raw_here = false;
+        self.edited();
+        self.say(
+            &lang::f(
+                "{} parça çöp kutusunda (^G, Tab).",
+                "{} in the trash (^G, Tab).",
+                &[&targets.len()],
+            ),
+            false,
+        );
+    }
+
+    /// Puts a trashed piece back where it was.
+    fn put_back(&mut self, i: usize) {
+        if !self.editable() || i >= self.trash.len() {
+            return;
+        }
+        let t = self.trash[i].clone();
+        let e = shelf::restore(&self.buf.text, &self.doc, &t);
+        let at = e.range.start + e.text.len();
+        self.buf.apply(&[e], at);
+        let mut trash = self.trash.clone();
+        trash.remove(i);
+        if let Err(e) = shelf::save(&shelf::trash_path(&self.path), &trash) {
+            self.say(&format!("{e:#}"), true);
+            return;
+        }
+        self.trash = trash;
+        self.edited();
+        self.say(
+            &lang::f("{} yerine kondu.", "{} put back.", &[&t.what]),
+            false,
+        );
+    }
+
+    /// Destroys a trashed piece; a copy goes to the play's history first.
+    fn destroy(&mut self, i: usize) {
+        if i >= self.trash.len() {
+            return;
+        }
+        let t = self.trash[i].clone();
+        let kept = std::fs::create_dir_all(&self.history).and_then(|_| {
+            use std::io::Write;
+            let mut f = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(self.history.join("destroyed.txt"))?;
+            writeln!(
+                f,
+                "%%% {} · {} (yok edildi {})",
+                t.what,
+                t.when,
+                chrono::Local::now().format("%Y-%m-%d %H:%M")
+            )?;
+            writeln!(f, "{}\n", t.text)
+        });
+        if let Err(e) = kept {
+            self.say(&format!("{e:#}"), true);
+            return;
+        }
+        let mut trash = self.trash.clone();
+        trash.remove(i);
+        if let Err(e) = shelf::save(&shelf::trash_path(&self.path), &trash) {
+            self.say(&format!("{e:#}"), true);
+            return;
+        }
+        self.trash = trash;
+        self.say(
+            &lang::f("{} yok edildi.", "{} destroyed.", &[&t.what]),
+            false,
+        );
+    }
+
     fn edit_form(&self, alias: &str) -> Form {
         let c = self.doc.cast.get(alias).cloned();
         let c = c.as_ref();
@@ -2095,16 +2337,37 @@ impl Writer {
                 let max = self.lay.rows.len().saturating_sub(self.text_height() / 2);
                 self.scroll = (self.scroll + 3).min(max);
             }
+            // In the margin map, a right click marks an act or scene for ^G.
+            MouseEventKind::Down(MouseButton::Right) => {
+                if m.column < self.sheet().x
+                    && let Some(&(_, at)) = self.map_hits.iter().find(|(y, _)| *y == m.row)
+                    && shelf::units(&self.buf.text, &self.doc)
+                        .iter()
+                        .any(|u| u.span.start == at)
+                {
+                    if !self.marks.remove(&at) {
+                        self.marks.insert(at);
+                    }
+                    let n = self.marks.len();
+                    self.say(
+                        &lang::f(
+                            "{} işaretli: ^G'de h gizler, t çöpe atar.",
+                            "{} marked: in ^G, h hides, t throws away.",
+                            &[&n],
+                        ),
+                        false,
+                    );
+                }
+            }
             MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(MouseButton::Left) => {
                 if !matches!(self.popup, Popup::None) || m.row < self.text_top {
                     return;
                 }
                 // A heading in the margin map: go there.
                 if m.column < self.sheet().x {
-                    if let Some(&(_, b)) = self.map_hits.iter().find(|(y, _)| *y == m.row)
+                    if let Some(&(_, at)) = self.map_hits.iter().find(|(y, _)| *y == m.row)
                         && matches!(m.kind, MouseEventKind::Down(_))
                     {
-                        let at = self.doc.blocks[b].span.start;
                         self.go(at, false);
                         self.snap_forward();
                         self.scroll = self
@@ -2328,7 +2591,19 @@ impl Writer {
             Popup::Cast(p) => {
                 panels::draw_cast(f, area, &self.doc, &self.buf.text, &self.sidecar, p)
             }
-            Popup::Scenes(sel) => panels::draw_scenes(f, area, &self.doc, self.wpm(), *sel),
+            Popup::Scenes(p) => {
+                let units = shelf::units(&self.buf.text, &self.doc);
+                panels::draw_scenes(
+                    f,
+                    area,
+                    &self.doc,
+                    &units,
+                    &self.marks,
+                    &self.trash,
+                    self.wpm(),
+                    p,
+                );
+            }
             Popup::Help(p) => keys::draw_help(f, area, &self.keyboard, p.as_ref()),
             Popup::Suggest(range, items, sel) => {
                 let word = self.buf.text.get(range.clone()).unwrap_or("");
@@ -2390,8 +2665,8 @@ impl Writer {
         }
         let o = &self.doc.outline;
         let base = self.doc.body.start;
-        // (block, depth, label)
-        let mut entries: Vec<(usize, u8, String)> = Vec::new();
+        // (where it starts, depth, label, hidden)
+        let mut entries: Vec<(usize, u8, String, bool)> = Vec::new();
         for sct in &o.sections {
             let name = if sct.title.trim().is_empty() {
                 match sct.which {
@@ -2402,27 +2677,22 @@ impl Writer {
             } else {
                 sct.title.trim().to_string()
             };
-            entries.push((sct.block + base, 0, name));
+            entries.push((self.doc.blocks[sct.block + base].span.start, 0, name, false));
         }
-        for a in &o.acts {
-            let mut s = format!("{}. {}", outline::roman(a.number), lang::l("Perde", "Act"));
-            if !a.title.trim().is_empty() {
-                s.push_str(&format!(" · {}", a.title.trim()));
-            }
-            entries.push((a.block + base, 0, s));
-        }
-        for sc in &o.scenes {
-            let mut s = format!("{} {}", lang::l("Sahne", "Scene"), sc.label);
-            if !sc.place.trim().is_empty() {
-                s.push_str(&format!(" · {}", sc.place.trim()));
-            }
-            entries.push((sc.block + base, 1, s));
+        for u in shelf::units(&self.buf.text, &self.doc) {
+            let depth = u8::from(u.kind == shelf::UnitKind::Scene);
+            let name = if u.hidden {
+                format!("{} ({})", u.name(), lang::l("gizli", "hidden"))
+            } else {
+                u.name()
+            };
+            entries.push((u.span.start, depth, name, u.hidden));
         }
         entries.sort_by_key(|e| e.0);
         if entries.is_empty() {
             return;
         }
-        let here = self.block().unwrap_or(0);
+        let here = self.buf.cursor;
         let current = entries.iter().rposition(|e| e.0 <= here);
         let w = (sheet.x - 4) as usize;
         let rows = area.height.saturating_sub(2) as usize;
@@ -2430,21 +2700,32 @@ impl Writer {
             .map_or(0, |c| c.saturating_sub(rows / 2))
             .min(entries.len().saturating_sub(rows));
         let x = area.x + 2;
-        for (n, (block, depth, label)) in entries.iter().enumerate().skip(start).take(rows) {
+        for (n, (at, depth, label, hidden)) in entries.iter().enumerate().skip(start).take(rows) {
             let y = area.y + 1 + (n - start) as u16;
             let is_here = Some(n) == current;
             let indent = if *depth == 0 { "" } else { "  " };
-            let mark = if is_here { "▸ " } else { "  " };
-            let style = if is_here {
+            let marked = self.marks.contains(at);
+            let mark = match (marked, is_here) {
+                (true, _) => "■ ",
+                (_, true) => "▸ ",
+                _ => "  ",
+            };
+            let mut style = if is_here {
                 Style::default().fg(CLARET)
-            } else if *depth == 0 {
+            } else if *depth == 0 && !hidden {
                 Style::default().fg(MUTED)
             } else {
                 Style::default().fg(FAINT)
             };
+            if *hidden {
+                style = style.add_modifier(Modifier::ITALIC);
+            }
             let text = popup::fit(&format!("{indent}{label}"), w.saturating_sub(2));
             let line = Line::from(vec![
-                Span::styled(mark, Style::default().fg(CLARET)),
+                Span::styled(
+                    mark,
+                    Style::default().fg(if marked { WARN } else { CLARET }),
+                ),
                 Span::styled(text, style),
             ]);
             f.render_widget(
@@ -2456,7 +2737,7 @@ impl Writer {
                     height: 1,
                 },
             );
-            self.map_hits.push((y, *block));
+            self.map_hits.push((y, *at));
         }
     }
 

@@ -287,7 +287,54 @@ pub fn layout(text: &str, doc: &Doc, opts: Options) -> Layout {
     let pages = pdf && opts.page_rows.is_some();
     let mut break_next = false;
     let mut seen_act = false;
+    // Hidden acts and scenes, by their first block: one folded row each.
+    let hidden: Vec<(usize, crate::shelf::Unit)> = crate::shelf::units(text, doc)
+        .into_iter()
+        .filter(|u| u.hidden)
+        .filter_map(|u| doc.block_at(u.span.start).map(|b| (b, u)))
+        .collect();
     for i in 0..doc.blocks.len() {
+        if !opts.raw_all && doc.body.contains(&i) && crate::shelf::is_hidden(text, &doc.blocks[i]) {
+            let start = b.out.rows.len();
+            let first = i == doc.body.start || !crate::shelf::is_hidden(text, &doc.blocks[i - 1]);
+            if first {
+                let mut j = i;
+                while j + 1 < doc.body.end && crate::shelf::is_hidden(text, &doc.blocks[j + 1]) {
+                    j += 1;
+                }
+                let s = match hidden.iter().find(|(at, _)| *at == i) {
+                    Some((_, u)) => {
+                        let what = match u.kind {
+                            crate::shelf::UnitKind::Act => lang::l("gizli perde", "hidden act"),
+                            crate::shelf::UnitKind::Scene => lang::l("gizli sahne", "hidden scene"),
+                        };
+                        let mut s = format!("▸ {what}");
+                        if !u.title.trim().is_empty() {
+                            s.push_str(&format!(" · {}", u.title.trim()));
+                        }
+                        s + &lang::f(" · {} replik", " · {} lines", &[&u.lines])
+                    }
+                    None => lang::f(
+                        "▸ gizli satırlar ({})",
+                        "▸ hidden lines ({})",
+                        &[&(j - i + 1)],
+                    ),
+                };
+                let glyphs = chip(&s, Style::Faint, doc.blocks[i].span.start);
+                let width = b.width;
+                b.flow(
+                    i,
+                    &glyphs,
+                    0,
+                    width,
+                    Align::Center,
+                    Some(doc.blocks[j].span.end),
+                    start,
+                );
+            }
+            b.out.block_rows.push(start..b.out.rows.len());
+            continue;
+        }
         if pdf && doc.body.contains(&i) {
             let kind = &doc.blocks[i].kind;
             let cmd = text[doc.blocks[i].span.clone()].trim();
@@ -1401,6 +1448,29 @@ mod tests {
             },
         );
         assert!(!l.rows.iter().any(|r| r.gap));
+    }
+
+    #[test]
+    fn hidden_scenes_fold() {
+        let u = crate::shelf::units(PLAY, &Doc::new(PLAY));
+        let hidden = crate::tex::apply(PLAY, &[crate::shelf::hide(PLAY, u[2].span.clone())]);
+        let d = Doc::new(&hidden);
+        let l = layout(
+            &hidden,
+            &d,
+            Options {
+                width: 70,
+                ..Options::default()
+            },
+        );
+        let row = find_row(&l, "gizli sahne");
+        assert_eq!(
+            row_text(&l, row).trim(),
+            "▸ gizli sahne · Dış, Meydan — Gece · 4 replik"
+        );
+        assert!((0..l.rows.len()).all(|r| !row_text(&l, r).contains("Kar dinmeyecek")));
+        // The next act's lines number on from the visible ones.
+        assert!(row_text(&l, find_row(&l, "Sabah oldu")).starts_with("OZAN"));
     }
 
     #[test]
