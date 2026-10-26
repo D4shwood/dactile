@@ -24,14 +24,25 @@
 %
 %   \action{...}  \stagedir{...}  \middir{...}  \beat
 %   \perde[Title]  \sahne[Place — Time][manual number]  \kisiler
+%   \onsoz[Title]  \notlar[Title]          a preface, notes for the director
+%
+% A line that starts with # is a heading, up to the end of the line:
+%
+%   #perde Title        #sahne Place — Time        #sahne[2.1] Place
+%   #önsöz              #notlar
+%
+% (#scene, #act, #preface, #notes too; \# prints a #; the class option nohash
+% turns this off.)
 %
 % In draft mode every line of dialogue and every direction gets one number in
 % the margin, so a rehearsal can say "line 112". Dactile shows the same numbers.
 
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesExplPackage{tiyatro-core}{2026-10-25}{1.0.0}{Dactile: characters, lines, scenes, acts}
+\ProvidesExplPackage{tiyatro-core}{2026-10-26}{1.1.0}{Dactile: characters, lines, scenes, acts}
 \RequirePackage{xspace}
 
+\msg_new:nnn { tiyatro } { hash }
+  { '\iow_char:N\##1'~is~not~a~heading;~printed~as~it~is.~Write~\iow_char:N\\\iow_char:N\#~for~a~plain~\iow_char:N\#. }
 \msg_new:nnn { tiyatro } { redefined }
   { The~alias~'#1'~replaces~an~existing~command~\iow_char:N\\#1. }
 
@@ -316,6 +327,7 @@
 
 \NewDocumentCommand \sahne { O{} O{} }
   {
+    \__tiy_unhide:
     \__tiy_scene_end:
     \stepcounter { scenecounter }
     \tl_gset:Ne \g__tiy_scene_tl { \theact - \thescene }
@@ -354,6 +366,7 @@
 
 \NewDocumentCommand \perde { O{} }
   {
+    \__tiy_unhide:
     \__tiy_scene_end:
     \int_compare:nNnT { \value { actcounter } } > { 0 }
       { \__tiy_curtain:n { \curtainlocalizedtext } }
@@ -374,8 +387,128 @@
   }
 \NewCommandCopy \act \perde
 
+% ------------------------------------------------------------------ preface, notes
+
+% A page of its own with a heading, then plain paragraphs. Notes for the
+% director can be left out of a copy (class option nonotes): everything up to
+% the next heading goes into a box that is thrown away.
+\bool_new:N \g__tiy_hiding_bool
+\box_new:N \l__tiy_hidden_box
+
+\cs_new_protected:Npn \__tiy_unhide:
+  {
+    \bool_if:NT \g__tiy_hiding_bool
+      {
+        \par
+        \vbox_set_end:
+        \bool_gset_false:N \g__tiy_hiding_bool
+      }
+  }
+
+\cs_new_protected:Npn \__tiy_section:nn #1#2
+  {
+    \__tiy_unhide:
+    \__tiy_scene_end:
+    \clearpage
+    \tl_if_blank:nTF {#2}
+      { \addcontentsline { toc } { chapter } {#1} }
+      { \addcontentsline { toc } { chapter } {#2} }
+    \vspace* { \beforecasttitleskip }
+    { \centering \sectiontitlefont \tl_if_blank:nTF {#2} {#1} {#2} \par }
+    \par \nobreak
+    \skip_vertical:n { \aftercasttitleskip }
+    \setlength \parskip { 0.5 \baselineskip }
+  }
+
+\NewDocumentCommand \onsoz { O{} } { \__tiy_section:nn { \prefacename } {#1} }
+\NewCommandCopy \preface \onsoz
+\NewDocumentCommand \notlar { O{} }
+  {
+    \iftiyatronotes
+      \__tiy_section:nn { \notesname } {#1}
+    \else
+      \__tiy_unhide:
+      \par
+      \bool_gset_true:N \g__tiy_hiding_bool
+      \vbox_set:Nw \l__tiy_hidden_box
+    \fi
+  }
+\NewCommandCopy \directorsnotes \notlar
+
+% ------------------------------------------------------------------ # headings
+
+% In the body, # is active. At a line's start it reads the rest of the line and
+% makes a heading of it; inside a line of dialogue it is a plain #.
+\ExplSyntaxOff
+\begingroup
+\catcode`\^^M=\active%
+\catcode`\|=6 %
+\catcode`\#=\active%
+\gdef\tiy@hashon{\catcode`\#=\active\let#\tiy@hash}%
+\gdef\tiy@hashline|1^^M{\endgroup\tiy@hashdo{|1}}%
+\endgroup
+\ExplSyntaxOn
+
+\cs_new_protected:Npn \tiy@hash
+  {
+    \bool_if:NTF \l__tiy_line_bool
+      { \# }
+      {
+        \group_begin:
+        \char_set_catcode_active:N \^^M
+        \tiy@hashline
+      }
+  }
+
+\seq_new:N \l__tiy_hash_seq
+\tl_new:N \l__tiy_hash_tl
+\cs_new_protected:Npn \tiy@hashdo #1
+  {
+    \regex_extract_once:nnNTF
+      { \A ([^\s\[]+) (?: \[ ([^\]]*) \] )? \s* (.*?) \s* \Z } {#1} \l__tiy_hash_seq
+      {
+        \tl_set:Ne \l__tiy_hash_tl { \seq_item:Nn \l__tiy_hash_seq { 2 } }
+        \str_case_e:nnF { \tl_to_str:N \l__tiy_hash_tl }
+          {
+            { sahne } { \__tiy_hash_use:N \sahne }
+            { scene } { \__tiy_hash_use:N \sahne }
+            { perde } { \__tiy_hash_use:N \perde }
+            { act } { \__tiy_hash_use:N \perde }
+            { önsöz } { \__tiy_hash_use:N \onsoz }
+            { onsoz } { \__tiy_hash_use:N \onsoz }
+            { preface } { \__tiy_hash_use:N \onsoz }
+            { notlar } { \__tiy_hash_use:N \notlar }
+            { notes } { \__tiy_hash_use:N \notlar }
+          }
+          { \__tiy_hash_plain:n {#1} }
+      }
+      { \__tiy_hash_plain:n {#1} }
+  }
+
+% \sahne[rest][label], \perde[rest]…: braced, so a ] in the text is safe.
+\cs_new_protected:Npn \__tiy_hash_use:N #1
+  {
+    \par
+    \use:e
+      {
+        \exp_not:N #1
+        [ { \seq_item:Nn \l__tiy_hash_seq { 4 } } ]
+        \tl_if_blank:eF { \seq_item:Nn \l__tiy_hash_seq { 3 } }
+          { [ { \seq_item:Nn \l__tiy_hash_seq { 3 } } ] }
+      }
+  }
+
+\cs_new_protected:Npn \__tiy_hash_plain:n #1
+  {
+    \msg_warning:nnn { tiyatro } { hash } {#1}
+    \# #1 \c_space_tl
+  }
+
+\AtBeginDocument { \iftiyatrohash \tiy@hashon \fi }
+
 \AtEndDocument
   {
+    \__tiy_unhide:
     \__tiy_scene_end:
     \__tiy_curtain:n { \curtainlocalizedtext }
     \__tiy_curtain:n { \scriptendlocalizedtext }
@@ -385,20 +518,25 @@
 
 \NewDocumentCommand \kisiler { }
   {
+    \__tiy_unhide:
     \clearpage
     \thispagestyle { empty }
     \vspace* { \beforecasttitleskip }
     { \centering \casttitlefont \casttitlename \par }
     \par \nobreak
     \skip_vertical:n { \aftercasttitleskip }
-    \begin { list } { }
+    % A new play has nobody yet: an empty list would be an error.
+    \seq_if_empty:NF \g__tiy_cast_seq
       {
-        \setlength \leftmargin { \castpageleftmargin }
-        \setlength \rightmargin { \castpagerightmargin }
-        \castlistoptions
+        \begin { list } { }
+          {
+            \setlength \leftmargin { \castpageleftmargin }
+            \setlength \rightmargin { \castpagerightmargin }
+            \castlistoptions
+          }
+        \seq_map_inline:Nn \g__tiy_cast_seq { \__tiy_cast_row:nn ##1 }
+        \end { list }
       }
-    \seq_map_inline:Nn \g__tiy_cast_seq { \__tiy_cast_row:nn ##1 }
-    \end { list }
   }
 
 \cs_new_protected:Npn \__tiy_cast_row:nn #1#2

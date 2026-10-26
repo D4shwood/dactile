@@ -1,6 +1,7 @@
 //! The terminal interface: the home screen and the writer.
 
 mod home;
+mod keys;
 mod panels;
 mod popup;
 mod theme;

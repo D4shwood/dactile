@@ -9,18 +9,26 @@
 %
 %   \documentclass[draft]{tiyatro}   line numbers, 1.5 spacing, "TASLAK" on the cover
 %   \documentclass[final]{tiyatro}   clean copy for print
+%   nohash     # at a line's start is not a heading (#sahne, #perde, #önsöz, #notlar)
+%   nonotes    leaves the director's notes (\notlar) out of this copy
 %
 % The class is split in two: tiyatro-core.sty (characters, lines, scenes, acts,
 % the cast table) and tiyatro-theme.sty (page, fonts, words, cover). A different
 % look only needs a different theme.
 
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesClass{tiyatro}[2026/10/25 v1.0.0 Dactile stage play class]
+\ProvidesClass{tiyatro}[2026/10/26 v1.1.0 Dactile stage play class]
 
 \newif\iftiyatrodraft
 \tiyatrodrafttrue
 \DeclareOption{draft}{\tiyatrodrafttrue}
 \DeclareOption{final}{\tiyatrodraftfalse}
+\newif\iftiyatrohash
+\tiyatrohashtrue
+\DeclareOption{nohash}{\tiyatrohashfalse}
+\newif\iftiyatronotes
+\tiyatronotestrue
+\DeclareOption{nonotes}{\tiyatronotesfalse}
 \DeclareOption*{\PassOptionsToClass{\CurrentOption}{book}}
 \ProcessOptions\relax
 

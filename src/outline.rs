@@ -2,7 +2,7 @@
 //! who appears in each scene and how much is said there.
 
 use crate::cast::Cast;
-use crate::lex::{self, Block, Kind};
+use crate::lex::{self, Block, Kind, Section};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Act {
@@ -44,10 +44,19 @@ impl Scene {
     }
 }
 
+/// A preface or notes for the director.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SectionAt {
+    pub which: Section,
+    pub title: String,
+    pub block: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Outline {
     pub acts: Vec<Act>,
     pub scenes: Vec<Scene>,
+    pub sections: Vec<SectionAt>,
     /// The draft line number of each block, as the class prints it in the
     /// margin: one per line of dialogue or direction.
     pub numbers: Vec<Option<usize>>,
@@ -70,7 +79,7 @@ impl Outline {
                 number
             }));
             match &b.kind {
-                Kind::Act { title } => {
+                Kind::Act { title, .. } => {
                     close(&mut open, i, &mut out.scenes);
                     out.acts.push(Act {
                         number: out.acts.len() + 1,
@@ -78,7 +87,7 @@ impl Outline {
                         block: i,
                     });
                 }
-                Kind::Scene { place, label } => {
+                Kind::Scene { place, label, .. } => {
                     close(&mut open, i, &mut out.scenes);
                     let act = out.acts.len().checked_sub(1);
                     let number = out.scenes.iter().filter(|s| s.act == act).count() + 1;
@@ -93,6 +102,15 @@ impl Outline {
                         lines: 0,
                         words: 0,
                         direction_words: 0,
+                    });
+                }
+                Kind::Section { which, title, .. } => {
+                    // The class ends the scene before a preface or notes.
+                    close(&mut open, i, &mut out.scenes);
+                    out.sections.push(SectionAt {
+                        which: *which,
+                        title: title.clone(),
+                        block: i,
                     });
                 }
                 Kind::Line { alias, text: t } => {

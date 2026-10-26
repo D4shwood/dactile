@@ -21,6 +21,8 @@ pub struct Menu {
     pub sel: usize,
     /// Where the typed query starts in the text (after the backslash).
     pub from: usize,
+    /// Headings after a `#`, not macros after a backslash.
+    pub hash: bool,
 }
 
 impl Menu {
@@ -31,6 +33,7 @@ impl Menu {
             shown,
             sel: 0,
             from,
+            hash: false,
         }
     }
 
@@ -276,11 +279,7 @@ pub fn draw_menu(f: &mut Frame, area: Rect, at: Position, m: &Menu, query: &str)
     let w = (2 + key_w + label_w + 5).clamp(28, 74) as u16;
     let r = near(area, at, w, rows + 2);
     float(f, r);
-    let title = if query.is_empty() {
-        "\\".to_string()
-    } else {
-        format!("\\{query}")
-    };
+    let title = format!("{}{query}", if m.hash { '#' } else { '\\' });
     let count = Line::from(Span::styled(
         format!(" {}/{} ", m.sel + 1, m.shown.len()),
         Style::default().fg(FAINT),
@@ -560,6 +559,7 @@ pub fn label_of(key: &str) -> &str {
         "Adın" => "Your name",
         "Öneri menüsü" => "Suggestion menu",
         "Dakikada kelime" => "Words a minute",
+        "Klavye" => "Keyboard",
         "Dosya" => "File",
         other => other,
     }

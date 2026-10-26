@@ -25,6 +25,9 @@ pub struct Config {
     pub dim: bool,
     /// The play on a paper page; dark otherwise.
     pub paper: bool,
+    /// The keyboard drawn on the help screen: "q" (Turkish Q), "f" (Turkish
+    /// F) or "us".
+    pub keyboard: String,
     /// Plays opened lately, newest first.
     pub recent: Vec<String>,
 }
@@ -41,6 +44,7 @@ impl Default for Config {
             focus: false,
             dim: false,
             paper: true,
+            keyboard: "q".into(),
             recent: Vec::new(),
         }
     }

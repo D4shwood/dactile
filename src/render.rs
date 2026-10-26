@@ -143,6 +143,8 @@ pub struct Row {
     pub cells: Vec<Cell>,
     /// The draft line number shown in the margin, on a block's first row.
     pub number: Option<usize>,
+    /// Between two pages: drawn as the desk, not as paper.
+    pub gap: bool,
 }
 
 /// A place the cursor can stand.
@@ -269,7 +271,31 @@ pub fn layout(text: &str, doc: &Doc, opts: Options) -> Layout {
         width: opts.width.max(20),
     };
     b.out.name_width = name_column(doc, b.width);
+    // Where the PDF starts a new page; never in the all-source view.
+    let pages = !opts.raw_all;
+    let mut break_next = false;
+    let mut seen_act = false;
     for i in 0..doc.blocks.len() {
+        if pages && doc.body.contains(&i) {
+            let kind = &doc.blocks[i].kind;
+            let cmd = text[doc.blocks[i].span.clone()].trim();
+            if matches!(kind, Kind::Act { .. }) {
+                // The curtain falls on the act before.
+                if seen_act {
+                    b.curtain(false);
+                }
+                seen_act = true;
+            }
+            let before =
+                matches!(kind, Kind::Act { .. } | Kind::Section { .. }) || cmd == "\\kisiler";
+            if (before || break_next) && !matches!(kind, Kind::Blank) {
+                b.gap();
+                break_next = false;
+            }
+            if cmd == "\\maketitle" || is_page_break(cmd) {
+                break_next = true;
+            }
+        }
         let start = b.out.rows.len();
         let raw = opts.raw_all || opts.raw_block == Some(i);
         if doc.in_preamble(i) && !opts.preamble_open && !opts.raw_all {
@@ -336,12 +362,53 @@ pub fn layout(text: &str, doc: &Doc, opts: Options) -> Layout {
             b.out.rows[start].number = Some(n);
         }
         b.out.block_rows.push(start..b.out.rows.len());
+        if pages && i + 1 == doc.body.end && !doc.body.is_empty() {
+            b.curtain(true);
+        }
     }
     b.out.stops.sort_by_key(|s| s.byte);
     // One stop per byte: the first placed wins (a block's own start over the
     // end of the one before).
     b.out.stops.dedup_by_key(|s| s.byte);
     b.out
+}
+
+/// `\\clearpage` and its kin, alone on a line.
+fn is_page_break(cmd: &str) -> bool {
+    matches!(
+        cmd,
+        "\\clearpage" | "\\newpage" | "\\pagebreak" | "\\cleardoublepage"
+    )
+}
+
+/// `\\section*{X}`, `\\chapter{X}`…: the heading text, when the block is only that.
+fn latex_heading(text: &str, span: Range<usize>) -> Option<String> {
+    let c = tex::commands(text, span.clone()).into_iter().next()?;
+    if !matches!(c.name, "section" | "chapter" | "subsection")
+        || !text[span.start..c.span.start].trim().is_empty()
+    {
+        return None;
+    }
+    let mut at = c.span.end;
+    if let Some(st) = tex::star(text, at) {
+        at = st.end;
+    }
+    while let Some(o) = tex::optional(text, at) {
+        at = o.span.end;
+    }
+    let g = tex::group(text, at)?;
+    text[g.span.end..span.end]
+        .trim()
+        .is_empty()
+        .then(|| g.inner.trim().to_string())
+}
+
+/// "PERDE" → "P E R D E"; words three spaces apart.
+fn spaced(s: &str) -> String {
+    s.split_whitespace()
+        .map(|w| w.chars().map(String::from).collect::<Vec<_>>().join(" "))
+        .collect::<Vec<_>>()
+        .join("   ")
 }
 
 /// The name column: as wide as the widest speaker's name and a gap, at most
@@ -371,7 +438,43 @@ impl Builder<'_> {
                 block: Some(block),
                 cells: Vec::new(),
                 number: None,
+                gap: false,
             });
+        }
+    }
+
+    /// The end of a page and the start of the next.
+    fn gap(&mut self) {
+        if self.out.rows.is_empty() || self.out.rows.last().is_some_and(|r| r.gap) {
+            return;
+        }
+        for _ in 0..2 {
+            self.out.rows.push(Row {
+                gap: true,
+                ..Row::default()
+            });
+        }
+        // The new page's top margin.
+        self.out.rows.push(Row::default());
+    }
+
+    /// "PERDE SONU" where an act ends, and "SON" after the last one, as the
+    /// class prints them.
+    fn curtain(&mut self, last: bool) {
+        let mut words = vec![lang::l("PERDE SONU", "CURTAIN")];
+        if last {
+            words.push(lang::l("SON", "THE END"));
+        }
+        for w in words {
+            let row = self.out.rows.len();
+            self.out.rows.push(Row::default());
+            let glyphs: Vec<Glyph> = w
+                .chars()
+                .map(|c| Glyph::deco(c, Style::SceneCast, None))
+                .collect();
+            let width = self.width;
+            self.flow(0, &glyphs, 0, width, Align::Center, None, row);
+            self.out.rows[row].block = None;
         }
     }
 
@@ -690,16 +793,23 @@ impl Builder<'_> {
                 self.flow(b, &glyphs, 0, self.width, align, Some(text.end), row);
                 self.stop(lead, row, 0);
             }
-            Kind::Act { title } => {
+            Kind::Act { title, .. } => {
                 let act = self
                     .doc
                     .act_of(b)
                     .map_or(0, |a| self.doc.outline.acts[a].number);
-                let mut s = format!("{}. {}", outline::roman(act), lang::l("PERDE", "ACT"));
-                if !title.trim().is_empty() {
-                    s.push_str(&format!(" · {}", title.trim()));
+                // As the PDF sets it: "I. PERDE", the title on a line of its own.
+                let head = format!(
+                    "{}.  {}",
+                    outline::roman(act),
+                    spaced(lang::l("PERDE", "ACT"))
+                );
+                let mut glyphs = chip(&head, Style::Heading, lead);
+                let title = title.trim();
+                if !title.is_empty() {
+                    glyphs.push(Glyph::deco('\n', Style::Heading, None));
+                    glyphs.extend(title.chars().map(|c| Glyph::deco(c, Style::Heading, None)));
                 }
-                let glyphs = chip(&s, Style::Heading, lead);
                 self.flow(
                     b,
                     &glyphs,
@@ -709,6 +819,28 @@ impl Builder<'_> {
                     Some(span.end),
                     row,
                 );
+            }
+            Kind::Section { which, title, .. } => {
+                let name = if title.trim().is_empty() {
+                    match which {
+                        lex::Section::Preface => lang::l("ÖNSÖZ", "PREFACE"),
+                        lex::Section::Notes => lang::l("REJİSÖRE NOTLAR", "NOTES FOR THE DIRECTOR"),
+                    }
+                    .to_string()
+                } else {
+                    cast::upper_tr(title.trim())
+                };
+                let glyphs = chip(&name, Style::Heading, lead);
+                let used = self.flow(
+                    b,
+                    &glyphs,
+                    0,
+                    self.width,
+                    Align::Center,
+                    Some(span.end),
+                    row,
+                );
+                self.ensure_row(row + used, b);
             }
             Kind::Scene { place, .. } => {
                 let scene = self.doc.scene_of(b).map(|s| &self.doc.outline.scenes[s]);
@@ -752,45 +884,79 @@ impl Builder<'_> {
             Kind::Other => match self.text[span.clone()].trim() {
                 "\\maketitle" => self.cover(b, lead, span.end),
                 "\\kisiler" => self.cast_table(b, lead, span.end),
-                _ => return false,
+                cmd if is_page_break(cmd) => {
+                    let s = lang::l("· yeni sayfa ·", "· new page ·");
+                    let glyphs = chip(s, Style::Faint, lead);
+                    self.flow(
+                        b,
+                        &glyphs,
+                        0,
+                        self.width,
+                        Align::Center,
+                        Some(span.end),
+                        row,
+                    );
+                }
+                _ => match latex_heading(self.text, span.clone()) {
+                    Some(h) => {
+                        let glyphs = chip(&cast::upper_tr(&h), Style::Heading, lead);
+                        let used = self.flow(
+                            b,
+                            &glyphs,
+                            0,
+                            self.width,
+                            Align::Center,
+                            Some(span.end),
+                            row,
+                        );
+                        self.ensure_row(row + used, b);
+                    }
+                    // Plain prose, a preface say: as text, its escapes shown
+                    // as what they print.
+                    None if !self.text[lead..span.end].starts_with('\\') => {
+                        let glyphs = self.inline_glyphs(lead..span.end, Style::Text, false);
+                        self.flow(b, &glyphs, 0, self.width, Align::Left, Some(span.end), row);
+                    }
+                    None => return false,
+                },
             },
             Kind::Comment => return false,
         }
         true
     }
 
-    /// Rows of decoration for a chip block: one stop at `lead` before the first
-    /// character, one at `end` after the last row.
+    /// Rows of decoration for a chip block. Its two stops, `lead` and `end`,
+    /// go before and after row `at`, so the cursor sits on that row.
     fn chip_rows(
         &mut self,
         b: usize,
         rows: Vec<(Vec<Glyph>, Align, u16)>,
+        at: usize,
         lead: usize,
         end: usize,
     ) {
         let mut row = self.out.rows.len();
-        let mut first = true;
-        for (mut glyphs, align, indent) in rows {
-            if first {
-                match glyphs.first_mut() {
-                    Some(g) => g.stop = Some(lead),
-                    None => glyphs.push(Glyph::deco(' ', Style::Faint, Some(lead))),
-                }
-                first = false;
-            }
+        for (n, (mut glyphs, align, indent)) in rows.into_iter().enumerate() {
             if glyphs.is_empty() {
                 self.ensure_row(row, b);
                 row += 1;
                 continue;
             }
+            if n == at {
+                glyphs[0].stop = Some(lead);
+            }
             let width = self.width;
-            row += self.flow(b, &glyphs, indent, width, align, None, row);
+            let used = self.flow(b, &glyphs, indent, width, align, None, row);
+            if n == at {
+                let (r, col) = self.last_pos(row);
+                let r = r.min(row + used - 1);
+                self.stop(end, r, col);
+            }
+            row += used;
         }
-        let (r, col) = self.last_pos(self.out.rows.len().saturating_sub(1));
-        self.stop(end, r, col);
     }
 
-    /// `\maketitle`: the cover in miniature, as the PDF prints it.
+    /// `\\maketitle`: the cover in miniature, with room around it as on the page.
     fn cover(&mut self, b: usize, lead: usize, end: usize) {
         let get = |name| {
             info::get(self.text, name)
@@ -800,19 +966,27 @@ impl Builder<'_> {
         let text = |s: &str, style| -> Vec<Glyph> {
             s.chars().map(|c| Glyph::deco(c, style, None)).collect()
         };
-        let mut rows = vec![(Vec::new(), Align::Center, 0)];
+        let blank = || (Vec::new(), Align::Center, 0);
+        let mut rows = vec![blank(), blank(), blank()];
         let title = self
             .doc
             .title(self.text)
             .unwrap_or_else(|| lang::l("(başlıksız)", "(untitled)").into());
-        rows.push((
-            text(&cast::upper_tr(&title), Style::Title),
-            Align::Center,
-            0,
-        ));
+        let title = cast::upper_tr(&title);
+        // Letter-spaced when it fits on one row.
+        let wide = spaced(&title);
+        let shown = if wide.width() + 4 <= self.width as usize {
+            wide
+        } else {
+            title
+        };
+        let at = rows.len();
+        rows.push((text(&shown, Style::Title), Align::Center, 0));
         if let Some(a) = get("author") {
+            rows.push(blank());
             rows.push((text(&a, Style::Text), Align::Center, 0));
         }
+        rows.push(blank());
         if info::is_final(self.text) {
             let starred: Vec<String> = self
                 .doc
@@ -822,9 +996,8 @@ impl Builder<'_> {
                 .filter(|c| c.star)
                 .map(|c| c.display_name().to_string())
                 .collect();
-            if !starred.is_empty() {
-                rows.push((Vec::new(), Align::Center, 0));
-                rows.push((text(&starred.join(", "), Style::Name), Align::Center, 0));
+            for s in starred {
+                rows.push((text(&s, Style::NameStar), Align::Center, 0));
             }
         } else {
             let mut d = lang::l("TASLAK", "DRAFT").to_string();
@@ -843,18 +1016,16 @@ impl Builder<'_> {
         .flatten()
         .collect();
         if !small.is_empty() {
-            rows.push((Vec::new(), Align::Center, 0));
-            rows.push((text(&small.join(" · "), Style::Faint), Align::Right, 0));
+            rows.extend([blank(), blank(), blank()]);
+            for s in small {
+                rows.push((text(&s, Style::Faint), Align::Right, 0));
+            }
         }
-        rows.push((
-            text(&"─".repeat(self.width as usize), Style::Faint),
-            Align::Left,
-            0,
-        ));
-        self.chip_rows(b, rows, lead, end);
+        rows.push(blank());
+        self.chip_rows(b, rows, at, lead, end);
     }
 
-    /// `\kisiler`: the cast table, names in a column, groups braced.
+    /// `\\kisiler`: the cast table, names in a column, groups braced.
     fn cast_table(&mut self, b: usize, lead: usize, end: usize) {
         let cast = &self.doc.cast;
         let text = |s: &str, style| -> Vec<Glyph> {
@@ -930,12 +1101,7 @@ impl Builder<'_> {
             rows.push((g, Align::Left, indent));
         }
         rows.push((Vec::new(), Align::Center, 0));
-        rows.push((
-            text(&"─".repeat(self.width as usize), Style::Faint),
-            Align::Left,
-            0,
-        ));
-        self.chip_rows(b, rows, lead, end);
+        self.chip_rows(b, rows, 1, lead, end);
     }
 
     /// Text in the column right of the names, aligned with the first name row.
@@ -1011,9 +1177,14 @@ mod tests {
     #[test]
     fn cover_and_cast_table_preview() {
         let (doc, l) = lay(70);
-        let title = find_row(&l, "KAR MASALI");
-        assert!(row_text(&l, title + 1).contains("Örnek Yazar"));
-        assert!(row_text(&l, title + 2).contains("TASLAK 0.1"));
+        // Room around the cover, the title letter-spaced.
+        let title = find_row(&l, "K A R   M A S A L I");
+        assert!(row_text(&l, title - 1).is_empty());
+        assert!(row_text(&l, title + 2).contains("Örnek Yazar"));
+        assert!(row_text(&l, title + 4).contains("TASLAK 0.1"));
+        // Each contact line on its own row.
+        assert!(row_text(&l, find_row(&l, "© 2026")).ends_with("© 2026 Örnek Yazar"));
+        find_row(&l, "ornek@example.com");
         let cast = find_row(&l, "KİŞİLER");
         assert!(cast > title);
         // Full names from the cast table, descriptions in their own column.
@@ -1031,15 +1202,16 @@ mod tests {
         assert!(row_text(&l, kadin).contains("Köylüler"));
         assert!(row_text(&l, kadin + 1).contains("ÇOBAN"));
         // Hidden characters stay out, as in the PDF.
-        assert!((cast..find_row(&l, "PERDE")).all(|r| !row_text(&l, r).contains("HERKES")));
-        // Each is one chip: one stop at its start and one at its end.
+        assert!((cast..find_row(&l, "P E R D E")).all(|r| !row_text(&l, r).contains("HERKES")));
+        // Each is one chip, its two stops on the title row.
         let mk = doc.parts.body.start + PLAY[doc.parts.body.clone()].find("\\maketitle").unwrap();
         let stops: Vec<_> = l
             .stops
             .iter()
-            .filter(|s| s.byte >= mk && s.byte < mk + 10)
+            .filter(|s| s.byte >= mk && s.byte <= mk + 10)
             .collect();
-        assert_eq!(stops.len(), 1);
+        assert_eq!(stops.len(), 2);
+        assert!(stops.iter().all(|s| s.row == title));
         // In final mode the cover names the starred characters instead.
         let fin = PLAY.replace("[draft]{tiyatro}", "[final]{tiyatro}");
         let d = Doc::new(&fin);
@@ -1051,16 +1223,63 @@ mod tests {
                 ..Options::default()
             },
         );
-        let t = find_row(&l, "KAR MASALI");
-        assert!((t..t + 4).any(|r| row_text(&l, r).trim() == "Selin"));
+        let t = find_row(&l, "K A R   M A S A L I");
+        assert!((t..t + 6).any(|r| row_text(&l, r).trim() == "Selin"));
         assert!((0..l.rows.len()).all(|r| !row_text(&l, r).contains("TASLAK")));
+    }
+
+    #[test]
+    fn pages_curtains_and_sections() {
+        let (_, l) = lay(70);
+        let gaps: Vec<usize> = (0..l.rows.len()).filter(|&r| l.rows[r].gap).collect();
+        // Between the cover and the preface (one page break, not two), and
+        // before the cast, the notes and each act; two rows each.
+        assert_eq!(gaps.len(), 2 * 5, "{gaps:?}");
+        assert!(gaps.iter().all(|&r| l.rows[r].cells.is_empty()));
+        assert!(!l.stops.iter().any(|s| l.rows[s.row].gap));
+        assert!(l.rows[find_row(&l, "ÖNSÖZ") - 2].gap);
+        assert!(l.rows[find_row(&l, "REJİSÖRE NOTLAR") - 2].gap);
+        // The curtain before act II, and at the end.
+        let curtains: Vec<usize> = (0..l.rows.len())
+            .filter(|&r| row_text(&l, r).trim() == "PERDE SONU")
+            .collect();
+        assert_eq!(curtains.len(), 2);
+        assert!(l.rows[curtains[0] + 1].gap);
+        assert_eq!(row_text(&l, curtains[1] + 1).trim(), "SON");
+        // Old LaTeX reads too.
+        let old = "\\documentclass{tiyatro}\n\\begin{document}\nÖnce.\n\\clearpage\n\\section*{Ön söz}\nMetin.\n\\end{document}\n";
+        let d = Doc::new(old);
+        let l = layout(
+            old,
+            &d,
+            Options {
+                width: 60,
+                ..Options::default()
+            },
+        );
+        let head = find_row(&l, "ÖN SÖZ");
+        assert!(l.rows[head - 2].gap);
+        find_row(&l, "· yeni sayfa ·");
+        // No pages in the all-source view.
+        let l = layout(
+            PLAY,
+            &Doc::new(PLAY),
+            Options {
+                width: 70,
+                raw_all: true,
+                ..Options::default()
+            },
+        );
+        assert!(!l.rows.iter().any(|r| r.gap));
     }
 
     #[test]
     fn reads_like_the_pdf() {
         let (_, l) = lay(80);
         assert!(row_text(&l, 0).starts_with("▸ Kişiler (6)"));
-        assert!(row_text(&l, find_row(&l, "PERDE")).contains("I. PERDE · Kar Yağarken"));
+        let act = find_row(&l, "P E R D E");
+        assert_eq!(row_text(&l, act).trim(), "I.  P E R D E");
+        assert_eq!(row_text(&l, act + 1).trim(), "Kar Yağarken");
         assert!(row_text(&l, find_row(&l, "Sahne 1")).contains("Sahne 1 — İç, Değirmen — Akşam"));
         assert!(row_text(&l, find_row(&l, "Sahne 1") + 1).contains("SELİN, OZAN, İHTİYAR"));
         assert_eq!(

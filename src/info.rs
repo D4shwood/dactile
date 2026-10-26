@@ -76,7 +76,12 @@ pub fn set(text: &str, name: &str, value: &str) -> Option<Edit> {
 
 /// Whether the class is in final mode.
 pub fn is_final(text: &str) -> bool {
-    documentclass_option(text).is_some_and(|(_, o)| o.split(',').any(|x| x.trim() == "final"))
+    has_option(text, "final")
+}
+
+/// Whether `\documentclass[…]` has `option`.
+pub fn has_option(text: &str, option: &str) -> bool {
+    documentclass_option(text).is_some_and(|(_, o)| o.split(',').any(|x| x.trim() == option))
 }
 
 fn documentclass_option(text: &str) -> Option<(std::ops::Range<usize>, &str)> {

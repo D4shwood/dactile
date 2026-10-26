@@ -126,32 +126,38 @@ pub fn file_name(title: &str) -> String {
 /// A new play: the class, the cover, one act and one scene, and three lines
 /// of help as comments.
 pub fn template(title: &str, author: &str, lang: Lang) -> String {
-    let (help, words, act, place, first) = match lang {
+    let (help, words, act, place, first, kw) = match lang {
         Lang::Tr => (
             "% Dactile ile yazılıyor. \\ yazınca öneriler açılır; \\kisaltma ve boşluk bir\n\
-             % replik başlatır, \\kisaltmado bir yönerge. F1 bütün tuşları gösterir.\n\
+             % replik başlatır, \\kisaltmado bir yönerge; satır başında # başlıklar\n\
+             % (#sahne, #perde, #önsöz, #notlar). F1 bütün tuşları gösterir.\n\
              % Derlemek için: xelatex iki kez.\n",
             "",
             "Birinci Perde",
             "İç — Gece",
             "\\action{Işıklar yavaşça açılır.}",
+            ("perde", "sahne"),
         ),
         Lang::En => (
             "% Written with Dactile. A backslash opens suggestions; \\alias and a space\n\
-             % starts a line, \\aliasdo a direction. F1 shows every key.\n\
+             % starts a line, \\aliasdo a direction; # at a line's start a heading\n\
+             % (#scene, #act, #preface, #notes). F1 shows every key.\n\
              % To compile: xelatex twice.\n",
             "\\renewcommand{\\casttitlename}{CAST}\n\\renewcommand{\\acttitlename}{Act}\n\
              \\renewcommand{\\scenetitlename}{Scene}\n\\renewcommand{\\curtainlocalizedtext}{Curtain}\n\
              \\renewcommand{\\scriptendlocalizedtext}{The End}\n\\renewcommand{\\draftlocalizedtext}{DRAFT}\n\
-             \\renewcommand{\\beattext}{Pause.}\n\n",
+             \\renewcommand{\\beattext}{Pause.}\n\\renewcommand{\\prefacename}{PREFACE}\n\
+             \\renewcommand{\\notesname}{NOTES FOR THE DIRECTOR}\n\n",
             "Act One",
             "Interior — Night",
             "\\action{The lights come up slowly.}",
+            ("act", "scene"),
         ),
     };
     format!(
         "{help}\n\\documentclass[draft]{{tiyatro}}\n\n\\title{{{title}}}\n\\author{{{author}}}\n\\draft{{0.1}}\n\n{words}\
-         \\begin{{document}}\n\n\\maketitle\n\\kisiler\n\n\\perde[{act}]\n\n\\sahne[{place}]\n\n{first}\n\n\\end{{document}}\n"
+         \\begin{{document}}\n\n\\maketitle\n\\kisiler\n\n#{} {act}\n\n#{} {place}\n\n{first}\n\n\\end{{document}}\n",
+        kw.0, kw.1
     )
 }
 

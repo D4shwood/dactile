@@ -1,5 +1,6 @@
 //! The writing screen: the play as it will read, edited in place.
 
+use super::keys;
 use super::panels::{self, CastPanel, Entry};
 use super::popup::{self, Field, Form, FormKind, Menu, Verbs};
 use super::theme::{self, BEIGE, CLARET, FAINT, MUTED, WARN};
@@ -83,6 +84,12 @@ pub struct Writer {
     dim: bool,
     /// The play on a paper page; dark otherwise.
     paper: bool,
+    /// `NAME:` just became a line with its space: the next space is dropped.
+    eat_space: bool,
+    /// The keyboard the help screen draws.
+    keyboard: String,
+    /// The margin map's rows on screen and the block each one opens.
+    map_hits: Vec<(u16, usize)>,
     /// Suggestions only with ^K, not on every backslash.
     menu_manual: bool,
     default_wpm: u32,
@@ -112,7 +119,8 @@ enum Popup {
     Cast(CastPanel),
     /// ^G: the scenes.
     Scenes(usize),
-    Help,
+    /// F1: the keyboard, with the last key pressed on it.
+    Help(Option<keys::Pressed>),
     /// Alt+S: spelling suggestions for the word at `range`.
     Suggest(std::ops::Range<usize>, Vec<String>, usize),
 }
@@ -172,6 +180,9 @@ impl Writer {
             focus: cfg.focus,
             dim: cfg.dim,
             paper: cfg.paper,
+            eat_space: false,
+            keyboard: cfg.keyboard.clone(),
+            map_hits: Vec::new(),
             menu_manual: cfg.menu == "manual",
             default_wpm: cfg.wpm,
             text_top: 1,
@@ -349,6 +360,9 @@ impl Writer {
 
     pub fn key(&mut self, k: KeyEvent) {
         self.message = None;
+        if !matches!(k.code, KeyCode::Char(_)) {
+            self.eat_space = false;
+        }
         if self.popup_key(k) {
             self.keep_visible();
             return;
@@ -471,7 +485,7 @@ impl Writer {
             }
             KeyCode::Char('i') if alt => self.popup = Popup::Form(self.info_form()),
             KeyCode::Char('s') if alt => self.suggest(),
-            KeyCode::F(1) => self.popup = Popup::Help,
+            KeyCode::F(1) => self.popup = Popup::Help(None),
             KeyCode::Char('k') if ctrl => {
                 let items = complete::items(&self.doc, self.block());
                 self.popup = Popup::Search(Menu::new(items, self.buf.cursor), String::new());
@@ -530,7 +544,14 @@ impl Writer {
             }
             KeyCode::Backspace => self.backspace(),
             KeyCode::Delete => self.delete(),
-            KeyCode::Tab => {}
+            KeyCode::Tab => {
+                if let Some(a) = self.ghost()
+                    && self.editable()
+                {
+                    self.buf.insert(&format!("\\{a} "));
+                    self.edited();
+                }
+            }
             KeyCode::Char(c) if !ctrl && !alt => self.type_char(c),
             _ => {}
         }
@@ -697,8 +718,26 @@ impl Writer {
         if !self.editable() {
             return;
         }
+        if std::mem::take(&mut self.eat_space) && c == ' ' {
+            return;
+        }
         let block = self.block().unwrap_or(0);
         let dialogue = self.doc.is_dialogue(block) || self.at_blank_line();
+        let hash_ok = !info::has_option(&self.buf.text, "nohash");
+        if c == '#' && hash_ok && !self.raw_all && self.at_line_start() {
+            // A heading: #sahne, #perde, #önsöz, #notlar.
+            self.raw_here = true;
+            self.buf.insert("#");
+            let nl = source::line_ending(&self.buf.text).to_string();
+            let mut m = Menu::new(complete::headings(&nl), self.buf.cursor);
+            m.hash = true;
+            self.popup = Popup::Menu(m);
+            self.edited();
+            return;
+        }
+        if c == ':' && !self.raw_now() && self.name_colon() {
+            return;
+        }
         if c == '\\' {
             // A macro is being written: its block shows as source until done,
             // with what can follow the backslash.
@@ -755,6 +794,71 @@ impl Writer {
         letters > 0 && chars.nth(letters) == Some('\\')
     }
 
+    /// Nothing but spaces between the line's start and the cursor.
+    fn at_line_start(&self) -> bool {
+        self.buf.text[self.line_start()..self.buf.cursor]
+            .trim()
+            .is_empty()
+    }
+
+    fn line_start(&self) -> usize {
+        let t = &self.buf.text[..self.buf.cursor];
+        t.rfind('\n').map_or(0, |i| i + 1)
+    }
+
+    /// `SELİN:` typed at a line's start: the line becomes SELİN's. A name in
+    /// capitals nobody has (`AHMET:`) asks for a new character. True when the
+    /// colon was taken.
+    fn name_colon(&mut self) -> bool {
+        let from = self.line_start();
+        let typed = &self.buf.text[from..self.buf.cursor];
+        let lead = from + (typed.len() - typed.trim_start().len());
+        let name = typed.trim();
+        if name.is_empty() || name.contains('\\') {
+            return false;
+        }
+        if let Some(c) = self.doc.cast.by_name(name) {
+            let line = format!("\\{} ", c.alias);
+            self.buf.apply(
+                &[dactile::tex::Edit::new(lead..self.buf.cursor, line.clone())],
+                lead + line.len(),
+            );
+            self.raw_here = false;
+            self.edited();
+            // The space usually typed after the colon is already there.
+            self.eat_space = true;
+            return true;
+        }
+        if dactile::writing::is_caps_name(name) {
+            let name = name.to_string();
+            // `AHMET:` stays until the form is done and is replaced then; a
+            // cancelled form leaves it as typed.
+            self.buf.insert(":");
+            self.edited();
+            let mut form = self.character_form("", Some(lead));
+            form.at = lead..self.buf.cursor;
+            form.fields[0].value = name.clone();
+            form.fields[0].touched = true;
+            form.fields[1].value = self.doc.cast.suggest_alias(&name);
+            self.popup = Popup::Form(form);
+            return true;
+        }
+        false
+    }
+
+    /// Who probably speaks on the empty line at the cursor: shown faint,
+    /// taken with Tab.
+    fn ghost(&self) -> Option<String> {
+        if !matches!(self.popup, Popup::None)
+            || self.raw_now()
+            || !self.at_blank_line()
+            || !self.at_line_start()
+        {
+            return None;
+        }
+        dactile::writing::next_speaker(&self.doc, self.block()?)
+    }
+
     fn at_blank_line(&self) -> bool {
         matches!(
             self.block().map(|b| &self.doc.blocks[b].kind),
@@ -769,6 +873,21 @@ impl Writer {
         let block = self.block().unwrap_or(0);
         let text = if self.raw_now() {
             s.replace("\r\n", "\n")
+        } else if self.at_line_start() {
+            // Whole lines from a draft: names, directions and headings take
+            // their shape.
+            let (text, unknown) = dactile::writing::paste_lines(s, &self.doc.cast);
+            if unknown > 0 {
+                self.say(
+                    &lang::f(
+                        "{} satırda tanımsız ad var (AD: …); düz yazı olarak kaldı.",
+                        "{} lines start with an unknown NAME:; left as text.",
+                        &[&unknown],
+                    ),
+                    true,
+                );
+            }
+            text
         } else {
             buffer::escape_pasted(s, self.doc.is_dialogue(block))
         };
@@ -851,7 +970,17 @@ impl Writer {
                     true
                 }
                 KeyCode::Esc => {
+                    // A lone # is a plain one.
+                    let lone =
+                        m.hash && self.buf.text.get(m.from - 1..self.buf.cursor) == Some("#");
+                    let at = m.from - 1;
                     self.popup = Popup::None;
+                    if lone {
+                        self.buf
+                            .apply(&[dactile::tex::Edit::new(at..at + 1, "\\#")], at + 2);
+                        self.raw_here = false;
+                        self.edited();
+                    }
                     true
                 }
                 _ => false,
@@ -950,9 +1079,15 @@ impl Writer {
                 }
                 true
             }
-            Popup::Help => {
-                if matches!(k.code, KeyCode::Esc | KeyCode::F(1) | KeyCode::Enter) {
-                    self.popup = Popup::None;
+            Popup::Help(p) => {
+                // Keys light up here instead of acting; Esc and F1 close.
+                match k.code {
+                    KeyCode::Esc | KeyCode::F(1) => self.popup = Popup::None,
+                    _ => {
+                        if let Some(now) = keys::pressed(k, &self.keyboard) {
+                            *p = Some(now);
+                        }
+                    }
                 }
                 true
             }
@@ -1206,19 +1341,23 @@ impl Writer {
                     .into_iter()
                     .filter(|s| !s.is_empty())
                     .collect();
-                let text = if parts.is_empty() {
-                    "\\sahne".to_string()
-                } else {
-                    format!("\\sahne[{}]", parts.join(" — "))
+                let hash = !info::has_option(&self.buf.text, "nohash");
+                let text = match (hash, parts.is_empty()) {
+                    (true, true) => "#sahne".to_string(),
+                    (true, false) => format!("#sahne {}", parts.join(" — ")),
+                    (false, true) => "\\sahne".to_string(),
+                    (false, false) => format!("\\sahne[{}]", parts.join(" — ")),
                 };
                 self.write_line(form.at.start, &text, &nl);
             }
             FormKind::Act => {
                 let title = form.get("Başlık");
-                let text = if title.is_empty() {
-                    "\\perde".to_string()
-                } else {
-                    format!("\\perde[{title}]")
+                let hash = !info::has_option(&self.buf.text, "nohash");
+                let text = match (hash, title.is_empty()) {
+                    (true, true) => "#perde".to_string(),
+                    (true, false) => format!("#perde {title}"),
+                    (false, true) => "\\perde".to_string(),
+                    (false, false) => format!("\\perde[{title}]"),
                 };
                 self.write_line(form.at.start, &text, &nl);
             }
@@ -1390,7 +1529,8 @@ impl Writer {
                     let at = form.at.start;
                     let use_text = format!("\\{alias} ");
                     cursor = at + use_text.len();
-                    edits.push(dactile::tex::Edit::new(at..at, use_text));
+                    // Over what was typed for it (`AHMET:`), if anything.
+                    edits.push(dactile::tex::Edit::new(form.at.clone(), use_text));
                 }
                 if decl.range.start <= cursor {
                     cursor += shift;
@@ -1909,6 +2049,21 @@ impl Writer {
                 if !matches!(self.popup, Popup::None) || m.row < self.text_top {
                     return;
                 }
+                // A heading in the margin map: go there.
+                if m.column < self.sheet().x {
+                    if let Some(&(_, b)) = self.map_hits.iter().find(|(y, _)| *y == m.row)
+                        && matches!(m.kind, MouseEventKind::Down(_))
+                    {
+                        let at = self.doc.blocks[b].span.start;
+                        self.go(at, false);
+                        self.snap_forward();
+                        self.scroll = self
+                            .lay
+                            .stop_at(at)
+                            .map_or(self.scroll, |s| s.row.saturating_sub(2));
+                    }
+                    return;
+                }
                 let row = self.scroll + (m.row - self.text_top) as usize;
                 let col = m.column.saturating_sub(self.sheet().text_x);
                 let hit = (row..self.lay.rows.len())
@@ -2080,6 +2235,7 @@ impl Writer {
         };
         self.text_top = body.y;
         self.draw_sheet(f, body);
+        self.draw_map(f, body);
         self.mark_misspelt();
         self.draw_text(f, body);
         let status = Rect {
@@ -2117,7 +2273,7 @@ impl Writer {
                 panels::draw_cast(f, area, &self.doc, &self.buf.text, &self.sidecar, p)
             }
             Popup::Scenes(sel) => panels::draw_scenes(f, area, &self.doc, self.wpm(), *sel),
-            Popup::Help => panels::draw_help(f, area),
+            Popup::Help(p) => keys::draw_help(f, area, &self.keyboard, p.as_ref()),
             Popup::Suggest(range, items, sel) => {
                 let word = self.buf.text.get(range.clone()).unwrap_or("");
                 panels::draw_suggest(f, body, at, word, items, *sel);
@@ -2168,6 +2324,86 @@ impl Writer {
         );
     }
 
+    /// The play's headings in the margin left of the page, where there is
+    /// room: prefaces, acts and their scenes, the cursor's one marked.
+    fn draw_map(&mut self, f: &mut Frame, area: Rect) {
+        self.map_hits.clear();
+        let sheet = self.sheet();
+        if sheet.x < 22 {
+            return;
+        }
+        let o = &self.doc.outline;
+        let base = self.doc.body.start;
+        // (block, depth, label)
+        let mut entries: Vec<(usize, u8, String)> = Vec::new();
+        for sct in &o.sections {
+            let name = if sct.title.trim().is_empty() {
+                match sct.which {
+                    dactile::lex::Section::Preface => lang::l("Önsöz", "Preface"),
+                    dactile::lex::Section::Notes => lang::l("Rejisöre notlar", "Director's notes"),
+                }
+                .to_string()
+            } else {
+                sct.title.trim().to_string()
+            };
+            entries.push((sct.block + base, 0, name));
+        }
+        for a in &o.acts {
+            let mut s = format!("{}. {}", outline::roman(a.number), lang::l("Perde", "Act"));
+            if !a.title.trim().is_empty() {
+                s.push_str(&format!(" · {}", a.title.trim()));
+            }
+            entries.push((a.block + base, 0, s));
+        }
+        for sc in &o.scenes {
+            let mut s = format!("{} {}", lang::l("Sahne", "Scene"), sc.label);
+            if !sc.place.trim().is_empty() {
+                s.push_str(&format!(" · {}", sc.place.trim()));
+            }
+            entries.push((sc.block + base, 1, s));
+        }
+        entries.sort_by_key(|e| e.0);
+        if entries.is_empty() {
+            return;
+        }
+        let here = self.block().unwrap_or(0);
+        let current = entries.iter().rposition(|e| e.0 <= here);
+        let w = (sheet.x - 4) as usize;
+        let rows = area.height.saturating_sub(2) as usize;
+        let start = current
+            .map_or(0, |c| c.saturating_sub(rows / 2))
+            .min(entries.len().saturating_sub(rows));
+        let x = area.x + 2;
+        for (n, (block, depth, label)) in entries.iter().enumerate().skip(start).take(rows) {
+            let y = area.y + 1 + (n - start) as u16;
+            let is_here = Some(n) == current;
+            let indent = if *depth == 0 { "" } else { "  " };
+            let mark = if is_here { "▸ " } else { "  " };
+            let style = if is_here {
+                Style::default().fg(CLARET)
+            } else if *depth == 0 {
+                Style::default().fg(MUTED)
+            } else {
+                Style::default().fg(FAINT)
+            };
+            let text = popup::fit(&format!("{indent}{label}"), w.saturating_sub(2));
+            let line = Line::from(vec![
+                Span::styled(mark, Style::default().fg(CLARET)),
+                Span::styled(text, style),
+            ]);
+            f.render_widget(
+                Paragraph::new(line).style(theme::base()),
+                Rect {
+                    x,
+                    y,
+                    width: w as u16,
+                    height: 1,
+                },
+            );
+            self.map_hits.push((y, *block));
+        }
+    }
+
     /// The desk and the page on it.
     fn draw_sheet(&self, f: &mut Frame, area: Rect) {
         let sheet = self.sheet();
@@ -2198,7 +2434,7 @@ impl Writer {
         // Panels cover the text; forms and search type somewhere else.
         let covered = matches!(
             self.popup,
-            Popup::Cast(_) | Popup::Scenes(_) | Popup::Help | Popup::Form(_) | Popup::Search(..)
+            Popup::Cast(_) | Popup::Scenes(_) | Popup::Help(_) | Popup::Form(_) | Popup::Search(..)
         );
         let cursor = self.cursor_stop().filter(|c| {
             !covered && c.row >= self.scroll && c.row < self.scroll + area.height as usize
@@ -2213,6 +2449,16 @@ impl Writer {
             .enumerate()
         {
             let y = area.y + i as u16;
+            if row.gap {
+                // Between two pages: the desk shows through.
+                let bg = if self.paper { theme::BG } else { theme::SHADOW };
+                for x in
+                    area.x + sheet.x..(area.x + sheet.x + sheet.width + 1).min(area.x + area.width)
+                {
+                    buf[(x, y)].set_char(' ').set_style(Style::default().bg(bg));
+                }
+                continue;
+            }
             let here = row.block.is_some() && row.block == self.block();
             if let Some(n) = row.number {
                 let label = format!("{n:>4}");
@@ -2249,6 +2495,23 @@ impl Writer {
                     style = style.bg(p.selection);
                 }
                 buf[(x, y)].set_char(c.ch).set_style(style);
+            }
+        }
+        // Who speaks next, faint, on the empty line.
+        if let (Some(a), Some(cur)) = (self.ghost(), cursor)
+            && let Some(c) = self.doc.cast.get(&a)
+        {
+            let y = area.y + (cur.row - self.scroll) as u16;
+            let hint = format!("{}   Tab", c.script);
+            let style = Style::default()
+                .bg(p.bg)
+                .fg(p.faint)
+                .add_modifier(Modifier::ITALIC);
+            for (k, ch) in hint.chars().enumerate() {
+                let x = left + cur.col + k as u16;
+                if x < right {
+                    buf[(x, y)].set_char(ch).set_style(style);
+                }
             }
         }
         // The cursor, unless a full panel covers the text. On paper the

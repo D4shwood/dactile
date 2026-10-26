@@ -137,6 +137,12 @@ impl Home {
                     "auto"
                 }
                 .into();
+                cfg.keyboard = match form.get("Klavye") {
+                    k if k.ends_with('F') || k.ends_with('f') => "f",
+                    k if k.eq_ignore_ascii_case("us") => "us",
+                    _ => "q",
+                }
+                .into();
                 match form.get("Dakikada kelime").parse::<u32>() {
                     Ok(n) if (30..=400).contains(&n) => cfg.wpm = n,
                     _ => {
@@ -573,6 +579,16 @@ fn settings_form(cfg: &Config, first: bool) -> Form {
         lang::l("otomatik (\\ ile)", "automatic (on \\)").to_string(),
         lang::l("elle (yalnız ^K)", "by hand (^K only)").to_string(),
     ];
+    let keyboards = vec![
+        lang::l("Türkçe Q", "Turkish Q").to_string(),
+        lang::l("Türkçe F", "Turkish F").to_string(),
+        "US".to_string(),
+    ];
+    let keyboard = match cfg.keyboard.as_str() {
+        "f" => keyboards[1].clone(),
+        "us" => keyboards[2].clone(),
+        _ => keyboards[0].clone(),
+    };
     let menu = if cfg.menu == "manual" {
         menus[1].clone()
     } else {
@@ -592,6 +608,7 @@ fn settings_form(cfg: &Config, first: bool) -> Form {
             Field::text("Adın", &cfg.author, Vec::new()),
             Field::text("Öneri menüsü", &menu, menus),
             Field::text("Dakikada kelime", &cfg.wpm.to_string(), Vec::new()),
+            Field::text("Klavye", &keyboard, keyboards),
         ],
         focus: 0,
         at: 0..0,

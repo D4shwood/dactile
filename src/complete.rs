@@ -45,6 +45,51 @@ fn insert(text: &str, cursor: usize) -> Action {
     }
 }
 
+/// What can follow a `#` at a line's start: the headings, in the play's
+/// words. `nl` ends the line a preface or notes heading takes.
+pub fn headings(nl: &str) -> Vec<Item> {
+    let tr = lang::is_tr();
+    let (scene, act, preface, notes) = if tr {
+        ("sahne", "perde", "önsöz", "notlar")
+    } else {
+        ("scene", "act", "preface", "notes")
+    };
+    let line = |key: &str| {
+        let text = format!("#{key}{nl}{nl}");
+        insert(&text, text.len())
+    };
+    vec![
+        Item {
+            key: scene.into(),
+            label: lang::l("yeni sahne: yer ve zaman", "new scene: place and time").into(),
+            group: Group::Command,
+            action: Action::Scene,
+        },
+        Item {
+            key: act.into(),
+            label: lang::l("yeni perde", "new act").into(),
+            group: Group::Command,
+            action: Action::Act,
+        },
+        Item {
+            key: preface.into(),
+            label: lang::l(
+                "önsöz: yeni sayfa, düz yazı",
+                "a preface: a new page of prose",
+            )
+            .into(),
+            group: Group::Command,
+            action: line(preface),
+        },
+        Item {
+            key: notes.into(),
+            label: lang::l("rejisöre notlar", "notes for the director").into(),
+            group: Group::Command,
+            action: line(notes),
+        },
+    ]
+}
+
 /// Every suggestion for the block at `block`, before filtering.
 pub fn items(doc: &Doc, block: Option<usize>) -> Vec<Item> {
     let scene_cast: Vec<String> = block
@@ -334,6 +379,21 @@ mod tests {
     use super::*;
 
     const PLAY: &str = include_str!("../examples/ornek-oyun.tex");
+
+    #[test]
+    fn heading_menu() {
+        let h = headings("\n");
+        let keys: Vec<&str> = h.iter().map(|i| i.key.as_str()).collect();
+        assert_eq!(keys, ["sahne", "perde", "önsöz", "notlar"]);
+        assert_eq!(h[0].action, Action::Scene);
+        assert_eq!(
+            h[2].action,
+            Action::Insert {
+                text: "#önsöz\n\n".into(),
+                cursor: 10
+            }
+        );
+    }
 
     #[test]
     fn scoring() {

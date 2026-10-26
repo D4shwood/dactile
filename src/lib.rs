@@ -19,6 +19,7 @@ pub mod source;
 pub mod spell;
 pub mod tex;
 pub mod timing;
+pub mod writing;
 
 /// The tiyatro class files, carried inside the app so a play needs nothing
 /// installed besides XeLaTeX.
@@ -49,6 +50,6 @@ pub mod class {
 mod tests {
     #[test]
     fn class_version() {
-        assert_eq!(super::class::version(), "1.0.0");
+        assert_eq!(super::class::version(), "1.1.0");
     }
 }

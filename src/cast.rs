@@ -211,6 +211,22 @@ impl Cast {
         self.get(alias).map(|c| title_case(&c.script))
     }
 
+    /// The character called `name` the way a writer types it before a colon:
+    /// the script name, the full name or the name inside a line, in any case.
+    pub fn by_name(&self, name: &str) -> Option<&Character> {
+        let want = lower_tr(name.trim());
+        if want.is_empty() {
+            return None;
+        }
+        self.characters.iter().find(|c| {
+            lower_tr(&c.script) == want
+                || c.full.as_deref().is_some_and(|f| lower_tr(f) == want)
+                || self
+                    .inline_name(&c.alias)
+                    .is_some_and(|n| lower_tr(&n) == want)
+        })
+    }
+
     /// Whether `alias` can't be used for a new character: taken, clashing with
     /// another character's commands, or a TeX/LaTeX command.
     pub fn alias_taken(&self, alias: &str) -> bool {

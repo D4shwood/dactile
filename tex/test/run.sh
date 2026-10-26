@@ -1,5 +1,6 @@
 #!/bin/sh
-# Compiles the example play with the class in draft and final mode and checks
+# Compiles the example play with the class in draft and final mode (and with
+# the director's notes left out), a new play with nobody in it yet, and checks
 # the scene casts the class wrote. Run from anywhere: tex/test/run.sh
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -9,8 +10,11 @@ trap 'rm -rf "$work"' EXIT
 cp "$root"/tex/*.cls "$root"/tex/*.sty "$root/examples/ornek-oyun.tex" "$work/"
 cd "$work"
 printf '\\PassOptionsToClass{final}{tiyatro}\\input{ornek-oyun}\n' > final.tex
+printf '\\PassOptionsToClass{nonotes}{tiyatro}\\input{ornek-oyun}\n' > nonotes.tex
+# What `dactile new` writes: no characters yet, # headings.
+printf '\\documentclass{tiyatro}\n\\title{Yeni}\n\\begin{document}\n\\maketitle\n\\kisiler\n\n#perde Bir\n\n#sahne İç — Gece\n\n\\action{Işıklar.}\n\n\\end{document}\n' > empty.tex
 
-for doc in ornek-oyun final; do
+for doc in ornek-oyun final nonotes empty; do
     # Twice: the scene casts come from the first run's .aux file.
     for run in 1 2; do
         if ! xelatex -interaction=nonstopmode -halt-on-error "$doc.tex" > "$doc.out" 2>&1; then

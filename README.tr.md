@@ -22,8 +22,8 @@ Dactile'da açılır.
 \karakter*[Selin][Köy öğretmeni]{SELİN}{se}
 \karakter[Ozan Usta][Değirmenci]{OZAN}{oz}
 
-\perde[Kar Yağarken]
-\sahne[İç, Değirmen — Akşam]
+#perde Kar Yağarken
+#sahne İç, Değirmen — Akşam
 
 \se Amca, yine mi taş durdu?
 \oz Durdu kızım. \ic{elini taşa koyar} Soğuk her şeyi durdurur.
@@ -74,12 +74,20 @@ dactile new "Kar Masalı"  # oyunlar klasöründe yeni bir oyun
 | `\se ` (kısaltma ve boşluk) | SELİN'in repliği; tanımlanmamış bir kısaltma yeni karakter formunu açar |
 | `\sedo ` | bir yönerge, `(Selin …)`; oyunda en çok kullanılan fiiller önerilir |
 | `\` | öneri menüsü: karakterler (sahnedekiler önce), komutlar, makrolar |
-| `\sahne`, `\perde` | yer ve zaman için bir form, ya da perdenin adı |
+| satır başında `#` | başlıklar: `#sahne`, `#perde`, `#önsöz`, `#notlar` (rejisöre notlar) |
+| `#sahne İç, Değirmen — Akşam` | doğrudan yazılmış bir sahne; `#` menüsünden seçilirse yer ve zaman sorulur |
+| satır başında `SELİN:` | SELİN'in repliği (adlarından biri, büyük küçük fark etmez); büyük harfle yazılmış bilinmeyen bir ad yeni karakter formunu açar |
+| boş satırda Tab | sıradaki konuşan, soluk gösterilir: son konuşandan öncekisi |
 | `((` | replik içinde yönerge, `\ic{…}` |
+| satır başında ^V | başka yerden yapıştırılan taslak: `AD: …` satırları replik, `(…)` satırları yönerge, `#…` satırları başlık olur |
 
 Makrolar chip olarak görünür; imleç üstünden atlar. İçine Backspace ile
 girince, sen çıkana kadar satırın kaynağı görünür. F2 bütün oyunu kaynak
 olarak gösterir.
+
+Sayfa PDF gibi okunur: kapak, önsöz, kişiler tablosu ve her perde kendi
+yaprağında; perde sonunda "Perde Sonu". Geniş ekranda oyunun iskeleti kenarda
+durur; tıklayınca oraya gider.
 
 ![Öneri menüsü](docs/menu.png)
 
@@ -96,7 +104,9 @@ olarak gösterir.
 | F6 | oyun kâğıt sayfada ya da koyu |
 | ^Z ^Y, ^C ^X ^V | geri al, yinele, kopyala, kes, yapıştır |
 | ^S, ^Q | kaydet (zaten kendiliğinden kaydeder), çık |
-| F1 | hepsi |
+| F1 | bir klavye: bir tuşa bas, ne yaptığını görürsün |
+
+![Tuşlar](docs/help.png)
 
 ![Kişiler](docs/cast.png)
 
@@ -117,6 +127,12 @@ Sınıf [tex/](tex/) klasöründe; Dactile onu kendi içinde taşır.
 - **Replik** kaynak satırın sonuna kadar sürer; ad kendi sütununda durur.
 - **Yönergeler:** `\aliasdo` zincirleri, `\action`, `\stagedir`, `\middir`, `\ic`, `\beat`.
 - **Perdeler ve sahneler** otomatik numaralanır. Sahne başlığında o sahnede kimlerin olduğu yazar; bunun için iki derleme gerekir.
+- **Başlıklar `#` satırı olarak:** `#perde Başlık`, `#sahne Yer — Zaman`,
+  `#sahne[2.1] Yer`, `#önsöz`, `#notlar` (`#act`, `#scene`, `#preface`,
+  `#notes` de olur). `\#` bir `#` basar; `\perde[…]` ve `\sahne[…]` eskisi
+  gibi çalışır.
+- **Önsöz** (`\onsoz`) ve **rejisöre notlar** (`\notlar`), her biri kendi
+  sayfasında.
 - **Kişiler tablosu** (`\kisiler`) ve kapak.
 - **Taslak ve final modları:**
 
@@ -124,6 +140,10 @@ Sınıf [tex/](tex/) klasöründe; Dactile onu kendi içinde taşır.
   |---|---|---|---|---|
   | taslak | sans | 1,5 | her repliğe ve yönergeye bir numara | "TASLAK" |
   | final | serif | tek | yok | yıldızlı karakterler |
+
+- **Seçenekler:** `nohash` `#`'i yeniden sıradan bir karakter yapar; `nonotes`
+  rejisöre notları o kopyadan çıkarır. Bir `#` satırı, replik gibi, kaynak
+  satırın sonunda biter; oradaki bir `%` sonraki satırı ona ekler.
 
 ```sh
 xelatex oyun.tex && xelatex oyun.tex

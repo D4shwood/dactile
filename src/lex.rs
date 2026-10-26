@@ -33,14 +33,23 @@ pub enum Kind {
         text: Range<usize>,
         right: bool,
     },
-    /// `\perde[Title]`.
+    /// `\perde[Title]`, or `#perde Title`.
     Act {
         title: String,
+        /// Written as a `#` line.
+        hash: bool,
     },
-    /// `\sahne[Place][Number]`.
+    /// `\sahne[Place][Number]`, or `#sahne[Number] Place`.
     Scene {
         place: String,
         label: Option<String>,
+        hash: bool,
+    },
+    /// `\onsoz[Title]`, `\notlar[Title]`, or `#önsöz`, `#notlar`.
+    Section {
+        which: Section,
+        title: String,
+        hash: bool,
     },
     /// `\beat` on its own line.
     Beat,
@@ -54,6 +63,46 @@ pub enum Kind {
     Blank,
     /// Anything else: other LaTeX, plain paragraphs.
     Other,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Section {
+    Preface,
+    Notes,
+}
+
+/// What a `#word` at a line's start stands for, as the class reads it.
+pub enum Heading {
+    Act,
+    Scene,
+    Section(Section),
+}
+
+pub fn heading(word: &str) -> Option<Heading> {
+    Some(match word {
+        "perde" | "act" => Heading::Act,
+        "sahne" | "scene" => Heading::Scene,
+        "önsöz" | "onsoz" | "preface" => Heading::Section(Section::Preface),
+        "notlar" | "notes" => Heading::Section(Section::Notes),
+        _ => return None,
+    })
+}
+
+/// A `#word[label] rest` line: the word, the label and the rest, trimmed.
+pub fn hash_line(line: &str) -> Option<(&str, Option<&str>, &str)> {
+    let s = line.trim().strip_prefix('#')?;
+    let end = s
+        .find(|c: char| c.is_whitespace() || c == '[')
+        .unwrap_or(s.len());
+    let (word, mut rest) = s.split_at(end);
+    let mut label = None;
+    if let Some(r) = rest.strip_prefix('[')
+        && let Some(close) = r.find(']')
+    {
+        label = Some(r[..close].trim()).filter(|l| !l.is_empty());
+        rest = &r[close + 1..];
+    }
+    Some((word, label, rest.trim()))
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -144,6 +193,28 @@ fn classify(text: &str, span: Range<usize>, cast: &Cast) -> Kind {
         return Kind::Comment;
     }
     let lead = span.start + (s.len() - trimmed.len());
+    if trimmed.starts_with('#') {
+        let Some((word, label, rest)) = hash_line(trimmed) else {
+            return Kind::Other;
+        };
+        return match heading(word) {
+            Some(Heading::Act) => Kind::Act {
+                title: rest.to_string(),
+                hash: true,
+            },
+            Some(Heading::Scene) => Kind::Scene {
+                place: rest.to_string(),
+                label: label.map(str::to_string),
+                hash: true,
+            },
+            Some(Heading::Section(which)) => Kind::Section {
+                which,
+                title: rest.to_string(),
+                hash: true,
+            },
+            None => Kind::Other,
+        };
+    }
     let cmds = tex::commands(text, lead..span.end);
     let Some(first) = cmds.first().filter(|c| c.span.start == lead) else {
         return Kind::Other;
@@ -201,6 +272,18 @@ fn classify(text: &str, span: Range<usize>, cast: &Cast) -> Kind {
             title: tex::optional(text, after)
                 .map(|o| o.inner.to_string())
                 .unwrap_or_default(),
+            hash: false,
+        },
+        "onsoz" | "preface" | "notlar" | "directorsnotes" => Kind::Section {
+            which: if matches!(name, "onsoz" | "preface") {
+                Section::Preface
+            } else {
+                Section::Notes
+            },
+            title: tex::optional(text, after)
+                .map(|o| o.inner.to_string())
+                .unwrap_or_default(),
+            hash: false,
         },
         "sahne" | "scene" => {
             let place = tex::optional(text, after);
@@ -210,6 +293,7 @@ fn classify(text: &str, span: Range<usize>, cast: &Cast) -> Kind {
                 label: label
                     .map(|l| l.inner.to_string())
                     .filter(|l| !l.trim().is_empty()),
+                hash: false,
             }
         }
         "beat" if text[after..span.end].trim().is_empty() => Kind::Beat,
@@ -513,6 +597,54 @@ mod tests {
     }
 
     #[test]
+    fn hash_headings() {
+        let cast = Cast::default();
+        let kind = |line: &str| classify(line, 0..line.len(), &cast);
+        assert_eq!(
+            kind("#sahne İç, Değirmen — Akşam"),
+            Kind::Scene {
+                place: "İç, Değirmen — Akşam".into(),
+                label: None,
+                hash: true
+            }
+        );
+        assert_eq!(
+            kind("  #scene[2.1]  Meydan "),
+            Kind::Scene {
+                place: "Meydan".into(),
+                label: Some("2.1".into()),
+                hash: true
+            }
+        );
+        assert_eq!(
+            kind("#perde"),
+            Kind::Act {
+                title: String::new(),
+                hash: true
+            }
+        );
+        assert_eq!(
+            kind("#önsöz"),
+            Kind::Section {
+                which: Section::Preface,
+                title: String::new(),
+                hash: true
+            }
+        );
+        assert_eq!(
+            kind("\\notlar[Oyunculara]"),
+            Kind::Section {
+                which: Section::Notes,
+                title: "Oyunculara".into(),
+                hash: false
+            }
+        );
+        // Not a keyword: the class prints it as it is.
+        assert_eq!(kind("#bilmem ne"), Kind::Other);
+        assert_eq!(kind("#"), Kind::Other);
+    }
+
+    #[test]
     fn example_blocks() {
         let (_, b) = body_blocks(PLAY);
         let kinds: Vec<String> = b
@@ -523,10 +655,11 @@ mod tests {
                 Kind::Do { aliases, .. } => format!("{}do", aliases.join("+")),
                 Kind::Action { .. } => "action".into(),
                 Kind::Stage { right, .. } => if *right { "middir" } else { "stagedir" }.into(),
-                Kind::Act { title } => format!("perde:{title}"),
-                Kind::Scene { place, label } => {
+                Kind::Act { title, .. } => format!("perde:{title}"),
+                Kind::Scene { place, label, .. } => {
                     format!("sahne:{place}:{}", label.clone().unwrap_or_default())
                 }
+                Kind::Section { which, .. } => format!("{which:?}"),
                 Kind::Beat => "beat".into(),
                 Kind::Unknown { name } => format!("?{name}"),
                 Kind::Comment => "%".into(),
@@ -537,6 +670,12 @@ mod tests {
         assert_eq!(
             kinds,
             vec![
+                "other",
+                "Preface",
+                "other",
+                "other",
+                "other",
+                "Notes",
                 "other",
                 "other",
                 "perde:Kar Yağarken",

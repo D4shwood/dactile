@@ -22,8 +22,8 @@ elsewhere.
 \karakter*[Selin][Köy öğretmeni]{SELİN}{se}
 \karakter[Ozan Usta][Değirmenci]{OZAN}{oz}
 
-\perde[Kar Yağarken]
-\sahne[İç, Değirmen — Akşam]
+#perde Kar Yağarken
+#sahne İç, Değirmen — Akşam
 
 \se Amca, yine mi taş durdu?
 \oz Durdu kızım. \ic{elini taşa koyar} Soğuk her şeyi durdurur.
@@ -73,11 +73,19 @@ plays live in, your name, and how the suggestion menu opens.
 | `\se ` (an alias and a space) | a line for SELİN; an alias nobody declared opens the new-character form |
 | `\sedo ` | a direction, `(Selin …)`, with the verbs this play uses most |
 | `\` | the suggestion menu: characters (those in the scene first), commands, macros |
-| `\sahne`, `\perde` | a form for the place and time, or the act's title |
+| `#` at a line's start | the headings: `#sahne`, `#perde`, `#önsöz` (a preface), `#notlar` (notes for the director) |
+| `#sahne İç, Değirmen — Akşam` | a scene, typed straight; choosing it from the `#` menu asks for place and time |
+| `SELİN:` at a line's start | a line for SELİN (any of her names, any case); an unknown name in capitals opens the new-character form |
+| Tab on an empty line | who speaks next, shown faint: the one before the last speaker |
 | `((` | a direction inside a line, `\ic{…}` |
+| ^V at a line's start | a draft pasted from elsewhere: `NAME: …` lines become lines, `(…)` lines directions, `#…` lines headings |
 
 A macro is a chip: the cursor steps over it, and Backspace into it shows the
 line's source until you leave it. F2 shows the whole play as source.
+
+The page reads like the PDF: the cover, the preface, the cast table and each
+act on a sheet of their own, the curtain at the end of an act. On a wide
+screen the play's outline sits in the margin; a click goes there.
 
 ![Suggestions](docs/menu.png)
 
@@ -94,7 +102,9 @@ line's source until you leave it. F2 shows the whole play as source.
 | F6 | the play on a paper page, or dark |
 | ^Z ^Y, ^C ^X ^V | undo, redo, copy, cut, paste |
 | ^S, ^Q | save (it saves by itself anyway), quit |
-| F1 | all of the above |
+| F1 | a keyboard: press any key to see what it does |
+
+![The keys](docs/help.png)
 
 ![The cast](docs/cast.png)
 
@@ -115,6 +125,11 @@ read-only. Earlier versions go to `~/.local/share/dactile/history`.
 - directions: `\aliasdo` chains, `\action`, `\stagedir`, `\middir`, `\ic`, `\beat`
 - acts and scenes with automatic numbers. Each scene heading lists who appears
   in it; this needs a second run.
+- headings as `#` lines: `#perde Title`, `#sahne Place — Time`,
+  `#sahne[2.1] Place`, `#önsöz`, `#notlar` (also `#act`, `#scene`, `#preface`,
+  `#notes`). `\#` prints a `#`; `\perde[…]` and `\sahne[…]` work as before.
+- a preface (`\onsoz`) and notes for the director (`\notlar`), each on a page
+  of its own
 - the cast table (`\kisiler`) and a cover
 - **draft** and **final** modes:
 
@@ -122,6 +137,10 @@ read-only. Earlier versions go to `~/.local/share/dactile/history`.
   |---|---|---|---|---|
   | draft | sans | 1.5× | one number per line of dialogue or direction | "TASLAK" |
   | final | serif | single | none | the starred characters |
+
+- options: `nohash` makes `#` an ordinary character again; `nonotes` leaves the
+  director's notes out of a copy. A `#` line, like a line of dialogue, ends at
+  the end of the source line, so a `%` there joins the next line to it.
 
 ```sh
 xelatex oyun.tex && xelatex oyun.tex
