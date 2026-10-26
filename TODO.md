@@ -19,7 +19,7 @@ Each milestone ends with a demo.
    - Tokens, with the class's rules: the first macro on a line is the speaker, and a line ends at the end of the line.
    - Live act and scene numbers.
    - Who appears in each scene, and word counts.
-4. **M3 the writer.**
+4. ~~**M3 the writer.**~~ Done: `dactile oyun.tex`.
    - Live macros as chips; one Backspace shows the raw text.
    - Hanging-indent wrap.
    - Escaping TeX's special characters.

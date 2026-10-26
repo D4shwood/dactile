@@ -3,9 +3,12 @@
 //! The play model: a `.tex` file written for the tiyatro class, read and
 //! written back byte for byte. The terminal interface lives in the binary.
 
+pub mod buffer;
 pub mod cast;
+pub mod file;
 pub mod lex;
 pub mod outline;
+pub mod render;
 pub mod source;
 pub mod tex;
 

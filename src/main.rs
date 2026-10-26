@@ -4,10 +4,14 @@ use dactile::cast::{Cast, Kind, Row};
 use dactile::{source, tex};
 use std::path::PathBuf;
 
+mod tui;
+
 /// Dactile — Dynamic Stagewright: write plays for the tiyatro class.
 #[derive(Parser)]
 #[command(version)]
 struct Cli {
+    /// The play to open in the writer.
+    play: Option<PathBuf>,
     #[command(subcommand)]
     cmd: Option<Cmd>,
 }
@@ -26,9 +30,11 @@ enum Cmd {
 }
 
 fn main() -> Result<()> {
-    match Cli::parse().cmd {
+    let cli = Cli::parse();
+    match cli.cmd {
         Some(Cmd::Cast { play }) => print_cast(&play),
         Some(Cmd::Outline { play, aux }) => print_outline(&play, aux),
+        None if cli.play.is_some() => tui::run(cli.play.as_ref().unwrap()),
         None => {
             println!(
                 "dactile {} — tiyatro class {}",

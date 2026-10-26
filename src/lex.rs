@@ -341,15 +341,23 @@ pub fn inline(text: &str, range: Range<usize>, cast: &Cast, in_dialogue: bool) -
                     .sum();
                 if name_len == 0 {
                     let sym = rest.chars().next().map_or(0, char::len_utf8);
+                    let mut end = i + 1 + sym;
+                    // `\\[1ex]`: the spacing goes with the line break.
+                    if rest.starts_with('\\')
+                        && let Some(o) = tex::optional(text, end)
+                            .filter(|o| o.span.start == end && o.span.end <= range.end)
+                    {
+                        end = o.span.end;
+                    }
                     push(
                         &mut out,
                         &mut plain_from,
                         Piece {
                             kind: Inline::Special,
-                            span: i..i + 1 + sym,
+                            span: i..end,
                         },
                     );
-                    i += 1 + sym;
+                    i = end;
                     continue;
                 }
                 let name = &text[i + 1..i + 1 + name_len];
