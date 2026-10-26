@@ -147,8 +147,8 @@ enum Popup {
     Scenes(ScenesPanel),
     /// Splitting a character: which of its scenes the new one takes.
     Split(SplitPanel),
-    /// F1: the keyboard, with the last key pressed on it.
-    Help(Option<keys::Pressed>),
+    /// F1: the keyboard, with the key last pressed or pointed at.
+    Help(keys::Help),
     /// Alt+S: spelling suggestions for the word at `range`.
     Suggest(std::ops::Range<usize>, Vec<String>, usize),
 }
@@ -554,7 +554,7 @@ impl Writer {
             }
             KeyCode::Char('i') if alt => self.popup = Popup::Form(self.info_form()),
             KeyCode::Char('s') if alt => self.suggest(),
-            KeyCode::F(1) => self.popup = Popup::Help(None),
+            KeyCode::F(1) => self.popup = Popup::Help(keys::Help::default()),
             KeyCode::Char('k') if ctrl => {
                 let items = complete::items(&self.doc, self.block());
                 self.popup = Popup::Search(Menu::new(items, self.buf.cursor), String::new());
@@ -1224,15 +1224,11 @@ impl Writer {
                 }
                 true
             }
-            Popup::Help(p) => {
+            Popup::Help(h) => {
                 // Keys light up here instead of acting; Esc and F1 close.
                 match k.code {
                     KeyCode::Esc | KeyCode::F(1) => self.popup = Popup::None,
-                    _ => {
-                        if let Some(now) = keys::pressed(k, &self.keyboard) {
-                            *p = Some(now);
-                        }
-                    }
+                    _ => h.key(k, &self.keyboard),
                 }
                 true
             }
@@ -2539,6 +2535,13 @@ impl Writer {
     // ------------------------------------------------------------ mouse
 
     pub fn mouse(&mut self, m: MouseEvent) {
+        // On the help screen the mouse points at keys.
+        if let Popup::Help(h) = &mut self.popup {
+            if matches!(m.kind, MouseEventKind::Moved | MouseEventKind::Down(_)) {
+                h.point(m.column, m.row, &self.keyboard);
+            }
+            return;
+        }
         match m.kind {
             MouseEventKind::ScrollUp => self.scroll = self.scroll.saturating_sub(3),
             MouseEventKind::ScrollDown => {
@@ -2812,7 +2815,8 @@ impl Writer {
                     p,
                 );
             }
-            Popup::Help(p) => keys::draw_help(f, area, &self.keyboard, p.as_ref()),
+            // Drawn below: it keeps where its caps are, for the mouse.
+            Popup::Help(_) => {}
             Popup::Split(p) => panels::draw_split(
                 f,
                 area,
@@ -2827,6 +2831,9 @@ impl Writer {
                 let word = self.buf.text.get(range.clone()).unwrap_or("");
                 panels::draw_suggest(f, body, at, word, items, *sel);
             }
+        }
+        if let Popup::Help(h) = &mut self.popup {
+            keys::draw_help(f, area, &self.keyboard, h);
         }
     }
 

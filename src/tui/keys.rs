@@ -298,6 +298,58 @@ pub struct Pressed {
     pub alt: bool,
 }
 
+/// What the help screen shows: the key pressed or pointed at, or a
+/// category pointed at in the legend; and where its caps are, for the mouse.
+#[derive(Debug, Clone, Default)]
+pub struct Help {
+    pub pressed: Option<Pressed>,
+    pub cat: Option<Cat>,
+    hits: Vec<(Rect, Hit)>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Hit {
+    Cap(&'static str),
+    Cat(Cat),
+}
+
+impl Help {
+    /// A key pressed on the help screen.
+    pub fn key(&mut self, k: KeyEvent, layout: &str) {
+        if let Some(p) = pressed(k, layout) {
+            self.pressed = Some(p);
+            self.cat = None;
+        }
+    }
+
+    /// The mouse over (or clicking) a cap or a legend entry: it lights up as
+    /// if pressed, with the modifiers its first binding needs.
+    pub fn point(&mut self, x: u16, y: u16, layout: &str) {
+        let Some(&(_, hit)) = self
+            .hits
+            .iter()
+            .find(|(r, _)| x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height)
+        else {
+            return;
+        };
+        match hit {
+            Hit::Cap(cap) => {
+                let first = binds_on(cap, layout).next();
+                self.pressed = Some(Pressed {
+                    cap: cap.to_string(),
+                    ctrl: first.is_some_and(|b| b.ctrl),
+                    alt: first.is_some_and(|b| b.alt),
+                });
+                self.cat = None;
+            }
+            Hit::Cat(c) => {
+                self.cat = Some(c);
+                self.pressed = None;
+            }
+        }
+    }
+}
+
 /// The cap a key event lands on, in `layout`'s letters.
 pub fn pressed(k: KeyEvent, layout: &str) -> Option<Pressed> {
     let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
@@ -359,10 +411,13 @@ fn binds_on<'a>(cap: &'a str, layout: &'a str) -> impl Iterator<Item = &'static 
 const KEYBOARD_HEIGHT: u16 = 5 * 3 + 6;
 const KEYBOARD_WIDTH: u16 = 76;
 
-pub fn draw_help(f: &mut Frame, area: Rect, layout: &str, pressed: Option<&Pressed>) {
+pub fn draw_help(f: &mut Frame, area: Rect, layout: &str, help: &mut Help) {
+    help.hits.clear();
     if area.width < KEYBOARD_WIDTH + 4 || area.height < KEYBOARD_HEIGHT + 2 {
         return draw_list(f, area);
     }
+    let pressed = help.pressed.as_ref();
+    let cat = help.cat;
     let r = Rect {
         x: area.x + (area.width - KEYBOARD_WIDTH) / 2,
         y: area.y + (area.height - KEYBOARD_HEIGHT) / 2,
@@ -372,8 +427,8 @@ pub fn draw_help(f: &mut Frame, area: Rect, layout: &str, pressed: Option<&Press
     float(f, r);
     f.render_widget(
         panel(lang::l(
-            "tuşlar — bir tuşa bas; Esc kapatır",
-            "keys — press one; Esc closes",
+            "tuşlar — bir tuşa bas ya da fareyle üstüne gel; Esc kapatır",
+            "keys — press one or point at it; Esc closes",
         )),
         r,
     );
@@ -381,6 +436,7 @@ pub fn draw_help(f: &mut Frame, area: Rect, layout: &str, pressed: Option<&Press
     let lit = |cap: &str| -> bool {
         pressed
             .is_some_and(|p| p.cap == cap || (cap == "Ctrl" && p.ctrl) || (cap == "Alt" && p.alt))
+            || cat.is_some_and(|c| binds_on(cap, layout).any(|b| b.cat == c))
     };
     let mut y = inn.y;
     let letters = rows(layout);
@@ -398,29 +454,45 @@ pub fn draw_help(f: &mut Frame, area: Rect, layout: &str, pressed: Option<&Press
             if x + w > inn.x + inn.width {
                 break;
             }
-            draw_cap(
-                f,
-                Rect {
-                    x,
-                    y,
-                    width: w,
-                    height: 3,
-                },
-                cap,
-                layout,
-                lit(cap),
-            );
+            let r = Rect {
+                x,
+                y,
+                width: w,
+                height: 3,
+            };
+            draw_cap(f, r, cap, layout, lit(cap));
+            help.hits.push((r, Hit::Cap(cap)));
             x += w;
         }
         y += 3;
     }
-    // The colours.
+    // The colours; pointing at one lights its keys.
     let mut legend = Vec::new();
+    let mut lx = inn.x;
     for c in Cat::ALL {
+        let label = format!("■ {}   ", c.name());
+        let w = label.width() as u16;
+        help.hits.push((
+            Rect {
+                x: lx,
+                y,
+                width: w,
+                height: 1,
+            },
+            Hit::Cat(c),
+        ));
+        lx += w;
+        let on = cat == Some(c);
         legend.push(Span::styled("■ ", Style::default().fg(c.color())));
         legend.push(Span::styled(
             format!("{}   ", c.name()),
-            Style::default().fg(MUTED),
+            Style::default()
+                .fg(if on { c.color() } else { MUTED })
+                .add_modifier(if on {
+                    Modifier::BOLD
+                } else {
+                    Modifier::empty()
+                }),
         ));
     }
     f.render_widget(
@@ -433,10 +505,37 @@ pub fn draw_help(f: &mut Frame, area: Rect, layout: &str, pressed: Option<&Press
     );
     // What the pressed key does.
     let about: Vec<Line> = match pressed {
+        None if cat.is_some() => {
+            let c = cat.unwrap_or(Cat::Write);
+            let combos: Vec<String> = BINDS
+                .iter()
+                .filter(|b| b.cat == c)
+                .map(|b| b.combo(layout))
+                .collect();
+            vec![
+                Line::from(vec![
+                    Span::styled(
+                        format!("{}  ", c.name()),
+                        Style::default().fg(c.color()).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled(
+                        fit(&combos.join("   "), inn.width as usize - 14),
+                        Style::default().fg(FG),
+                    ),
+                ]),
+                Line::from(Span::styled(
+                    lang::l(
+                        "Birinin üstüne gel: ne yaptığı burada yazar.",
+                        "Point at one: what it does shows here.",
+                    ),
+                    Style::default().fg(FAINT),
+                )),
+            ]
+        }
         None => vec![Line::from(Span::styled(
             lang::l(
-                "Bir tuşa ya da Ctrl/Alt ile bir tuşa bas: ne yaptığı burada yazar.",
-                "Press a key, or Ctrl/Alt with one: what it does shows here.",
+                "Bir tuşa bas ya da fareyle üstüne gel: ne yaptığı burada yazar.",
+                "Press a key or point at it: what it does shows here.",
             ),
             Style::default().fg(FAINT),
         ))],
