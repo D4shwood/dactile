@@ -25,6 +25,8 @@ pub struct Config {
     pub dim: bool,
     /// The play on a paper page; dark otherwise.
     pub paper: bool,
+    /// Page view: A4-shaped sheets.
+    pub pages: bool,
     /// The keyboard drawn on the help screen: "q" (Turkish Q), "f" (Turkish
     /// F) or "us".
     pub keyboard: String,
@@ -44,6 +46,7 @@ impl Default for Config {
             focus: false,
             dim: false,
             paper: true,
+            pages: false,
             keyboard: "q".into(),
             recent: Vec::new(),
         }

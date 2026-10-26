@@ -164,6 +164,8 @@ pub struct Layout {
     pub block_rows: Vec<Range<usize>>,
     /// Width of the name column, the gap included.
     pub name_width: u16,
+    /// In page view, the first row of each sheet.
+    pub pages: Vec<usize>,
 }
 
 impl Layout {
@@ -212,7 +214,15 @@ pub struct Options {
     /// Show only this scene (an index into `outline.scenes`); the others
     /// fold to one line each.
     pub focus_scene: Option<usize>,
+    /// Page view: the play in sheets this many rows of text tall, broken
+    /// where the PDF breaks; None for one long sheet.
+    pub page_rows: Option<u16>,
 }
+
+/// Rows of paper above and below the text of a sheet in page view; the
+/// bottom ones hold the page number.
+pub const PAGE_TOP: usize = 2;
+pub const PAGE_BOTTOM: usize = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Align {
@@ -271,12 +281,14 @@ pub fn layout(text: &str, doc: &Doc, opts: Options) -> Layout {
         width: opts.width.max(20),
     };
     b.out.name_width = name_column(doc, b.width);
-    // Where the PDF starts a new page; never in the all-source view.
-    let pages = !opts.raw_all;
+    // The PDF's act endings, and in page view its page breaks; never in the
+    // all-source view.
+    let pdf = !opts.raw_all;
+    let pages = pdf && opts.page_rows.is_some();
     let mut break_next = false;
     let mut seen_act = false;
     for i in 0..doc.blocks.len() {
-        if pages && doc.body.contains(&i) {
+        if pdf && doc.body.contains(&i) {
             let kind = &doc.blocks[i].kind;
             let cmd = text[doc.blocks[i].span.clone()].trim();
             if matches!(kind, Kind::Act { .. }) {
@@ -288,7 +300,7 @@ pub fn layout(text: &str, doc: &Doc, opts: Options) -> Layout {
             }
             let before =
                 matches!(kind, Kind::Act { .. } | Kind::Section { .. }) || cmd == "\\kisiler";
-            if (before || break_next) && !matches!(kind, Kind::Blank) {
+            if pages && (before || break_next) && !matches!(kind, Kind::Blank) {
                 b.gap();
                 break_next = false;
             }
@@ -362,9 +374,13 @@ pub fn layout(text: &str, doc: &Doc, opts: Options) -> Layout {
             b.out.rows[start].number = Some(n);
         }
         b.out.block_rows.push(start..b.out.rows.len());
-        if pages && i + 1 == doc.body.end && !doc.body.is_empty() {
+        if pdf && i + 1 == doc.body.end && !doc.body.is_empty() {
             b.curtain(true);
         }
+    }
+    if let Some(h) = opts.page_rows.filter(|_| pages) {
+        let cover = text[doc.parts.body.clone()].contains("\\maketitle");
+        b.paginate(h.max(8) as usize, cover);
     }
     b.out.stops.sort_by_key(|s| s.byte);
     // One stop per byte: the first placed wins (a block's own start over the
@@ -444,18 +460,103 @@ impl Builder<'_> {
     }
 
     /// The end of a page and the start of the next.
+    /// A forced page break: a mark `paginate` turns into the end of a sheet.
     fn gap(&mut self) {
         if self.out.rows.is_empty() || self.out.rows.last().is_some_and(|r| r.gap) {
             return;
         }
-        for _ in 0..2 {
-            self.out.rows.push(Row {
-                gap: true,
-                ..Row::default()
-            });
+        self.out.rows.push(Row {
+            gap: true,
+            ..Row::default()
+        });
+    }
+
+    /// Cuts the rows into sheets of `h` rows of text, as A4 pages: margins
+    /// above and below, the page number at the foot (none on the cover),
+    /// the desk between sheets. A forced break ends a sheet early.
+    fn paginate(&mut self, h: usize, cover: bool) {
+        let old = std::mem::take(&mut self.out.rows);
+        let mut map = vec![0usize; old.len() + 1];
+        let mut rows: Vec<Row> = Vec::new();
+        let mut pages: Vec<usize> = Vec::new();
+        let width = self.width;
+        let blank = || Row::default();
+        let start = |rows: &mut Vec<Row>, pages: &mut Vec<usize>| {
+            pages.push(rows.len());
+            for _ in 0..PAGE_TOP {
+                rows.push(blank());
+            }
+        };
+        let end = |rows: &mut Vec<Row>, pages: &[usize], last: bool| {
+            let top = *pages.last().unwrap() + PAGE_TOP;
+            while rows.len() < top + h {
+                rows.push(blank());
+            }
+            rows.push(blank());
+            let n = pages.len();
+            let mut foot = Row::default();
+            if !(cover && n == 1) {
+                let label = format!("{}", if cover { n - 1 } else { n });
+                let col = (width.saturating_sub(label.len() as u16)) / 2;
+                foot.cells = label
+                    .chars()
+                    .enumerate()
+                    .map(|(k, ch)| Cell {
+                        col: col + k as u16,
+                        ch,
+                        style: Style::Faint,
+                        byte: None,
+                    })
+                    .collect();
+            }
+            rows.push(foot);
+            rows.push(blank());
+            if !last {
+                for _ in 0..2 {
+                    rows.push(Row {
+                        gap: true,
+                        ..Row::default()
+                    });
+                }
+            }
+        };
+        start(&mut rows, &mut pages);
+        let mut used = 0;
+        for (i, r) in old.into_iter().enumerate() {
+            if r.gap {
+                if used > 0 {
+                    end(&mut rows, &pages, false);
+                    start(&mut rows, &mut pages);
+                    used = 0;
+                }
+                map[i] = rows.len();
+                continue;
+            }
+            if used == h {
+                end(&mut rows, &pages, false);
+                start(&mut rows, &mut pages);
+                used = 0;
+            }
+            map[i] = rows.len();
+            rows.push(r);
+            used += 1;
         }
-        // The new page's top margin.
-        self.out.rows.push(Row::default());
+        if let Some(last) = map.last_mut() {
+            *last = rows.len();
+        }
+        end(&mut rows, &pages, true);
+        for s in &mut self.out.stops {
+            s.row = map[s.row];
+        }
+        for r in &mut self.out.block_rows {
+            *r = if r.start == r.end {
+                map[r.start]..map[r.start]
+            } else {
+                map[r.start]..map[r.end - 1] + 1
+            };
+        }
+        self.out.rows = rows;
+        self.out.pages = pages;
     }
 
     /// "PERDE SONU" where an act ends, and "SON" after the last one, as the
@@ -1230,35 +1331,63 @@ mod tests {
 
     #[test]
     fn pages_curtains_and_sections() {
-        let (_, l) = lay(70);
-        let gaps: Vec<usize> = (0..l.rows.len()).filter(|&r| l.rows[r].gap).collect();
-        // Between the cover and the preface (one page break, not two), and
-        // before the cast, the notes and each act; two rows each.
-        assert_eq!(gaps.len(), 2 * 5, "{gaps:?}");
-        assert!(gaps.iter().all(|&r| l.rows[r].cells.is_empty()));
-        assert!(!l.stops.iter().any(|s| l.rows[s.row].gap));
-        assert!(l.rows[find_row(&l, "ÖNSÖZ") - 2].gap);
-        assert!(l.rows[find_row(&l, "REJİSÖRE NOTLAR") - 2].gap);
-        // The curtain before act II, and at the end.
-        let curtains: Vec<usize> = (0..l.rows.len())
-            .filter(|&r| row_text(&l, r).trim() == "PERDE SONU")
+        let paged = |text: &str, h: u16| {
+            let d = Doc::new(text);
+            layout(
+                text,
+                &d,
+                Options {
+                    width: 70,
+                    page_rows: Some(h),
+                    ..Options::default()
+                },
+            )
+        };
+        // One long sheet unless page view is on; the curtains either way.
+        let (_, flat) = lay(70);
+        assert!(!flat.rows.iter().any(|r| r.gap));
+        assert!(flat.pages.is_empty());
+        let curtains: Vec<usize> = (0..flat.rows.len())
+            .filter(|&r| row_text(&flat, r).trim() == "PERDE SONU")
             .collect();
         assert_eq!(curtains.len(), 2);
-        assert!(l.rows[curtains[0] + 1].gap);
-        assert_eq!(row_text(&l, curtains[1] + 1).trim(), "SON");
-        // Old LaTeX reads too.
+        assert_eq!(row_text(&flat, curtains[1] + 1).trim(), "SON");
+
+        let h = 40;
+        let l = paged(PLAY, h);
+        // The cover, the preface, the cast, the notes, act I, act II.
+        assert_eq!(l.pages.len(), 6, "{:?}", l.pages);
+        // Every sheet the same height: margins, h rows of text, two rows of desk.
+        let sheet = PAGE_TOP + h as usize + PAGE_BOTTOM;
+        for w in l.pages.windows(2) {
+            assert_eq!(w[1] - w[0], sheet + 2);
+            assert!(l.rows[w[1] - 1].gap && l.rows[w[1] - 2].gap);
+        }
+        assert_eq!(l.rows.len(), l.pages.last().unwrap() + sheet);
+        assert!(!l.stops.iter().any(|s| l.rows[s.row].gap));
+        // Each section starts its own sheet; page numbers at the foot, none
+        // on the cover.
+        let preface = find_row(&l, "ÖNSÖZ");
+        assert_eq!(preface, l.pages[1] + PAGE_TOP);
+        let foot = |n: usize| row_text(&l, l.pages[n] + sheet - 2).trim().to_string();
+        assert_eq!(foot(0), "");
+        assert_eq!(foot(1), "1");
+        assert_eq!(foot(5), "5");
+        // A long act runs on to more sheets of the same height.
+        let short = paged(PLAY, 12);
+        assert!(short.pages.len() > 6);
+        for w in short.pages.windows(2) {
+            assert_eq!(w[1] - w[0], PAGE_TOP + 12 + PAGE_BOTTOM + 2);
+        }
+        // Stops still land on their text.
+        let amca = PLAY.find("Amca, yine").unwrap();
+        let st = l.stop_at(amca).unwrap();
+        assert!(row_text(&l, st.row).contains("Amca"));
+        // Old LaTeX breaks pages too.
         let old = "\\documentclass{tiyatro}\n\\begin{document}\nÖnce.\n\\clearpage\n\\section*{Ön söz}\nMetin.\n\\end{document}\n";
-        let d = Doc::new(old);
-        let l = layout(
-            old,
-            &d,
-            Options {
-                width: 60,
-                ..Options::default()
-            },
-        );
-        let head = find_row(&l, "ÖN SÖZ");
-        assert!(l.rows[head - 2].gap);
+        let l = paged(old, 20);
+        assert_eq!(l.pages.len(), 2);
+        assert_eq!(find_row(&l, "ÖN SÖZ"), l.pages[1] + PAGE_TOP);
         find_row(&l, "· yeni sayfa ·");
         // No pages in the all-source view.
         let l = layout(
@@ -1267,6 +1396,7 @@ mod tests {
             Options {
                 width: 70,
                 raw_all: true,
+                page_rows: Some(40),
                 ..Options::default()
             },
         );

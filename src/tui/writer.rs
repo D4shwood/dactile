@@ -84,6 +84,8 @@ pub struct Writer {
     dim: bool,
     /// The play on a paper page; dark otherwise.
     paper: bool,
+    /// Page view: A4-shaped sheets broken where the PDF breaks.
+    pages: bool,
     /// `NAME:` just became a line with its space: the next space is dropped.
     eat_space: bool,
     /// The keyboard the help screen draws.
@@ -104,6 +106,15 @@ pub struct Writer {
     /// Misspelt words on screen, by byte range.
     misspelt: Vec<std::ops::Range<usize>>,
     pub quit: bool,
+}
+
+/// The view toggles, kept in the settings between sessions.
+pub struct View {
+    pub typewriter: bool,
+    pub focus: bool,
+    pub dim: bool,
+    pub paper: bool,
+    pub pages: bool,
 }
 
 enum Popup {
@@ -180,6 +191,7 @@ impl Writer {
             focus: cfg.focus,
             dim: cfg.dim,
             paper: cfg.paper,
+            pages: cfg.pages,
             eat_space: false,
             keyboard: cfg.keyboard.clone(),
             map_hits: Vec::new(),
@@ -220,6 +232,7 @@ impl Writer {
             raw_block: if self.raw_here { self.block() } else { None },
             raw_all: self.raw_all,
             preamble_open: self.preamble_open,
+            page_rows: self.pages.then(|| self.page_rows()),
             focus_scene: if self.focus {
                 self.block().and_then(|b| self.doc.scene_of(b))
             } else {
@@ -252,6 +265,15 @@ impl Writer {
                 text_w: self.width.saturating_sub(MARGIN + 1).max(20),
             }
         }
+    }
+
+    /// Rows of text on a sheet in page view: an A4 sheet as wide as the
+    /// page on screen (terminal cells are about twice as tall as wide), less
+    /// its margins.
+    fn page_rows(&self) -> u16 {
+        let tall = (self.sheet().width as f32 * 1.414 / 2.0).round() as u16;
+        tall.saturating_sub((render::PAGE_TOP + render::PAGE_BOTTOM) as u16)
+            .max(12)
     }
 
     fn palette(&self) -> &'static theme::Palette {
@@ -452,6 +474,26 @@ impl Writer {
             }
             KeyCode::F(6) => {
                 self.paper = !self.paper;
+            }
+            KeyCode::F(7) => {
+                self.pages = !self.pages;
+                self.relayout();
+                self.snap_back();
+                self.keep_visible();
+                self.say(
+                    if self.pages {
+                        lang::l(
+                            "Sayfa görünümü: A4 yapraklar, PDF'in böldüğü yerlerden.",
+                            "Page view: A4 sheets, broken where the PDF breaks.",
+                        )
+                    } else {
+                        lang::l(
+                            "Sayfa görünümü kapalı: tek uzun kâğıt.",
+                            "Page view off: one long sheet.",
+                        )
+                    },
+                    false,
+                );
             }
             KeyCode::Char('o') if ctrl => {
                 self.popup = Popup::Cast(CastPanel {
@@ -2180,9 +2222,15 @@ impl Writer {
         }
     }
 
-    /// The view toggles, for the settings: typewriter, scene focus, dim, paper.
-    pub fn view(&self) -> (bool, bool, bool, bool) {
-        (self.typewriter, self.focus, self.dim, self.paper)
+    /// The view toggles, for the settings.
+    pub fn view(&self) -> View {
+        View {
+            typewriter: self.typewriter,
+            focus: self.focus,
+            dim: self.dim,
+            paper: self.paper,
+            pages: self.pages,
+        }
     }
 
     /// On quit: save what's left and keep a version.
@@ -2598,6 +2646,13 @@ impl Writer {
         if self.dim {
             tags.push(lang::l("soluk", "dim"));
         }
+        let page;
+        if self.pages && !self.lay.pages.is_empty() {
+            let row = self.cursor_stop().map_or(0, |c| c.row);
+            let n = self.lay.pages.partition_point(|&p| p <= row);
+            page = lang::f("sayfa {}/{}", "page {}/{}", &[&n, &self.lay.pages.len()]);
+            tags.push(&page);
+        }
         let misspelt = self.misspelt.len();
         let spell = (misspelt > 0).then(|| lang::f("{} yazım", "{} spelling", &[&misspelt]));
         let mut right: Vec<Span> = Vec::new();
@@ -2634,7 +2689,8 @@ impl Writer {
             ("^F", lang::l("bul", "find"), 4),
             ("^K", lang::l("ara", "search"), 3),
             ("^Z", lang::l("geri al", "undo"), 2),
-            ("F6", lang::l("sayfa", "page"), 1),
+            ("F6", lang::l("kâğıt", "paper"), 1),
+            ("F7", lang::l("sayfalar", "pages"), 1),
             ("^S", lang::l("kaydet", "save"), 5),
             ("^Q", lang::l("çık", "quit"), 10),
         ];

@@ -85,8 +85,9 @@ Makrolar chip olarak görünür; imleç üstünden atlar. İçine Backspace ile
 girince, sen çıkana kadar satırın kaynağı görünür. F2 bütün oyunu kaynak
 olarak gösterir.
 
-Sayfa PDF gibi okunur: kapak, önsöz, kişiler tablosu ve her perde kendi
-yaprağında; perde sonunda "Perde Sonu". Geniş ekranda oyunun iskeleti kenarda
+Sayfa PDF gibi okunur, perde sonunda "Perde Sonu" yazar. F7 metni A4
+yapraklara böler: PDF'in yeni sayfa açtığı yerlerde (kapak, önsöz, kişiler,
+her perde) ve yaprak dolunca; altta sayfa numarasıyla. Geniş ekranda oyunun iskeleti kenarda
 durur; tıklayınca oraya gider.
 
 ![Öneri menüsü](docs/menu.png)
@@ -102,6 +103,7 @@ durur; tıklayınca oraya gider.
 | Alt+P | kaynaktaki kişi ve oyun bilgisi satırlarını aç |
 | F3 / F4 / F5 | daktilo, sahne odağı, gerisini soldur |
 | F6 | oyun kâğıt sayfada ya da koyu |
+| F7 | sayfa görünümü: PDF'in böldüğü yerlerden bölünmüş, numaralı A4 yapraklar |
 | ^Z ^Y, ^C ^X ^V | geri al, yinele, kopyala, kes, yapıştır |
 | ^S, ^Q | kaydet (zaten kendiliğinden kaydeder), çık |
 | F1 | bir klavye: bir tuşa bas, ne yaptığını görürsün |

@@ -83,8 +83,9 @@ plays live in, your name, and how the suggestion menu opens.
 A macro is a chip: the cursor steps over it, and Backspace into it shows the
 line's source until you leave it. F2 shows the whole play as source.
 
-The page reads like the PDF: the cover, the preface, the cast table and each
-act on a sheet of their own, the curtain at the end of an act. On a wide
+The page reads like the PDF, the curtain at the end of an act; F7 cuts it
+into A4 sheets where the PDF starts a new page (the cover, the preface, the
+cast table, each act) and where a sheet fills up, with page numbers. On a wide
 screen the play's outline sits in the margin; a click goes there.
 
 ![Suggestions](docs/menu.png)
@@ -100,6 +101,7 @@ screen the play's outline sits in the margin; a click goes there.
 | Alt+P | show the cast and cover lines of the source |
 | F3 / F4 / F5 | typewriter, scene focus, dim the rest |
 | F6 | the play on a paper page, or dark |
+| F7 | page view: A4 sheets broken where the PDF breaks, numbered |
 | ^Z ^Y, ^C ^X ^V | undo, redo, copy, cut, paste |
 | ^S, ^Q | save (it saves by itself anyway), quit |
 | F1 | a keyboard: press any key to see what it does |
