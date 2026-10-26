@@ -1,6 +1,6 @@
 [package]
 name = "dactile"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 edition = "2024"
 description = "Dactile — Dynamic Stagewright: write stage plays with live tiyatro.cls macros"
 repository = "https://github.com/D4shwood/dactile"
