@@ -436,6 +436,24 @@ fn whole_line_or(text: &str, span: Range<usize>) -> Range<usize> {
     ls..after
 }
 
+/// Swaps a row of the cast table with the one above (`up`) or below: the
+/// declarations change places, so the PDF's table follows. Hidden and plain
+/// characters stay where they are.
+pub fn move_row(text: &str, cast: &Cast, row: usize, up: bool) -> Option<Vec<Edit>> {
+    let rows = cast.rows();
+    let other = if up { row.checked_sub(1)? } else { row + 1 };
+    let span = |r: Row| match r {
+        Row::Character(i) => cast.characters[i].span.clone(),
+        Row::Group(g) => cast.groups[g].span.clone(),
+    };
+    let a = span(*rows.get(row)?);
+    let b = span(*rows.get(other)?);
+    Some(vec![
+        Edit::new(a.clone(), &text[b.clone()]),
+        Edit::new(b, &text[a]),
+    ])
+}
+
 /// Renames an alias everywhere: the declaration, `\setinlinename`, and every
 /// `\old`, `\olddo` and `\oldfont` in the text. Comments are left alone.
 pub fn rename(text: &str, cast: &Cast, old: &str, new: &str) -> Vec<Edit> {
@@ -767,6 +785,26 @@ mod tests {
         let cast = Cast::default();
         let out = apply(t, &rename(t, &cast, "oz", "o"));
         assert_eq!(out, "\\ozgur \\o \\odo \\ofont \\ozdoX % \\oz");
+    }
+
+    #[test]
+    fn moving_rows() {
+        let cast = Cast::of_play(PLAY);
+        let out = apply(PLAY, &move_row(PLAY, &cast, 0, false).unwrap());
+        let moved = Cast::of_play(&out);
+        let order: Vec<&str> = moved
+            .rows()
+            .iter()
+            .map(|r| match r {
+                Row::Character(i) => moved.characters[*i].alias.as_str(),
+                Row::Group(_) => "grup",
+            })
+            .collect();
+        assert_eq!(order, vec!["oz", "se", "ih", "grup"]);
+        assert!(move_row(PLAY, &cast, 0, true).is_none());
+        // The group moves as one.
+        let out = apply(PLAY, &move_row(PLAY, &cast, 3, true).unwrap());
+        assert!(out.find("\\karaktergrubu").unwrap() < out.find("{İHTİYAR}").unwrap());
     }
 
     #[test]

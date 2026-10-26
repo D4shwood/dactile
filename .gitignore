@@ -10,3 +10,4 @@
 
 # Dactile's own files next to a play
 *.dactile-lock
+*.dactile.toml

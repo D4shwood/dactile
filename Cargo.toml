@@ -20,6 +20,9 @@ required-features = ["app"]
 anyhow = "1"
 chrono = "0.4.45"
 dirs = "7.0.0"
+serde = { version = "1", features = ["derive"] }
+spellbook = "0.4.2"
+toml = "1"
 unicode-width = "0.2.2"
 arboard = { version = "3.7", default-features = false, features = ["wayland-data-control"], optional = true }
 clap = { version = "4.6", features = ["derive"], optional = true }
@@ -30,3 +33,11 @@ default = ["app"]
 # Everything beyond the play model: the terminal interface. The core alone
 # (reading and writing plays) builds with `default-features = false`.
 app = ["dep:arboard", "dep:clap", "dep:ratatui"]
+
+# The Turkish dictionary is large: keep its loader fast in debug builds too.
+[profile.dev.package.spellbook]
+opt-level = 3
+[profile.dev.package.hashbrown]
+opt-level = 3
+[profile.dev.package.foldhash]
+opt-level = 3

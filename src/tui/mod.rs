@@ -1,5 +1,6 @@
 //! The terminal interface.
 
+mod panels;
 mod popup;
 mod theme;
 mod writer;

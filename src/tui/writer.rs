@@ -1,5 +1,6 @@
 //! The writing screen: the play as it will read, edited in place.
 
+use super::panels::{self, CastPanel, Entry};
 use super::popup::{self, Field, Form, FormKind, Menu, Verbs};
 use super::theme::{self, BEIGE, CLARET, FAINT, MUTED, SELECTION, WARN};
 use anyhow::Result;
@@ -10,7 +11,10 @@ use dactile::file::{self, LockState};
 use dactile::lex::Kind;
 use dactile::outline;
 use dactile::render::{self, Doc, Layout, Options, Stop};
+use dactile::sidecar::Sidecar;
 use dactile::source;
+use dactile::spell::{self, Speller};
+use dactile::{info, timing};
 use ratatui::Frame;
 use ratatui::crossterm::event::{
     KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
@@ -19,7 +23,9 @@ use ratatui::layout::{Position, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{Receiver, channel};
 use std::time::{Duration, Instant, SystemTime};
 
 /// Saved this long after the last keystroke.
@@ -64,6 +70,14 @@ pub struct Writer {
     dim: bool,
     /// The top of the text area on screen, for the mouse.
     text_top: u16,
+    sidecar: Sidecar,
+    speller: Option<Speller>,
+    speller_rx: Option<Receiver<Result<Speller>>>,
+    /// Words the play knows: names and words added by hand, lower case.
+    known: HashSet<String>,
+    spell_cache: HashMap<String, bool>,
+    /// Misspelt words on screen, by byte range.
+    misspelt: Vec<std::ops::Range<usize>>,
     pub quit: bool,
 }
 
@@ -76,6 +90,13 @@ enum Popup {
     /// ^K: the same list, searched by name.
     Search(Menu, String),
     Form(Form),
+    /// ^O: the cast.
+    Cast(CastPanel),
+    /// ^G: the scenes.
+    Scenes(usize),
+    Help,
+    /// Alt+S: spelling suggestions for the word at `range`.
+    Suggest(std::ops::Range<usize>, Vec<String>, usize),
 }
 
 impl Writer {
@@ -128,8 +149,23 @@ impl Writer {
             focus: false,
             dim: false,
             text_top: 1,
+            sidecar: Sidecar::load(path).unwrap_or_default(),
+            speller: None,
+            speller_rx: None,
+            known: HashSet::new(),
+            spell_cache: HashMap::new(),
+            misspelt: Vec::new(),
             quit: false,
         };
+        // The dictionary takes a moment to load: in the background.
+        if let Some((aff, dic)) = spell::find() {
+            let (tx, rx) = channel();
+            std::thread::spawn(move || {
+                let _ = tx.send(Speller::load(&aff, &dic));
+            });
+            w.speller_rx = Some(rx);
+        }
+        w.refresh_known();
         w.relayout();
         w.snap_forward();
         Ok(w)
@@ -329,6 +365,39 @@ impl Writer {
             KeyCode::F(5) => {
                 self.dim = !self.dim;
             }
+            KeyCode::Char('o') if ctrl => {
+                self.popup = Popup::Cast(CastPanel {
+                    sel: 0,
+                    by_lines: false,
+                });
+            }
+            KeyCode::Char('g') if ctrl => {
+                let sel = self.block().and_then(|b| self.doc.scene_of(b)).unwrap_or(0);
+                self.popup = Popup::Scenes(sel);
+            }
+            KeyCode::Char('f') if ctrl => {
+                let q = self
+                    .buf
+                    .selected_text()
+                    .filter(|t| !t.contains('\n'))
+                    .unwrap_or("")
+                    .to_string();
+                self.popup = Popup::Form(Form {
+                    kind: FormKind::Find,
+                    title: "bul".into(),
+                    fields: vec![
+                        Field::text("Ara", &q, Vec::new()),
+                        Field::text("Değiştir", "", Vec::new()),
+                    ],
+                    focus: 0,
+                    at: 0..0,
+                    error: None,
+                    confirmed: false,
+                });
+            }
+            KeyCode::Char('i') if alt => self.popup = Popup::Form(self.info_form()),
+            KeyCode::Char('s') if alt => self.suggest(),
+            KeyCode::F(1) => self.popup = Popup::Help,
             KeyCode::Char('k') if ctrl => {
                 let items = complete::items(&self.doc, self.block());
                 self.popup = Popup::Search(Menu::new(items, self.buf.cursor), String::new());
@@ -772,6 +841,72 @@ impl Writer {
                 self.form_key(k);
                 true
             }
+            Popup::Cast(_) => {
+                self.cast_key(k);
+                true
+            }
+            Popup::Scenes(sel) => {
+                let n = self.doc.outline.scenes.len();
+                match k.code {
+                    KeyCode::Esc => self.popup = Popup::None,
+                    KeyCode::Char('g') if ctrl => self.popup = Popup::None,
+                    KeyCode::Up => *sel = sel.saturating_sub(1),
+                    KeyCode::Down => *sel = (*sel + 1).min(n.saturating_sub(1)),
+                    KeyCode::Enter => {
+                        let target = self
+                            .doc
+                            .outline
+                            .scenes
+                            .get(*sel)
+                            .map(|s| s.block + self.doc.body.start);
+                        self.popup = Popup::None;
+                        if let Some(b) = target {
+                            let at = self.doc.blocks[b].span.start;
+                            self.go(at, false);
+                            self.relayout();
+                            // The first line after the heading.
+                            if let Some(s) = self.lay.next_stop(self.doc.blocks[b].span.end) {
+                                self.go(s.byte, false);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+                true
+            }
+            Popup::Help => {
+                if matches!(k.code, KeyCode::Esc | KeyCode::F(1) | KeyCode::Enter) {
+                    self.popup = Popup::None;
+                }
+                true
+            }
+            Popup::Suggest(range, items, sel) => {
+                match k.code {
+                    KeyCode::Esc => self.popup = Popup::None,
+                    KeyCode::Up => *sel = sel.saturating_sub(1),
+                    KeyCode::Down => *sel = (*sel + 1).min(items.len().saturating_sub(1)),
+                    KeyCode::Enter | KeyCode::Tab => {
+                        let (range, choice) = (range.clone(), items[*sel].clone());
+                        self.popup = Popup::None;
+                        let word = self.buf.text[range.clone()].to_string();
+                        if choice.starts_with('+') {
+                            self.sidecar.add_word(&word);
+                            let _ = self.sidecar.save(&self.path);
+                            self.refresh_known();
+                            self.say(&format!("«{word}» bu oyunun sözlüğüne eklendi."), false);
+                        } else if self.editable() {
+                            let at = range.start;
+                            self.buf.apply(
+                                &[dactile::tex::Edit::new(range, choice.clone())],
+                                at + choice.len(),
+                            );
+                            self.edited();
+                        }
+                    }
+                    _ => {}
+                }
+                true
+            }
         }
     }
 
@@ -845,6 +980,7 @@ impl Writer {
             focus: 0,
             at: at..at,
             error: None,
+            confirmed: false,
         }
     }
 
@@ -856,6 +992,7 @@ impl Writer {
             focus: 0,
             at: at..at,
             error: None,
+            confirmed: false,
         }
     }
 
@@ -880,6 +1017,7 @@ impl Writer {
             focus: 0,
             at: at..at,
             error: None,
+            confirmed: false,
         }
     }
 
@@ -889,6 +1027,32 @@ impl Writer {
         };
         form.error = None;
         let n = form.fields.len();
+        if form.kind == FormKind::Find {
+            let (needle, with) = (
+                form.get("Ara").to_string(),
+                form.get("Değiştir").to_string(),
+            );
+            let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+            let alt = k.modifiers.contains(KeyModifiers::ALT);
+            match k.code {
+                KeyCode::Enter => {
+                    self.find_next(&needle);
+                    return;
+                }
+                KeyCode::Char('r') if ctrl => {
+                    self.replace_one(&needle, &with);
+                    return;
+                }
+                KeyCode::Char('r') if alt => {
+                    self.replace_all(&needle, &with);
+                    return;
+                }
+                _ => {}
+            }
+        }
+        let Popup::Form(form) = &mut self.popup else {
+            return;
+        };
         match k.code {
             KeyCode::Esc => {
                 self.popup = Popup::None;
@@ -953,7 +1117,7 @@ impl Writer {
     /// what is wrong.
     fn submit(&mut self, form: Form) -> Result<(), Box<(Form, String)>> {
         let nl = source::line_ending(&self.buf.text).to_string();
-        match form.kind {
+        match form.kind.clone() {
             FormKind::Scene => {
                 let parts: Vec<&str> = [form.get("Yer"), form.get("Zaman")]
                     .into_iter()
@@ -974,6 +1138,99 @@ impl Writer {
                     format!("\\perde[{title}]")
                 };
                 self.write_line(form.at.start, &text, &nl);
+            }
+            FormKind::Find => {}
+            FormKind::Card(alias) => {
+                let card = dactile::sidecar::Card {
+                    age: form.get("Yaş").to_string(),
+                    relations: form.get("İlişkiler").to_string(),
+                    notes: form.get("Notlar").to_string(),
+                };
+                if card.is_empty() {
+                    self.sidecar.cards.remove(&alias);
+                } else {
+                    self.sidecar.cards.insert(alias.clone(), card);
+                }
+                if let Err(e) = self.sidecar.save(&self.path) {
+                    self.say(&format!("Kart kaydedilemedi: {e:#}"), true);
+                }
+                self.popup = Popup::Cast(CastPanel {
+                    sel: self.cast_index(&alias),
+                    by_lines: false,
+                });
+            }
+            FormKind::Info => {
+                let mut t = self.buf.text.clone();
+                for (cmd, label) in info::FIELDS {
+                    if let Some(e) = info::set(&t, cmd, form.get(label)) {
+                        t = dactile::tex::apply(&t, &[e]);
+                    }
+                }
+                let fin = form
+                    .fields
+                    .iter()
+                    .find(|f| f.label.starts_with("Final"))
+                    .is_some_and(Field::on);
+                if let Some(e) = info::set_final(&t, fin) {
+                    t = dactile::tex::apply(&t, &[e]);
+                }
+                if t != self.buf.text && self.editable() {
+                    // Every change is in the preamble, before the cursor.
+                    let cursor = (self.buf.cursor as isize + t.len() as isize
+                        - self.buf.text.len() as isize) as usize;
+                    let all = 0..self.buf.text.len();
+                    self.buf.apply(&[dactile::tex::Edit::new(all, t)], cursor);
+                    self.edited();
+                    self.say("Oyun bilgisi güncellendi.", false);
+                }
+            }
+            FormKind::EditCharacter(old) => {
+                let spec = match self.spec_from(&form, Some(&old)) {
+                    Ok(s) => s,
+                    Err(e) => return Err(Box::new((form, e))),
+                };
+                let renaming = spec.alias != old;
+                if renaming && !form.confirmed {
+                    let n = dcast::rename(&self.buf.text, &self.doc.cast, &old, &spec.alias).len();
+                    let mut form = form;
+                    form.confirmed = true;
+                    return Err(Box::new((
+                        form,
+                        format!(
+                            "\\{old} → \\{}: {n} yerde değişecek. Onay için tekrar ⏎.",
+                            spec.alias
+                        ),
+                    )));
+                }
+                // The declaration first, then the alias everywhere: one undo step.
+                let mut keep = spec.clone();
+                keep.alias = old.clone();
+                let mut t = self.buf.text.clone();
+                if let Some(e) = dcast::update(&self.doc.cast, &old, &keep) {
+                    t = dactile::tex::apply(&t, &[e]);
+                }
+                if renaming {
+                    let c = dcast::Cast::of_play(&t);
+                    t = dactile::tex::apply(&t, &dcast::rename(&t, &c, &old, &spec.alias));
+                    self.sidecar.rename(&old, &spec.alias);
+                    let _ = self.sidecar.save(&self.path);
+                }
+                if t != self.buf.text && self.editable() {
+                    let at = self.buf.cursor;
+                    let all = 0..self.buf.text.len();
+                    // The cursor stays at the same line: count from the end of the text.
+                    let from_end = self.buf.text.len() - at;
+                    self.buf.apply(
+                        &[dactile::tex::Edit::new(all, t.clone())],
+                        t.len().saturating_sub(from_end),
+                    );
+                    self.edited();
+                    self.refresh_known();
+                }
+                self.popup = Popup::Cast(CastPanel {
+                    sel: self.cast_index(&spec.alias),
+                    by_lines: false,
+                });
             }
             FormKind::Character => {
                 let script = form.get("Ad").to_string();
@@ -1047,6 +1304,148 @@ impl Writer {
         Ok(())
     }
 
+    /// The character a form describes. `old` is the alias being edited.
+    fn spec_from(&self, form: &Form, old: Option<&str>) -> Result<Spec, String> {
+        let script = form.get("Ad").to_string();
+        let alias = form.get("Kısaltma").to_string();
+        if script.is_empty() {
+            return Err("Ad boş olamaz.".into());
+        }
+        if alias.is_empty() || !alias.chars().all(|c| c.is_ascii_alphabetic()) {
+            return Err("Kısaltma yalnız İngilizce harflerden oluşmalı (ş, ç… olmadan).".into());
+        }
+        if Some(alias.as_str()) != old && self.doc.cast.alias_taken(&alias) {
+            return Err(format!(
+                "\\{alias} kullanılıyor ya da bir LaTeX komutu; başka bir kısaltma seç."
+            ));
+        }
+        let flag = |label: &str| {
+            form.fields
+                .iter()
+                .find(|f| f.label.starts_with(label))
+                .is_some_and(Field::on)
+        };
+        let member = old
+            .and_then(|o| self.doc.cast.get(o))
+            .is_some_and(|c| c.kind == dcast::Kind::Member);
+        Ok(Spec {
+            alias,
+            script,
+            full: form.get("Tam ad").to_string(),
+            desc: form.get("Açıklama").to_string(),
+            star: flag("Yıldızlı"),
+            kind: if member {
+                dcast::Kind::Member
+            } else if flag("Gizli") {
+                dcast::Kind::Hidden
+            } else if flag("Kişiler") {
+                dcast::Kind::Cast
+            } else {
+                dcast::Kind::Plain
+            },
+        })
+    }
+
+    /// Where a character is in the cast panel.
+    fn cast_index(&self, alias: &str) -> usize {
+        self.cast_entries(false)
+            .iter()
+            .position(
+                |e| matches!(e, Entry::Character(i) if self.doc.cast.characters[*i].alias == alias),
+            )
+            .unwrap_or(0)
+    }
+
+    // ------------------------------------------------------------ find
+
+    /// The next match of `needle` after the cursor (wrapping), ignoring case
+    /// the Turkish way.
+    fn find_from(&self, needle: &str, from: usize) -> Option<std::ops::Range<usize>> {
+        if needle.is_empty() {
+            return None;
+        }
+        let t = &self.buf.text;
+        let n = dcast::lower_tr(needle);
+        let n: Vec<char> = n.chars().collect();
+        let starts: Vec<usize> = t.char_indices().map(|(i, _)| i).collect();
+        let try_at = |i: usize| -> Option<usize> {
+            let mut end = i;
+            for &c in &n {
+                let ch = t[end..].chars().next()?;
+                let low: Vec<char> = dcast::lower_tr(&ch.to_string()).chars().collect();
+                if low.first() != Some(&c) {
+                    return None;
+                }
+                end += ch.len_utf8();
+            }
+            Some(end)
+        };
+        let body = self.doc.parts.body.clone();
+        let after = starts.iter().filter(|&&i| i >= from && i < body.end);
+        let before = starts.iter().filter(|&&i| i >= body.start && i < from);
+        after.chain(before).find_map(|&i| try_at(i).map(|e| i..e))
+    }
+
+    fn find_next(&mut self, needle: &str) {
+        let from = self.buf.selection().map_or(self.buf.cursor, |s| s.end);
+        match self.find_from(needle, from) {
+            Some(r) => {
+                // Show the line raw when the match is inside a macro.
+                self.buf.anchor = Some(r.start);
+                self.buf.cursor = r.end;
+                if !self.lay.is_stop(r.start) || !self.lay.is_stop(r.end) {
+                    self.raw_here = true;
+                    self.relayout();
+                }
+                self.keep_visible();
+            }
+            None => self.say(&format!("«{needle}» bulunamadı."), false),
+        }
+    }
+
+    fn replace_one(&mut self, needle: &str, with: &str) {
+        let matches = self
+            .buf
+            .selected_text()
+            .is_some_and(|s| dcast::lower_tr(s) == dcast::lower_tr(needle));
+        if matches && self.editable() {
+            let r = self.buf.selection().unwrap();
+            let at = r.start;
+            self.buf.apply(
+                &[dactile::tex::Edit::new(r, with.to_string())],
+                at + with.len(),
+            );
+            self.edited();
+        }
+        self.find_next(needle);
+    }
+
+    fn replace_all(&mut self, needle: &str, with: &str) {
+        if needle.is_empty() || !self.editable() {
+            return;
+        }
+        let mut edits = Vec::new();
+        let mut at = self.doc.parts.body.start;
+        while let Some(r) = self.find_from(needle, at) {
+            if r.start < at
+                || edits
+                    .iter()
+                    .any(|e: &dactile::tex::Edit| e.range.start == r.start)
+            {
+                break;
+            }
+            at = r.end;
+            edits.push(dactile::tex::Edit::new(r, with.to_string()));
+        }
+        let n = edits.len();
+        if n > 0 {
+            let cursor = self.buf.cursor.min(self.buf.text.len());
+            self.buf.apply(&edits, cursor.min(edits[0].range.start));
+            self.edited();
+        }
+        self.say(&format!("{n} yer değişti (^Z geri alır)."), false);
+    }
+
     /// Puts `text` on a line of its own at `at` and the cursor on the line after.
     fn write_line(&mut self, at: usize, text: &str, nl: &str) {
         let line_start = self.buf.text[..at].rfind('\n').map_or(0, |i| i + 1);
@@ -1065,6 +1464,289 @@ impl Writer {
         self.raw_here = false;
         self.edited();
         self.snap_forward_if_inside();
+    }
+
+    // ------------------------------------------------------------ cast panel
+
+    fn wpm(&self) -> u32 {
+        self.sidecar.wpm.unwrap_or(timing::WPM)
+    }
+
+    fn cast_entries(&self, by_lines: bool) -> Vec<Entry> {
+        let st = panels::stats(&self.doc, &self.buf.text);
+        panels::entries(&self.doc, &st, by_lines)
+    }
+
+    fn cast_key(&mut self, k: KeyEvent) {
+        let Popup::Cast(p) = &mut self.popup else {
+            return;
+        };
+        let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+        let alt = k.modifiers.contains(KeyModifiers::ALT);
+        let (sel, by_lines) = (p.sel, p.by_lines);
+        let list = self.cast_entries(by_lines);
+        let n = list.len();
+        let chosen = list.get(sel).copied();
+        let alias = match chosen {
+            Some(Entry::Character(i)) => Some(self.doc.cast.characters[i].alias.clone()),
+            _ => None,
+        };
+        match k.code {
+            KeyCode::Esc => self.popup = Popup::None,
+            KeyCode::Char('o') if ctrl => self.popup = Popup::None,
+            KeyCode::Up | KeyCode::Down if alt && !by_lines => {
+                // Move the row (a character of the table, or a whole group).
+                let row = match chosen {
+                    Some(Entry::Character(i)) => self
+                        .doc
+                        .cast
+                        .rows()
+                        .iter()
+                        .position(|r| *r == dactile::cast::Row::Character(i)),
+                    Some(Entry::Group(g)) => self
+                        .doc
+                        .cast
+                        .rows()
+                        .iter()
+                        .position(|r| *r == dactile::cast::Row::Group(g)),
+                    None => None,
+                };
+                let up = k.code == KeyCode::Up;
+                match row.and_then(|r| dcast::move_row(&self.buf.text, &self.doc.cast, r, up)) {
+                    Some(edits) if self.editable() => {
+                        // Two declarations swap places: lengths before the cursor don't change.
+                        let cursor = self.buf.cursor;
+                        self.buf.apply(&edits, cursor);
+                        self.edited();
+                        // The selection follows the moved row.
+                        let new_list = self.cast_entries(false);
+                        let target = alias.as_ref().and_then(|a| {
+                            new_list.iter().position(|e| matches!(e, Entry::Character(i) if self.doc.cast.characters[*i].alias == *a))
+                        });
+                        if let Popup::Cast(p) = &mut self.popup {
+                            p.sel =
+                                target.unwrap_or(if up { sel.saturating_sub(1) } else { sel + 1 });
+                        }
+                    }
+                    Some(_) => {}
+                    None => self.say("Yalnız kişiler tablosundaki satırlar taşınır.", false),
+                }
+            }
+            KeyCode::Up => {
+                if let Popup::Cast(p) = &mut self.popup {
+                    p.sel = sel.saturating_sub(1);
+                }
+            }
+            KeyCode::Down => {
+                if let Popup::Cast(p) = &mut self.popup {
+                    p.sel = (sel + 1).min(n.saturating_sub(1));
+                }
+            }
+            KeyCode::Char('s') => {
+                if let Popup::Cast(p) = &mut self.popup {
+                    p.by_lines = !by_lines;
+                    p.sel = 0;
+                }
+            }
+            KeyCode::Char('n') => self.popup = Popup::Form(self.character_form("", None)),
+            KeyCode::Enter => {
+                if let Some(a) = alias {
+                    self.popup = Popup::Form(self.card_form(&a));
+                }
+            }
+            KeyCode::Char('e') => {
+                if let Some(a) = alias {
+                    self.popup = Popup::Form(self.edit_form(&a));
+                }
+            }
+            KeyCode::Char('d') => {
+                if let Some(a) = alias {
+                    let (lines, dos) = dcast::uses(&self.buf.text, self.doc.parts.body.clone(), &a);
+                    if lines + dos > 0 {
+                        self.say(
+                            &format!(
+                                "\\{a} oyunda {} kez geçiyor; önce o satırları değiştir.",
+                                lines + dos
+                            ),
+                            true,
+                        );
+                    } else if self.editable()
+                        && let Some(e) = dcast::remove(&self.buf.text, &self.doc.cast, &a)
+                    {
+                        let cursor = if e.range.end <= self.buf.cursor {
+                            self.buf.cursor - e.range.len()
+                        } else {
+                            self.buf.cursor
+                        };
+                        self.buf.apply(&[e], cursor);
+                        self.edited();
+                        self.sidecar.cards.remove(&a);
+                        let _ = self.sidecar.save(&self.path);
+                        self.say(&format!("\\{a} silindi (^Z geri alır)."), false);
+                        if let Popup::Cast(p) = &mut self.popup {
+                            p.sel = sel.min(n.saturating_sub(2));
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn edit_form(&self, alias: &str) -> Form {
+        let c = self.doc.cast.get(alias).cloned();
+        let c = c.as_ref();
+        let mut f = self.character_form(alias, None);
+        f.kind = FormKind::EditCharacter(alias.to_string());
+        f.title = format!("\\{alias} düzenle");
+        let set = |f: &mut Form, label: &str, v: String| {
+            if let Some(x) = f.field_mut(label) {
+                x.value = v;
+                x.touched = true;
+            }
+        };
+        if let Some(c) = c {
+            set(&mut f, "Ad", c.script.clone());
+            set(&mut f, "Tam ad", c.full.clone().unwrap_or_default());
+            set(&mut f, "Açıklama", c.desc.clone().unwrap_or_default());
+            let on = |b: bool| if b { "evet" } else { "hayır" }.to_string();
+            set(
+                &mut f,
+                "Kişiler tablosunda",
+                on(c.kind == dcast::Kind::Cast),
+            );
+            set(&mut f, "Yıldızlı", on(c.star));
+            set(
+                &mut f,
+                "Gizli (HERKES gibi)",
+                on(c.kind == dcast::Kind::Hidden),
+            );
+            if c.kind == dcast::Kind::Member {
+                // A group member stays one; its table and hidden flags don't apply.
+                f.fields
+                    .retain(|x| !x.label.starts_with("Kişiler") && !x.label.starts_with("Gizli"));
+                f.fields.retain(|x| x.label != "Açıklama");
+            }
+        }
+        f
+    }
+
+    fn card_form(&self, alias: &str) -> Form {
+        let card = self.sidecar.cards.get(alias).cloned().unwrap_or_default();
+        let name = self
+            .doc
+            .cast
+            .get(alias)
+            .map_or(alias.to_string(), |c| c.script.clone());
+        Form {
+            kind: FormKind::Card(alias.to_string()),
+            title: format!("{name} — kart (PDF'e girmez)"),
+            fields: vec![
+                Field::text("Yaş", &card.age, Vec::new()),
+                Field::text("İlişkiler", &card.relations, Vec::new()),
+                Field::text("Notlar", &card.notes, Vec::new()),
+            ],
+            focus: 0,
+            at: 0..0,
+            error: None,
+            confirmed: false,
+        }
+    }
+
+    fn info_form(&self) -> Form {
+        let mut fields: Vec<Field> = info::FIELDS
+            .iter()
+            .map(|(cmd, label)| {
+                let v = info::get(&self.buf.text, cmd).unwrap_or_default();
+                Field::text(label, &v, Vec::new())
+            })
+            .collect();
+        fields.push(Field::flag("Final (baskı)", info::is_final(&self.buf.text)));
+        Form {
+            kind: FormKind::Info,
+            title: "oyun bilgisi".into(),
+            fields,
+            focus: 0,
+            at: 0..0,
+            error: None,
+            confirmed: false,
+        }
+    }
+
+    // ------------------------------------------------------------ spelling
+
+    fn refresh_known(&mut self) {
+        self.known = spell::cast_words(&self.doc.cast)
+            .into_iter()
+            .chain(self.sidecar.words.iter().cloned())
+            .map(|w| dcast::lower_tr(&w))
+            .collect();
+        self.spell_cache.clear();
+    }
+
+    fn word_ok(&mut self, w: &str) -> bool {
+        let Some(sp) = &self.speller else { return true };
+        if let Some(&ok) = self.spell_cache.get(w) {
+            return ok;
+        }
+        let lower = dcast::lower_tr(w);
+        let stem = lower.split(['\'', '’']).next().unwrap_or("").to_string();
+        let ok = self.known.contains(&lower) || self.known.contains(&stem) || sp.check(w);
+        self.spell_cache.insert(w.to_string(), ok);
+        ok
+    }
+
+    /// The misspelt words of the blocks on screen.
+    fn mark_misspelt(&mut self) {
+        self.misspelt.clear();
+        if self.speller.is_none() {
+            return;
+        }
+        let h = self.text_height();
+        let mut blocks: Vec<usize> = self
+            .lay
+            .rows
+            .iter()
+            .skip(self.scroll)
+            .take(h)
+            .filter_map(|r| r.block)
+            .collect();
+        blocks.dedup();
+        let text = self.buf.text.clone();
+        for b in blocks {
+            for r in spell::words(&text, &self.doc, b) {
+                if !self.word_ok(&text[r.clone()]) {
+                    self.misspelt.push(r);
+                }
+            }
+        }
+    }
+
+    fn suggest(&mut self) {
+        if self.speller.is_none() {
+            let why = if self.speller_rx.is_some() {
+                "Sözlük yükleniyor, birazdan."
+            } else {
+                "Türkçe sözlük bulunamadı (tr_TR.aff/.dic): paru -S hunspell-tr ile kurulabilir."
+            };
+            self.say(why, true);
+            return;
+        }
+        let cur = self.buf.cursor;
+        let Some(b) = self.block() else { return };
+        let words = spell::words(&self.buf.text, &self.doc, b);
+        let Some(range) = words.into_iter().find(|r| r.start <= cur && cur <= r.end) else {
+            self.say("İmleç bir kelimenin üstünde değil.", false);
+            return;
+        };
+        let word = self.buf.text[range.clone()].to_string();
+        let mut items = self
+            .speller
+            .as_ref()
+            .map(|s| s.suggest(&word))
+            .unwrap_or_default();
+        items.push(format!("+ «{word}» oyunun sözlüğüne"));
+        self.popup = Popup::Suggest(range, items, 0);
     }
 
     // ------------------------------------------------------------ mouse
@@ -1097,6 +1779,18 @@ impl Writer {
     // ------------------------------------------------------------ saving
 
     pub fn tick(&mut self) {
+        if let Some(rx) = &self.speller_rx
+            && let Ok(result) = rx.try_recv()
+        {
+            self.speller_rx = None;
+            match result {
+                Ok(sp) => {
+                    self.speller = Some(sp);
+                    self.spell_cache.clear();
+                }
+                Err(e) => self.say(&format!("Sözlük yüklenemedi: {e:#}"), true),
+            }
+        }
         if self.checked.elapsed() >= CHECK_EVERY {
             self.checked = Instant::now();
             self.check_disk();
@@ -1210,6 +1904,7 @@ impl Writer {
             ..area
         };
         self.text_top = body.y;
+        self.mark_misspelt();
         self.draw_text(f, body);
         let status = Rect {
             y: area.y + area.height.saturating_sub(2),
@@ -1242,6 +1937,15 @@ impl Writer {
             Popup::Verbs(v) => popup::draw_verbs(f, body, at, v),
             Popup::Search(m, q) => popup::draw_search(f, area, m, q),
             Popup::Form(form) => popup::draw_form(f, area, form),
+            Popup::Cast(p) => {
+                panels::draw_cast(f, area, &self.doc, &self.buf.text, &self.sidecar, p)
+            }
+            Popup::Scenes(sel) => panels::draw_scenes(f, area, &self.doc, self.wpm(), *sel),
+            Popup::Help => panels::draw_help(f, area),
+            Popup::Suggest(range, items, sel) => {
+                let word = self.buf.text.get(range.clone()).unwrap_or("");
+                panels::draw_suggest(f, body, at, word, items, *sel);
+            }
         }
     }
 
@@ -1313,6 +2017,13 @@ impl Writer {
                 if self.dim && !here {
                     style = style.fg(FAINT);
                 }
+                if let Some(b) = c.byte
+                    && self.misspelt.iter().any(|r| r.contains(&b))
+                {
+                    style = style
+                        .add_modifier(Modifier::UNDERLINED)
+                        .underline_color(WARN);
+                }
                 if let (Some(s), Some(b)) = (&sel, c.byte)
                     && s.contains(&b)
                 {
@@ -1358,7 +2069,11 @@ impl Writer {
                 Style::default().fg(CLARET),
             ));
             parts.push(Span::styled(
-                format!(" · {} kelime", s.words),
+                format!(
+                    " · {} kelime · ≈ {}",
+                    s.words,
+                    timing::format(timing::scene_secs(s, self.wpm()))
+                ),
                 Style::default().fg(MUTED),
             ));
         }
@@ -1388,11 +2103,11 @@ impl Writer {
             ("^S", "kaydet"),
             ("^Z", "geri al"),
             ("^C/^X/^V", "kopyala"),
+            ("F1", "yardım"),
             ("\\", "öneri"),
-            ("^K", "ara"),
-            ("F2", "ham"),
-            ("F3/F4/F5", "daktilo/odak/soluk"),
-            ("Alt+P", "kişiler"),
+            ("^O", "kişiler"),
+            ("^G", "sahneler"),
+            ("^F", "bul"),
             ("^Q", "çık"),
         ];
         let mut spans = vec![Span::raw(" ")];

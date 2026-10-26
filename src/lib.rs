@@ -7,11 +7,15 @@ pub mod buffer;
 pub mod cast;
 pub mod complete;
 pub mod file;
+pub mod info;
 pub mod lex;
 pub mod outline;
 pub mod render;
+pub mod sidecar;
 pub mod source;
+pub mod spell;
 pub mod tex;
+pub mod timing;
 
 /// The tiyatro class files, carried inside the app so a play needs nothing
 /// installed besides XeLaTeX.

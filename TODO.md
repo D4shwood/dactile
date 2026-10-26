@@ -29,7 +29,7 @@ Each milestone ends with a demo.
    - The `\` suggestion menu, the verbs list, and a fuzzy search window.
    - The new-character, scene and act forms.
    - The theme, typewriter / scene focus / dimming modes, margin numbers, and the mouse.
-6. **M5 panels and text tools.**
+6. ~~**M5 panels and text tools.**~~ Done.
    - The cast panel: rename, order and character cards, saved in a sidecar file.
    - The scene navigator and running time.
    - Turkish spell check (hunspell-tr), play info, find and replace, help.

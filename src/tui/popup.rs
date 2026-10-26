@@ -89,13 +89,22 @@ pub struct Form {
     /// Where the result goes in the text.
     pub at: std::ops::Range<usize>,
     pub error: Option<String>,
+    /// A change asked to be confirmed with a second ⏎ (renaming an alias).
+    pub confirmed: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FormKind {
     Scene,
     Act,
     Character,
+    /// Changing a character, by its alias before the change.
+    EditCharacter(String),
+    /// A character's card, by alias.
+    Card(String),
+    /// The cover details and draft/final.
+    Info,
+    Find,
 }
 
 pub struct Field {
@@ -406,7 +415,11 @@ pub fn draw_form(f: &mut Frame, area: Rect, form: &Form) {
         );
         y += 1;
     }
-    let hint = "⏎ tamam   Tab tamamla   ↑↓ alan   Esc vazgeç";
+    let hint = if form.kind == FormKind::Find {
+        "⏎ sonraki   ^R değiştir   Alt+R hepsini   ↑↓ alan   Esc kapat"
+    } else {
+        "⏎ tamam   Tab tamamla   ↑↓ alan   Esc vazgeç"
+    };
     f.render_widget(
         Paragraph::new(hint).style(theme::base().fg(FAINT)),
         Rect {
