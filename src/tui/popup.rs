@@ -12,7 +12,7 @@ use ratatui::widgets::{Block, BorderType, Borders, Clear, Paragraph};
 use unicode_width::UnicodeWidthStr;
 
 /// The background of a field being typed into.
-const FIELD: Color = Color::Rgb(0x22, 0x22, 0x22);
+pub const FIELD: Color = Color::Rgb(0x22, 0x22, 0x22);
 
 /// A list to choose from, filtered by what is typed.
 pub struct Menu {

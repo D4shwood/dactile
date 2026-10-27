@@ -149,10 +149,10 @@ pub fn draft_base(stem: &str) -> &str {
         .map_or(stem, |(b, _)| b)
 }
 
-/// The plays in the order of their tree: each followed by its drafts, the
-/// families most recently changed first. With each, whether it and every
-/// play above it in the tree is the last of its siblings (empty for a
-/// play of its own).
+/// The plays in the order of their tree, growing upward: each play's drafts
+/// above it, the newest on top, and the families most recently changed
+/// first. With each, whether it and every play it comes from is the topmost
+/// of its siblings (empty for a play of its own).
 pub fn tree(plays: Vec<Play>) -> Vec<(Play, Vec<bool>)> {
     let n = plays.len();
     let index = |p: &Path| plays.iter().position(|x| x.path == p);
@@ -193,13 +193,13 @@ pub fn tree(plays: Vec<Play>) -> Vec<(Play, Vec<bool>)> {
     let mut roots: Vec<usize> = (0..n).filter(|&i| up[i].is_none()).collect();
     by_newest(&mut roots);
     let mut order: Vec<(usize, Vec<bool>)> = Vec::new();
-    fn walk(i: usize, lasts: Vec<bool>, kids: &[Vec<usize>], out: &mut Vec<(usize, Vec<bool>)>) {
-        out.push((i, lasts.clone()));
+    fn walk(i: usize, firsts: Vec<bool>, kids: &[Vec<usize>], out: &mut Vec<(usize, Vec<bool>)>) {
         for (j, &k) in kids[i].iter().enumerate() {
-            let mut l = lasts.clone();
-            l.push(j + 1 == kids[i].len());
+            let mut l = firsts.clone();
+            l.push(j == 0);
             walk(k, l, kids, out);
         }
+        out.push((i, firsts));
     }
     for r in roots {
         walk(r, Vec::new(), &kids, &mut order);
@@ -291,7 +291,17 @@ pub fn throw_away(play: &Path, bin: &Path) -> anyhow::Result<Vec<crate::trash::M
 pub fn file_name(title: &str) -> String {
     let words: Vec<String> = title
         .split_whitespace()
-        .map(crate::cast::fold_ascii)
+        .map(|w| {
+            w.chars()
+                .map(|c| {
+                    if c.is_ascii_alphanumeric() {
+                        c.to_ascii_lowercase().to_string()
+                    } else {
+                        crate::cast::fold_ascii(&c.to_string())
+                    }
+                })
+                .collect::<String>()
+        })
         .filter(|w| !w.is_empty())
         .collect();
     let s = words.join("-");
@@ -428,6 +438,8 @@ mod tests {
         assert_eq!(Doc::new(&t).outline.scenes[0].place, "Interior — Night");
         assert_eq!(file_name("Kar Masalı"), "kar-masali.tex");
         assert_eq!(file_name("  "), "oyun.tex");
+        assert_eq!(file_name("Kar Masalı 2"), "kar-masali-2.tex");
+        assert_eq!(file_name("Çay & Şeker"), "cay-seker.tex");
     }
 
     fn play(dir: &Path, name: &str, title: &str, age: u64) -> Play {
@@ -450,7 +462,7 @@ mod tests {
     }
 
     #[test]
-    fn drafts_hang_under_their_play() {
+    fn drafts_stack_above_their_play() {
         let d = Path::new("/x");
         let mut a2 = play(d, "a-0.2.tex", "A", 1);
         a2.parent = Some(d.join("a.tex"));
@@ -483,22 +495,22 @@ mod tests {
         assert_eq!(
             names,
             [
-                "a.tex",
-                "a-0.2.tex",
                 "a-0.2.1.tex",
+                "a-0.2.tex",
                 "a-0.3.tex",
+                "a.tex",
                 "b.tex",
                 "lost-2.tex",
-                "l1.tex",
-                "l2.tex"
+                "l2.tex",
+                "l1.tex"
             ]
         );
-        assert_eq!(t[1].1, [false]);
-        assert_eq!(t[2].1, [false, true]);
-        assert_eq!(t[3].1, [true]);
-        assert!(t[4].1.is_empty());
+        assert_eq!(t[0].1, [true, true]);
+        assert_eq!(t[1].1, [true]);
+        assert_eq!(t[2].1, [false]);
+        assert!(t[3].1.is_empty() && t[4].1.is_empty());
         // The loop broke somewhere: one of the two is a root.
-        assert!(t[6].1.is_empty());
+        assert!(t[7].1.is_empty());
         assert_eq!(draft_base("kar-masali-0.2"), "kar-masali");
         assert_eq!(draft_base("kar-masali"), "kar-masali");
         assert_eq!(draft_base("-2"), "-2");

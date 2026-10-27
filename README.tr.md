@@ -71,9 +71,12 @@ dactile new "Kar Masalı"  # oyunlar klasöründe yeni bir oyun
 
 Ana ekranda `d` seçili oyunun yeni bir adla kopyasını çıkarır; `f` yanına
 yeni bir taslağını açar (`kar-masali-0.2.tex`: taslak numarası bir artar,
-karakter kartları da gelir). Taslaklar geldikleri oyunun altında ağaç gibi
-durur. F2 oyunun adını değiştirir (başlığını, dosyasını ve yanındaki
-dosyaları); iki kez Del onu masaüstünün çöp kutusuna atar, `u` geri getirir.
+karakter kartları da gelir). Taslaklar geldikleri oyunun üstünde ağaç gibi
+birikir, en yenisi en üstte; ana ekran en son çalıştığın oyunda açılır. F2
+dosya yöneticisindeki gibi oyunun adını kendi satırında değiştirir: yeni başlığı
+yazarsın, dosya adı ve yanındaki dosyalar da onu izler (taslak, dosya adının
+sonundaki numarasını korur). Shift+F2 başlığı ve dosya adını ayrı ayrı sorar;
+iki kez Del onu masaüstünün çöp kutusuna atar, `u` geri getirir.
 
 | Yazınca | Olan |
 |---|---|

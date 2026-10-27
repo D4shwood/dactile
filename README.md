@@ -70,9 +70,12 @@ plays live in, your name, and how the suggestion menu opens.
 
 On the home screen `d` copies the chosen play under a new title, and `f`
 starts a new draft of it next to it (`kar-masali-0.2.tex`, the draft number
-one up, the character cards along). Drafts hang under the play they came
-from, as a tree. F2 renames a play (its title, its file, and the files that go
-with it); Del, pressed twice, sends it to the desktop's trash, and `u` brings
+one up, the character cards along). Drafts stack up above the play they came
+from as a tree, the newest on top, and the home screen opens on the play you
+worked on last. F2 renames a play right in its row, as a file manager does:
+type the new title, and its file, and the files that go with it, follow (a
+draft keeps its number at the end of its file name). Shift+F2 gives the title
+and the file name separately. Del, pressed twice, sends it to the desktop's trash, and `u` brings
 it back.
 
 | Type | You get |

@@ -48,6 +48,19 @@ pub struct Home {
     arming: Option<PathBuf>,
     /// What went to the trash last, for `u`.
     thrown: Option<(String, Vec<dactile::trash::Moved>)>,
+    /// The chosen play's title being changed in its row (F2).
+    inline: Option<Inline>,
+}
+
+/// A title typed over in its row, as a file manager renames.
+struct Inline {
+    value: String,
+    /// The title before, to tell whether anything changed.
+    was: String,
+    /// The cursor, in characters.
+    at: usize,
+    /// All of it chosen: the first key types over it.
+    all: bool,
 }
 
 impl Home {
@@ -66,8 +79,13 @@ impl Home {
             form_kind: None,
             arming: None,
             thrown: None,
+            inline: None,
         };
         h.refresh(cfg);
+        // On the play worked on last.
+        if let Some(i) = (0..h.plays.len()).max_by_key(|&i| h.plays[i].modified) {
+            h.sel = i;
+        }
         if first_run {
             h.form = Some(settings_form(cfg, true));
         }
@@ -83,6 +101,10 @@ impl Home {
     pub fn key(&mut self, k: KeyEvent, cfg: &mut Config) -> Action {
         self.message = None;
         let armed = self.arming.take();
+        if self.inline.is_some() {
+            self.inline_key(k, cfg);
+            return Action::Stay;
+        }
         if let Some(form) = &mut self.form {
             match popup::edit(form, k) {
                 Outcome::Stay => {
@@ -141,6 +163,22 @@ impl Home {
                 });
             }
             KeyCode::Char('s') => self.form = Some(settings_form(cfg, false)),
+            KeyCode::F(2) if !k.modifiers.contains(KeyModifiers::SHIFT) => {
+                if let Some(p) = self.plays.get(self.sel) {
+                    let raw = dactile::info::get(
+                        &std::fs::read_to_string(&p.path).unwrap_or_default(),
+                        "title",
+                    )
+                    .map(|t| dactile::tex::unescape_text(&t))
+                    .unwrap_or_else(|| p.title.clone());
+                    self.inline = Some(Inline {
+                        at: raw.chars().count(),
+                        value: raw.clone(),
+                        was: raw,
+                        all: true,
+                    });
+                }
+            }
             KeyCode::F(2) => {
                 if let Some(p) = self.plays.get(self.sel) {
                     let raw = dactile::info::get(
@@ -474,87 +512,11 @@ impl Home {
             FormKind::Rename(ref from) => {
                 let from = from.clone();
                 let title = form.get("Başlık").trim().to_string();
-                let mut name = form.get("Dosya").trim().to_string();
-                if title.is_empty() || name.is_empty() {
-                    return fail(
-                        self,
-                        form,
-                        lang::l(
-                            "Başlık ve dosya adı boş olamaz.",
-                            "Title and file name can't be empty.",
-                        )
-                        .into(),
-                    );
+                let name = form.get("Dosya").trim().to_string();
+                match self.rename_play(&from, &title, &name, cfg) {
+                    Ok(()) => Action::Stay,
+                    Err(e) => fail(self, form, e),
                 }
-                if name.contains('/') {
-                    return fail(
-                        self,
-                        form,
-                        lang::l(
-                            "Dosya adında / olamaz: oyun yerinde kalır.",
-                            "No / in the file name: the play stays where it is.",
-                        )
-                        .into(),
-                    );
-                }
-                if !name.ends_with(".tex") {
-                    name.push_str(".tex");
-                }
-                if let Some(who) = dactile::file::holder(&from) {
-                    return fail(
-                        self,
-                        form,
-                        lang::f(
-                            "Başka bir Dactile'da açık ({}).",
-                            "Open in another Dactile ({}).",
-                            &[&who],
-                        ),
-                    );
-                }
-                let to = from.with_file_name(&name);
-                if to != from {
-                    if to.exists() {
-                        return fail(
-                            self,
-                            form,
-                            lang::f(
-                                "{} zaten var.",
-                                "{} already exists.",
-                                &[&config::tilde(&to)],
-                            ),
-                        );
-                    }
-                    let drafts = self.drafts_of(&from);
-                    if let Err(e) = library::rename(&from, &to, &drafts) {
-                        return fail(self, form, format!("{e:#}"));
-                    }
-                    let (old, new) = (from.to_string_lossy(), to.to_string_lossy());
-                    for r in cfg.recent.iter_mut().filter(|r| **r == old) {
-                        *r = new.to_string();
-                    }
-                    let _ = cfg.save();
-                }
-                let text = dactile::file::read(&to).unwrap_or_default();
-                let old_title = dactile::info::get(&text, "title").unwrap_or_default();
-                if dactile::tex::unescape_text(&old_title) != title {
-                    let new_text = library::derive(&text, Some(&title), None);
-                    if let Err(e) = dactile::file::write_atomic(&to, &new_text) {
-                        return fail(self, form, format!("{e:#}"));
-                    }
-                }
-                self.refresh(cfg);
-                if let Some(i) = self.plays.iter().position(|p| p.path == to) {
-                    self.sel = i;
-                }
-                self.message = Some((
-                    lang::f(
-                        "Artık «{}»: {}.",
-                        "Now «{}»: {}.",
-                        &[&title, &config::tilde(&to)],
-                    ),
-                    false,
-                ));
-                Action::Stay
             }
             FormKind::OpenPath => {
                 let path = resolve_path(form.get("Dosya"), cfg);
@@ -568,6 +530,143 @@ impl Home {
                 Action::Open(path)
             }
             _ => Action::Stay,
+        }
+    }
+
+    /// A play's new title and file name, from the form or the row; on the
+    /// screen after it, chosen.
+    fn rename_play(
+        &mut self,
+        from: &Path,
+        title: &str,
+        name: &str,
+        cfg: &mut Config,
+    ) -> Result<(), String> {
+        if title.is_empty() || name.is_empty() {
+            return Err(lang::l(
+                "Başlık ve dosya adı boş olamaz.",
+                "Title and file name can't be empty.",
+            )
+            .into());
+        }
+        if name.contains('/') {
+            return Err(lang::l(
+                "Dosya adında / olamaz: oyun yerinde kalır.",
+                "No / in the file name: the play stays where it is.",
+            )
+            .into());
+        }
+        let name = if name.ends_with(".tex") {
+            name.to_string()
+        } else {
+            format!("{name}.tex")
+        };
+        if let Some(who) = dactile::file::holder(from) {
+            return Err(lang::f(
+                "Başka bir Dactile'da açık ({}).",
+                "Open in another Dactile ({}).",
+                &[&who],
+            ));
+        }
+        let to = from.with_file_name(&name);
+        if to != from {
+            if to.exists() {
+                return Err(lang::f(
+                    "{} zaten var.",
+                    "{} already exists.",
+                    &[&config::tilde(&to)],
+                ));
+            }
+            let drafts = self.drafts_of(from);
+            library::rename(from, &to, &drafts).map_err(|e| format!("{e:#}"))?;
+            let (old, new) = (from.to_string_lossy(), to.to_string_lossy());
+            for r in cfg.recent.iter_mut().filter(|r| **r == old) {
+                *r = new.to_string();
+            }
+            let _ = cfg.save();
+        }
+        let text = dactile::file::read(&to).unwrap_or_default();
+        let old_title = dactile::info::get(&text, "title").unwrap_or_default();
+        if dactile::tex::unescape_text(&old_title) != title {
+            let new_text = library::derive(&text, Some(title), None);
+            dactile::file::write_atomic(&to, &new_text).map_err(|e| format!("{e:#}"))?;
+        }
+        self.refresh(cfg);
+        if let Some(i) = self.plays.iter().position(|p| p.path == to) {
+            self.sel = i;
+        }
+        self.message = Some((
+            lang::f(
+                "Artık «{}»: {}.",
+                "Now «{}»: {}.",
+                &[&title, &config::tilde(&to)],
+            ),
+            false,
+        ));
+        Ok(())
+    }
+
+    /// A key while the chosen play's title is being changed in its row.
+    fn inline_key(&mut self, k: KeyEvent, cfg: &mut Config) {
+        let Some(ed) = self.inline.as_mut() else {
+            return;
+        };
+        let len = ed.value.chars().count();
+        let byte = |v: &str, at: usize| v.char_indices().nth(at).map_or(v.len(), |(b, _)| b);
+        match k.code {
+            KeyCode::Esc => self.inline = None,
+            KeyCode::Enter => {
+                let Some(p) = self.plays.get(self.sel) else {
+                    self.inline = None;
+                    return;
+                };
+                let title = ed.value.trim().to_string();
+                let from = p.path.clone();
+                if title.is_empty() || title == ed.was {
+                    self.inline = None;
+                    return;
+                }
+                let name = inline_name(&from, &title, p.draft.as_deref());
+                match self.rename_play(&from, &title, &name, cfg) {
+                    Ok(()) => self.inline = None,
+                    Err(e) => self.message = Some((e, true)),
+                }
+            }
+            KeyCode::Char(c) if !k.modifiers.contains(KeyModifiers::CONTROL) => {
+                if ed.all {
+                    ed.value.clear();
+                    ed.at = 0;
+                    ed.all = false;
+                }
+                let b = byte(&ed.value, ed.at);
+                ed.value.insert(b, c);
+                ed.at += 1;
+            }
+            KeyCode::Backspace | KeyCode::Delete if ed.all => {
+                ed.value.clear();
+                ed.at = 0;
+                ed.all = false;
+            }
+            KeyCode::Backspace if ed.at > 0 => {
+                let b = byte(&ed.value, ed.at - 1);
+                ed.value.remove(b);
+                ed.at -= 1;
+            }
+            KeyCode::Delete if ed.at < len => {
+                let b = byte(&ed.value, ed.at);
+                ed.value.remove(b);
+            }
+            KeyCode::Left => {
+                ed.at = if ed.all { 0 } else { ed.at.saturating_sub(1) };
+                ed.all = false;
+            }
+            KeyCode::Right => {
+                ed.at = if ed.all { len } else { (ed.at + 1).min(len) };
+                ed.all = false;
+            }
+            KeyCode::Home => (ed.at, ed.all) = (0, false),
+            KeyCode::End => (ed.at, ed.all) = (len, false),
+            _ => {}
         }
     }
 
@@ -790,19 +889,26 @@ impl Home {
                 height: 1,
             },
         );
-        let keys = [
-            ("⏎", lang::l("aç", "open")),
-            ("n", lang::l("yeni oyun", "new play")),
-            ("o", lang::l("dosya aç", "open a file")),
-            ("d", lang::l("kopya", "copy")),
-            ("f", lang::l("yeni taslak", "new draft")),
-            ("F2", lang::l("ad", "rename")),
-            ("Del", lang::l("çöpe", "trash")),
-            ("s", lang::l("ayarlar", "settings")),
-            ("q", lang::l("çık", "quit")),
-        ];
+        let keys: &[(&str, &str)] = if self.inline.is_some() {
+            &[
+                ("⏎", lang::l("tamam", "done")),
+                ("Esc", lang::l("vazgeç", "cancel")),
+            ]
+        } else {
+            &[
+                ("⏎", lang::l("aç", "open")),
+                ("n", lang::l("yeni oyun", "new play")),
+                ("o", lang::l("dosya aç", "open a file")),
+                ("d", lang::l("kopya", "copy")),
+                ("f", lang::l("yeni taslak", "new draft")),
+                ("F2", lang::l("ad", "rename")),
+                ("Del", lang::l("çöpe", "trash")),
+                ("s", lang::l("ayarlar", "settings")),
+                ("q", lang::l("çık", "quit")),
+            ]
+        };
         let mut spans = Vec::new();
-        for (k, what) in keys {
+        for &(k, what) in keys {
             spans.push(Span::styled(k, Style::default().fg(MUTED)));
             spans.push(Span::styled(
                 format!(" {what}   "),
@@ -831,7 +937,7 @@ impl Home {
     }
 
     /// The plays, two rows each: the title and when, then who and how long.
-    /// A play's drafts hang under it as a tree.
+    /// A play's drafts stand above it as a tree.
     fn draw_list(&self, f: &mut Frame, area: Rect) {
         let per = 3usize;
         let rows = (area.height as usize / per).max(1);
@@ -841,23 +947,27 @@ impl Home {
         for (i, p) in self.plays.iter().enumerate().skip(start).take(rows) {
             let sel = i == self.sel;
             let w = area.width as usize;
-            let lasts = &self.lasts[i];
-            let has_drafts = self.lasts.get(i + 1).is_some_and(|n| n.len() > lasts.len());
-            // The lines down the left: one per level above, then the branch.
-            let above: String = lasts
+            // The lines down the left, the tree growing upward: one per
+            // level, a line where siblings stand above, then the branch.
+            let firsts = &self.lasts[i];
+            let level = |&first: &bool| if first { "   " } else { "│  " };
+            let above: String = firsts
                 .iter()
-                .take(lasts.len().saturating_sub(1))
-                .map(|&last| if last { "   " } else { "│  " })
+                .take(firsts.len().saturating_sub(1))
+                .map(level)
                 .collect();
-            let branch = match lasts.last() {
-                Some(true) => "└─ ",
+            let branch = match firsts.last() {
+                Some(true) => "┌─ ",
                 Some(false) => "├─ ",
                 None => "",
             };
-            let under: String = lasts
+            // Under a draft its line goes on down to the play it comes from.
+            let under: String = firsts
                 .iter()
-                .map(|&last| if last { "   " } else { "│  " })
-                .chain(std::iter::once(if has_drafts { "│ " } else { "  " }))
+                .take(firsts.len().saturating_sub(1))
+                .map(level)
+                .chain(firsts.last().map(|_| "│  "))
+                .chain(std::iter::once("  "))
                 .collect();
             // A draft of the same title goes by its draft number.
             let parent = p
@@ -876,24 +986,58 @@ impl Home {
             };
             let stamp = when(p.modified);
             let lead = above.width() + branch.width();
-            let title = popup::fit(&name, w.saturating_sub(stamp.width() + 6 + lead));
-            let gap = w.saturating_sub(2 + lead + title.width() + stamp.width());
-            lines.push(popup::row(
-                vec![
-                    popup::mark(sel),
-                    Span::styled(format!("{above}{branch}"), guide),
-                    Span::styled(
+            let room = w.saturating_sub(stamp.width() + 6 + lead);
+            let mut head = vec![
+                popup::mark(sel),
+                Span::styled(format!("{above}{branch}"), guide),
+            ];
+            match self.inline.as_ref().filter(|_| sel) {
+                // Being renamed: a band to type on, the cursor in it.
+                Some(ed) => {
+                    let chars: Vec<char> = ed.value.chars().collect();
+                    let width = |cs: &[char]| cs.iter().collect::<String>().width();
+                    let mut skip = 0;
+                    while skip < ed.at && width(&chars[skip..ed.at]) + 1 > room {
+                        skip += 1;
+                    }
+                    let mut shown = String::new();
+                    for &c in &chars[skip..] {
+                        if (shown.width() + c.to_string().width()) >= room {
+                            break;
+                        }
+                        shown.push(c);
+                    }
+                    let band = Style::default().fg(FG).bg(popup::FIELD);
+                    let pad = room.saturating_sub(shown.width());
+                    head.push(Span::styled(
+                        shown,
+                        if ed.all {
+                            band.add_modifier(Modifier::REVERSED)
+                        } else {
+                            band
+                        },
+                    ));
+                    head.push(Span::styled(" ".repeat(pad), band));
+                    let gap = w.saturating_sub(2 + lead + room + stamp.width());
+                    head.push(Span::raw(" ".repeat(gap)));
+                    let x = area.x as usize + 2 + lead + width(&chars[skip..ed.at]);
+                    let y = area.y as usize + (i - start) * per;
+                    f.set_cursor_position(ratatui::layout::Position::new(x as u16, y as u16));
+                }
+                None => {
+                    let title = popup::fit(&name, room);
+                    let gap = w.saturating_sub(2 + lead + title.width() + stamp.width());
+                    head.push(Span::styled(
                         title,
                         Style::default()
                             .fg(if sel { BEIGE } else { FG })
                             .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::raw(" ".repeat(gap)),
-                    Span::styled(stamp, Style::default().fg(FAINT)),
-                ],
-                sel,
-                area.width,
-            ));
+                    ));
+                    head.push(Span::raw(" ".repeat(gap)));
+                }
+            }
+            head.push(Span::styled(stamp, Style::default().fg(FAINT)));
+            lines.push(popup::row(head, sel, area.width));
             let mut about = Vec::new();
             if !p.author.is_empty() && !parent.is_some_and(|x| x.author == p.author) {
                 about.push(p.author.clone());
@@ -985,17 +1129,31 @@ fn draw_card(f: &mut Frame, area: Rect, p: &Play, theme_name: &str) {
     f.render_widget(Paragraph::new(lines).style(base), area);
 }
 
-/// `kar-masali.tex` with draft 0.2 → `kar-masali-0.2.tex`; from
-/// `kar-masali-0.2.tex`, 0.3 → `kar-masali-0.3.tex`.
-fn fork_name(src: &Path, draft: &str) -> String {
-    let stem = src
+/// The file name a title typed in its row gives: the title's, with a
+/// draft's number kept at its end (`kar-masali-0.2.tex`, "Kış Masalı" →
+/// `kis-masali-0.2.tex`).
+fn inline_name(path: &Path, title: &str, draft: Option<&str>) -> String {
+    let stem = path
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_default();
-    // Without an earlier draft's number at its end.
-    let base = library::draft_base(&stem).to_string();
-    // Letters, digits and dots stay; the rest becomes a dash.
-    let draft: String = draft
+    let fresh = library::file_name(title);
+    let fresh = fresh.trim_end_matches(".tex");
+    // The tail a new draft got from its number, or a number of digits.
+    let tag = draft.map(draft_tag).filter(|t| !t.is_empty());
+    let tail = match tag {
+        Some(t) if stem.ends_with(&format!("-{t}")) && stem.len() > t.len() + 1 => {
+            format!("-{t}")
+        }
+        _ => stem[library::draft_base(&stem).len()..].to_string(),
+    };
+    format!("{fresh}{tail}.tex")
+}
+
+/// A draft number as a file name ends with it: letters, digits and dots
+/// stay, the rest becomes a dash (`İkinci el` → `ikinci-el`).
+fn draft_tag(draft: &str) -> String {
+    let tag: String = draft
         .trim()
         .chars()
         .map(|c| {
@@ -1007,7 +1165,19 @@ fn fork_name(src: &Path, draft: &str) -> String {
             }
         })
         .collect();
-    let draft = draft.trim_matches('-');
+    tag.trim_matches('-').to_string()
+}
+
+/// `kar-masali.tex` with draft 0.2 → `kar-masali-0.2.tex`; from
+/// `kar-masali-0.2.tex`, 0.3 → `kar-masali-0.3.tex`.
+fn fork_name(src: &Path, draft: &str) -> String {
+    let stem = src
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
+    // Without an earlier draft's number at its end.
+    let base = library::draft_base(&stem).to_string();
+    let draft = draft_tag(draft);
     if draft.is_empty() {
         format!("{base}-2.tex")
     } else {
@@ -1103,6 +1273,38 @@ fn when(t: Option<std::time::SystemTime>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn names_typed_in_the_row() {
+        assert_eq!(
+            inline_name(Path::new("/x/kar-masali.tex"), "Kış Masalı", Some("0.1")),
+            "kis-masali.tex"
+        );
+        assert_eq!(
+            inline_name(
+                Path::new("/x/kar-masali-0.2.tex"),
+                "Kış Masalı",
+                Some("0.2")
+            ),
+            "kis-masali-0.2.tex"
+        );
+        assert_eq!(
+            inline_name(Path::new("/x/kar-masali-26.10.2026.tex"), "Kar 2", None),
+            "kar-2-26.10.2026.tex"
+        );
+        assert_eq!(
+            inline_name(Path::new("/x/kar-masali-0.2b.tex"), "Kış", Some("0.2b")),
+            "kis-0.2b.tex"
+        );
+        assert_eq!(
+            inline_name(
+                Path::new("/x/kar-masali-ikinci-el.tex"),
+                "Kış",
+                Some("İkinci el")
+            ),
+            "kis-ikinci-el.tex"
+        );
+    }
 
     #[test]
     fn draft_file_names() {
