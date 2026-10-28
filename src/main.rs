@@ -35,6 +35,8 @@ enum Cmd {
         #[arg(long)]
         aux: bool,
     },
+    /// Lists what would stop XeLaTeX in a play (changes nothing).
+    Check { play: PathBuf },
     /// Builds a play's PDF next to it, in one XeLaTeX run.
     Pdf {
         play: PathBuf,
@@ -49,6 +51,20 @@ fn main() -> Result<()> {
     match cli.cmd {
         Some(Cmd::Cast { play }) => print_cast(&play),
         Some(Cmd::Outline { play, aux }) => print_outline(&play, aux),
+        Some(Cmd::Check { play }) => {
+            let text = std::fs::read_to_string(&play)
+                .with_context(|| format!("reading {}", play.display()))?;
+            let doc = dactile::render::Doc::new(&text);
+            let found = dactile::check::problems(&text, &doc, &dactile::check::known(&text, &doc));
+            for p in &found {
+                let line = text[..p.span.start].matches('\n').count() + 1;
+                println!("{line}: {}", p.message());
+            }
+            if found.is_empty() {
+                println!("Temiz.");
+            }
+            Ok(())
+        }
         Some(Cmd::Pdf { play, open }) => {
             let b = dactile::build::build(&play).map_err(|e| anyhow::anyhow!("{e}"))?;
             println!(

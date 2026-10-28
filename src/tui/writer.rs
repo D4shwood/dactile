@@ -9,6 +9,7 @@ use anyhow::Result;
 use dactile::buffer::{self, Buffer};
 use dactile::build::{self, Built, Failed};
 use dactile::cast::{self as dcast, Spec};
+use dactile::check::{self, Problem};
 use dactile::complete::{self, Action};
 use dactile::file::{self, LockState};
 use dactile::lex::Kind;
@@ -128,6 +129,10 @@ pub struct Writer {
     speller_rx: Option<Receiver<Result<Speller>>>,
     /// A PDF build running in the background, and since when.
     building: Option<(Receiver<Result<Built, Failed>>, Instant)>,
+    /// What would stop XeLaTeX, underlined faintly.
+    problems: Vec<Problem>,
+    /// Where F5 last stopped for a problem: F5 there again builds anyway.
+    stopped_at: Option<usize>,
     /// Words the play knows: names and words added by hand, lower case.
     known: HashSet<String>,
     spell_cache: HashMap<String, bool>,
@@ -254,6 +259,8 @@ impl Writer {
             speller: None,
             speller_rx: None,
             building: None,
+            problems: Vec::new(),
+            stopped_at: None,
             known: HashSet::new(),
             spell_cache: HashMap::new(),
             misspelt: Vec::new(),
@@ -343,6 +350,35 @@ impl Writer {
     fn relayout(&mut self) {
         self.doc = Doc::new(&self.buf.text);
         self.lay = render::layout(&self.buf.text, &self.doc, self.opts());
+        let known = check::known(&self.buf.text, &self.doc);
+        self.problems = check::problems(&self.buf.text, &self.doc, &known);
+    }
+
+    /// The problem the cursor is on, if any.
+    fn problem_here(&self) -> Option<&Problem> {
+        let at = self.buf.cursor;
+        self.problems
+            .iter()
+            .find(|p| p.span.start <= at && at <= p.span.end)
+    }
+
+    /// The quiet fixes, but not in the block being written as source.
+    fn fix_quietly(&mut self) {
+        let keep = (self.raw_here && !self.raw_all)
+            .then(|| self.block().map(|b| self.doc.blocks[b].span.clone()))
+            .flatten();
+        let edits = check::fixes(&self.problems, keep);
+        if edits.is_empty() {
+            return;
+        }
+        let at = self.buf.cursor;
+        let shift: usize = edits
+            .iter()
+            .filter(|e| e.range.start < at)
+            .map(|e| e.text.len() - e.range.len())
+            .sum();
+        self.buf.apply(&edits, at + shift);
+        self.relayout();
     }
 
     /// Lays out again after an edit; the cursor lands on a stop.
@@ -2846,6 +2882,7 @@ impl Writer {
         if !self.buf.dirty && !by_hand {
             return;
         }
+        self.fix_quietly();
         match file::write_atomic(&self.path, &self.buf.text) {
             Ok(()) => {
                 self.buf.dirty = false;
@@ -2875,7 +2912,30 @@ impl Writer {
         if self.building.is_some() {
             return;
         }
+        if !self.read_only {
+            self.fix_quietly();
+        }
         self.save(false);
+        if let Some(p) = check::stops(&self.problems) {
+            let at = p.span.start;
+            if self.stopped_at != Some(at) {
+                // Not built: the cursor goes there; F5 again builds anyway.
+                let msg = p.message();
+                self.stopped_at = Some(at);
+                self.buf.cursor = at;
+                self.buf.anchor = None;
+                self.raw_here = true;
+                self.relayout();
+                self.snap_back();
+                self.keep_visible();
+                self.say(
+                    &lang::f("{} (F5 yine de derler)", "{} (F5 builds anyway)", &[&msg]),
+                    true,
+                );
+                return;
+            }
+        }
+        self.stopped_at = None;
         if self.buf.dirty && !self.read_only {
             return;
         }
@@ -3311,6 +3371,12 @@ impl Writer {
                     style = style
                         .add_modifier(Modifier::UNDERLINED)
                         .underline_color(p.warn);
+                } else if let Some(b) = c.byte
+                    && self.problems.iter().any(|r| r.span.contains(&b))
+                {
+                    style = style
+                        .add_modifier(Modifier::UNDERLINED)
+                        .underline_color(p.faint);
                 }
                 if let (Some(s), Some(b)) = (&sel, c.byte)
                     && s.contains(&b)
@@ -3366,6 +3432,14 @@ impl Writer {
             let style = Style::default().fg(color);
             f.render_widget(
                 Paragraph::new(format!(" {msg}")).style(theme::base().patch(style)),
+                area,
+            );
+            return;
+        }
+        if let Some(pr) = self.problem_here() {
+            f.render_widget(
+                Paragraph::new(format!(" {}", pr.message()))
+                    .style(theme::base().patch(Style::default().fg(MUTED))),
                 area,
             );
             return;

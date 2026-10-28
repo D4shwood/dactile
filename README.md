@@ -110,7 +110,7 @@ screen the play's outline sits in the margin; a click goes there.
 | Alt+I | cover details (title, author, draft number…) and draft/final |
 | Alt+S | spelling suggestions for the word at the cursor |
 | Alt+P | show the cast and cover lines of the source |
-| F5, Alt+O | build the PDF next to the play (in the background, one XeLaTeX run); open it in the viewer |
+| F5, Alt+O | build the PDF next to the play (in the background, one XeLaTeX run); open it in the viewer. What would stop XeLaTeX is underlined faintly as you write (the cursor on it says what); `&`, `$`, `^`, a stray `_` and `%50` are escaped quietly on save; a brace left open or a command nobody defined stops F5 there, and F5 again builds anyway |
 | F3 / F4 / F8 | typewriter, scene focus, dim the rest |
 | F6 | the theme: paper, sepia, night, high contrast, dark |
 | F7 | page view: A4 sheets broken where the PDF breaks, numbered |

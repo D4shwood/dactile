@@ -24,18 +24,19 @@ Each milestone ends with a demo and a beta, published once approved.
      `dactile pdf <play>` from the shell. Dim moved to F8.
    - ~~Never opened by itself.~~ Done: Alt+O in the writer ("PDF ready … Alt+O
      opens it"), "Open the PDF" on ^P, `p` on the home screen.
-   - No build errors, and nothing that pulls the eye while writing:
+   - ~~No build errors~~ Done (`src/check.rs`, `dactile check <play>`; tested
+     against XeLaTeX itself: `cargo test --test broken_sources -- --ignored`),
+     and nothing that pulls the eye while writing:
      - A thin, faint underline where something would break; the detail in the
        status line only with the cursor there.
-     - Simple ones fixed on save, quietly: unescaped `& % $ # _` in dialogue,
-       as the forms already do.
-     - A check before the build: an unclosed `{`, an unknown command, an
-       undefined character, a broken `\ic` or direction. If it finds one, no
-       build, and the cursor goes there.
-     - If XeLaTeX still fails (`-interaction=nonstopmode -halt-on-error`):
-       one line in the status line, the log a key away, and the case added to
-       the check.
-     - A test with broken sources in `tex/test`.
+     - Fixed on save, quietly: `&`, `$`, `^`, a `_` outside a line, `%`
+       before a number (not in the block being written as source, nor in
+       environments). Typing and pasting escaped these already.
+     - Before the build: a brace left open or one too many, a command nobody
+       defined (`\sein` → "write `\se{}in`"). No build, the cursor goes
+       there; F5 again builds anyway.
+     - If XeLaTeX still fails: one line in the status line with the play's
+       line number. Left: the log a key away; add each new case to the check.
 2. **M9 structure** → 0.2.0-beta.2
    - An outline board, two views, a key between them:
      - a list: acts and scenes, a summary under each (the scene navigator,

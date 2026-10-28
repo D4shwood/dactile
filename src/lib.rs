@@ -6,6 +6,7 @@
 pub mod buffer;
 pub mod build;
 pub mod cast;
+pub mod check;
 pub mod complete;
 pub mod config;
 pub mod file;
