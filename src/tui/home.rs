@@ -150,6 +150,13 @@ impl Home {
                 }
             }
             KeyCode::Char('n') => self.form = Some(new_play_form()),
+            KeyCode::Char('p') => {
+                if let Some(p) = self.plays.get(self.sel)
+                    && let Err(e) = dactile::build::open(&dactile::build::pdf_path(&p.path))
+                {
+                    self.message = Some((format!("{e:#}"), true));
+                }
+            }
             KeyCode::Char('o') => {
                 let dir = format!("{}/", config::tilde(&cfg.plays_dir()));
                 self.form = Some(Form {
@@ -901,6 +908,7 @@ impl Home {
                 ("o", lang::l("dosya aç", "open a file")),
                 ("d", lang::l("kopya", "copy")),
                 ("f", lang::l("yeni taslak", "new draft")),
+                ("p", "PDF"),
                 ("F2", lang::l("ad", "rename")),
                 ("Del", lang::l("çöpe", "trash")),
                 ("s", lang::l("ayarlar", "settings")),

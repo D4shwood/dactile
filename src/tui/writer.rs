@@ -7,6 +7,7 @@ use super::popup::{self, Field, Form, FormKind, Menu, Verbs};
 use super::theme::{self, BEIGE, CLARET, FAINT, MUTED, WARN};
 use anyhow::Result;
 use dactile::buffer::{self, Buffer};
+use dactile::build::{self, Built, Failed};
 use dactile::cast::{self as dcast, Spec};
 use dactile::complete::{self, Action};
 use dactile::file::{self, LockState};
@@ -125,6 +126,8 @@ pub struct Writer {
     sidecar: Sidecar,
     speller: Option<Speller>,
     speller_rx: Option<Receiver<Result<Speller>>>,
+    /// A PDF build running in the background, and since when.
+    building: Option<(Receiver<Result<Built, Failed>>, Instant)>,
     /// Words the play knows: names and words added by hand, lower case.
     known: HashSet<String>,
     spell_cache: HashMap<String, bool>,
@@ -250,6 +253,7 @@ impl Writer {
             sidecar: Sidecar::load(path).unwrap_or_default(),
             speller: None,
             speller_rx: None,
+            building: None,
             known: HashSet::new(),
             spell_cache: HashMap::new(),
             misspelt: Vec::new(),
@@ -552,8 +556,14 @@ impl Writer {
                     false,
                 );
             }
-            KeyCode::F(5) => {
+            KeyCode::F(5) => self.build(),
+            KeyCode::F(8) => {
                 self.dim = !self.dim;
+            }
+            KeyCode::Char('o') if alt => {
+                if let Err(e) = build::open(&build::pdf_path(&self.path)) {
+                    self.say(&format!("{e:#}"), true);
+                }
             }
             KeyCode::F(6) => {
                 self.theme = theme::next_theme(&self.theme).to_string();
@@ -2761,6 +2771,25 @@ impl Writer {
                 ),
             }
         }
+        if let Some((rx, since)) = &self.building {
+            let since = *since;
+            match rx.try_recv() {
+                Ok(result) => {
+                    self.building = None;
+                    self.built(result);
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => self.building = None,
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    // The message stays while it runs.
+                    let secs = since.elapsed().as_secs();
+                    self.message = Some((
+                        lang::f("PDF derleniyor… {} sn", "Building the PDF… {} s", &[&secs]),
+                        false,
+                    ));
+                    self.message_at = Instant::now();
+                }
+            }
+        }
         if self.checked.elapsed() >= CHECK_EVERY {
             self.checked = Instant::now();
             self.check_disk();
@@ -2823,6 +2852,9 @@ impl Writer {
                 self.conflict = false;
                 self.disk_time = file::modified(&self.path);
                 let _ = file::snapshot(&self.history, &self.buf.text, false);
+                // An .aux there already gets the casts: a run by hand is
+                // right in one pass too.
+                let _ = build::seed(&self.path, &build::casts(&self.doc.outline), false);
                 if by_hand {
                     self.say(lang::l("Kaydedildi.", "Saved."), false);
                 }
@@ -2835,6 +2867,43 @@ impl Writer {
                 ),
                 true,
             ),
+        }
+    }
+
+    /// F5: the PDF, built in the background from the saved play.
+    fn build(&mut self) {
+        if self.building.is_some() {
+            return;
+        }
+        self.save(false);
+        if self.buf.dirty && !self.read_only {
+            return;
+        }
+        let (tx, rx) = channel();
+        let path = self.path.clone();
+        std::thread::spawn(move || {
+            let _ = tx.send(build::build(&path));
+        });
+        self.building = Some((rx, Instant::now()));
+        self.say(lang::l("PDF derleniyor…", "Building the PDF…"), false);
+    }
+
+    fn built(&mut self, result: Result<Built, Failed>) {
+        match result {
+            Ok(b) => {
+                let pages = b.pages.map_or(String::new(), |n| {
+                    lang::f(", {} sayfa", ", {} pages", &[&n])
+                });
+                self.say(
+                    &lang::f(
+                        "PDF hazır{} ({} sn). Alt+O ile aç.",
+                        "PDF ready{} ({} s). Alt+O opens it.",
+                        &[&pages, &format!("{:.1}", b.took.as_secs_f32())],
+                    ),
+                    false,
+                );
+            }
+            Err(e) => self.say(&lang::f("PDF olmadı: {}", "No PDF: {}", &[&e]), true),
         }
     }
 
@@ -3507,7 +3576,9 @@ fn palette_items(q: &str) -> Vec<PItem> {
         ),
         ("Daktilo modu", "Typewriter mode", "F3", k(F(3), n)),
         ("Sahne odağı", "Scene focus", "F4", k(F(4), n)),
-        ("İmleç dışını soldur", "Dim the rest", "F5", k(F(5), n)),
+        ("PDF derle", "Build the PDF", "F5", k(F(5), n)),
+        ("PDF'i aç", "Open the PDF", "Alt+O", k(Char('o'), a)),
+        ("İmleç dışını soldur", "Dim the rest", "F8", k(F(8), n)),
         ("Sayfa görünümü", "Page view", "F7", k(F(7), n)),
         (
             "Animasyonları aç/kapat",

@@ -35,6 +35,13 @@ enum Cmd {
         #[arg(long)]
         aux: bool,
     },
+    /// Builds a play's PDF next to it, in one XeLaTeX run.
+    Pdf {
+        play: PathBuf,
+        /// Open it in the desktop's viewer afterwards.
+        #[arg(long)]
+        open: bool,
+    },
 }
 
 fn main() -> Result<()> {
@@ -42,6 +49,20 @@ fn main() -> Result<()> {
     match cli.cmd {
         Some(Cmd::Cast { play }) => print_cast(&play),
         Some(Cmd::Outline { play, aux }) => print_outline(&play, aux),
+        Some(Cmd::Pdf { play, open }) => {
+            let b = dactile::build::build(&play).map_err(|e| anyhow::anyhow!("{e}"))?;
+            println!(
+                "{} ({} sayfa, {} geçiş, {:.1} sn)",
+                b.pdf.display(),
+                b.pages.map_or("?".into(), |n| n.to_string()),
+                b.runs,
+                b.took.as_secs_f32()
+            );
+            if open {
+                dactile::build::open(&b.pdf)?;
+            }
+            Ok(())
+        }
         Some(Cmd::Install) => {
             for line in install::install()? {
                 println!("{line}");
@@ -141,13 +162,7 @@ fn print_outline(path: &PathBuf, aux: bool) -> Result<()> {
     let blocks = dactile::lex::blocks(&text, source::split(&text).body, &cast);
     let o = dactile::outline::Outline::of(&text, &blocks, &cast);
     if aux {
-        for s in o.scenes.iter().filter(|s| !s.cast.is_empty()) {
-            println!(
-                "\\tiyatrocast{{{}}}{{{}}}",
-                s.key(&o.acts),
-                s.cast.join(",")
-            );
-        }
+        print!("{}", dactile::build::casts(&o));
         return Ok(());
     }
     let name = |a: &str| cast.get(a).map_or(a.to_string(), |c| c.script.clone());

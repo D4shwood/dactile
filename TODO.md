@@ -11,21 +11,19 @@ setup, the README and release. Published as 0.1.0-beta.3.
 Each milestone ends with a demo and a beta, published once approved.
 
 1. **M8 PDF builds** → 0.2.0-beta.1
-   - One pass, not two:
-     - The class reads `play.cast` if it is there: who is in each scene, for
-       the headings. Dactile writes it on every save and before each build,
-       from the outline (the same as the class's `.aux`, which `--aux` checks).
-     - A plain `xelatex` run is right in one pass too.
-     - At each scene's end the class checks the file against who spoke; if
-       they differ, LaTeX's "rerun" warning, and the `.aux` as before. With no
-       file, the old way.
-     - Later data can use the same file: entrances, actors.
-   - F5 or "PDF" on ^P: one XeLaTeX run in the background, writing goes on,
-     progress in the status line. Every output beside the play, as by hand
-     (`library::OUTPUTS` already follows them). One PDF, the play's own
-     options.
-   - Never opened by itself. Open it with `xdg-open` from the "PDF ready — o
-     to open" message, from "Open PDF" on ^P, or with a key on the home screen.
+   - ~~One pass, not two.~~ Done: Dactile writes the scene casts into the
+     `.aux` (from the outline, what the class would write) before each build,
+     and on every save once there is one, so a plain `xelatex` is right in
+     one pass too. No second file to go stale: the class's own run rewrites
+     the `.aux`. At each scene's end the class checks the heading's cast
+     against who spoke; if they differ, "Rerun to get them right", and the
+     build runs once more.
+   - ~~F5~~ Done: one XeLaTeX run in the background with the class that came
+     with the app (`TEXINPUTS`; a class beside the play still wins), writing
+     goes on, seconds in the status line; every output beside the play;
+     `dactile pdf <play>` from the shell. Dim moved to F8.
+   - ~~Never opened by itself.~~ Done: Alt+O in the writer ("PDF ready … Alt+O
+     opens it"), "Open the PDF" on ^P, `p` on the home screen.
    - No build errors, and nothing that pulls the eye while writing:
      - A thin, faint underline where something would break; the detail in the
        status line only with the cursor there.

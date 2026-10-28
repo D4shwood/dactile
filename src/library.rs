@@ -371,7 +371,7 @@ pub fn template(title: &str, author: &str, lang: Lang) -> String {
             "% Dactile ile yazılıyor. \\ yazınca öneriler açılır; \\kisaltma ve boşluk bir\n\
              % replik başlatır, \\kisaltmado bir yönerge; satır başında # başlıklar\n\
              % (#sahne, #perde, #önsöz, #notlar). F1 bütün tuşları gösterir.\n\
-             % Derlemek için: xelatex iki kez.\n",
+             % PDF: F5 (ya da elle xelatex; Dactile dışında yazılınca iki kez).\n",
             "",
             "Birinci Perde",
             "İç — Gece",
@@ -382,7 +382,7 @@ pub fn template(title: &str, author: &str, lang: Lang) -> String {
             "% Written with Dactile. A backslash opens suggestions; \\alias and a space\n\
              % starts a line, \\aliasdo a direction; # at a line's start a heading\n\
              % (#scene, #act, #preface, #notes). F1 shows every key.\n\
-             % To compile: xelatex twice.\n",
+             % PDF: F5 (or xelatex by hand; twice after editing outside Dactile).\n",
             "\\renewcommand{\\casttitlename}{CAST}\n\\renewcommand{\\acttitlename}{Act}\n\
              \\renewcommand{\\scenetitlename}{Scene}\n\\renewcommand{\\curtainlocalizedtext}{Curtain}\n\
              \\renewcommand{\\scriptendlocalizedtext}{The End}\n\\renewcommand{\\draftlocalizedtext}{DRAFT}\n\

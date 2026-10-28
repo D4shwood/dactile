@@ -1,7 +1,8 @@
 #!/bin/sh
 # Compiles the example play with the class in draft and final mode (and with
 # the director's notes left out), a new play with nobody in it yet, and checks
-# the scene casts the class wrote. Run from anywhere: tex/test/run.sh
+# the scene casts the class wrote, the rerun warning when they were stale, and
+# a run with the casts seeded as Dactile does. Run from anywhere: tex/test/run.sh
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(mktemp -d)
@@ -33,3 +34,17 @@ expect '\tiyatrocast{I-1}{se,oz,ih}'
 expect '\tiyatrocast{I-2}{ka,co,hep,se}'
 expect '\tiyatrocast{II-1}{oz,ih}'
 echo "ok: scene casts"
+
+# The first run had no casts: it must have asked for a rerun; the second not.
+rm -f ornek-oyun.aux
+xelatex -interaction=nonstopmode -halt-on-error ornek-oyun.tex > /dev/null 2>&1
+grep -q 'Rerun to get them right' ornek-oyun.log || { echo "FAIL: no rerun warning"; exit 1; }
+xelatex -interaction=nonstopmode -halt-on-error ornek-oyun.tex > /dev/null 2>&1
+! grep -q 'Rerun to get them right' ornek-oyun.log || { echo "FAIL: rerun warning on a right .aux"; exit 1; }
+echo "ok: rerun warning"
+
+# Seeded as Dactile seeds it: one run, no warning.
+printf '\\relax\n\\tiyatrocast{I-1}{se,oz,ih}\n\\tiyatrocast{I-2}{ka,co,hep,se}\n\\tiyatrocast{II-1}{oz,ih}\n' > ornek-oyun.aux
+xelatex -interaction=nonstopmode -halt-on-error ornek-oyun.tex > /dev/null 2>&1
+! grep -q 'Rerun to get them right' ornek-oyun.log || { echo "FAIL: seeded run asks for a rerun"; exit 1; }
+echo "ok: one pass when seeded"

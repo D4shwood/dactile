@@ -4,6 +4,7 @@
 //! written back byte for byte. The terminal interface lives in the binary.
 
 pub mod buffer;
+pub mod build;
 pub mod cast;
 pub mod complete;
 pub mod config;
@@ -52,6 +53,6 @@ pub mod class {
 mod tests {
     #[test]
     fn class_version() {
-        assert_eq!(super::class::version(), "1.1.0");
+        assert_eq!(super::class::version(), "1.2.0");
     }
 }

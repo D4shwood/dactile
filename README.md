@@ -75,7 +75,7 @@ from as a tree, the newest on top, and the home screen opens on the play you
 worked on last. F2 renames a play right in its row, as a file manager does:
 type the new title, and its file, and the files that go with it, follow (a
 draft keeps its number at the end of its file name). Shift+F2 gives the title
-and the file name separately. Del, pressed twice, sends it to the desktop's trash, and `u` brings
+and the file name separately. `p` opens its PDF. Del, pressed twice, sends it to the desktop's trash, and `u` brings
 it back.
 
 | Type | You get |
@@ -110,7 +110,8 @@ screen the play's outline sits in the margin; a click goes there.
 | Alt+I | cover details (title, author, draft number…) and draft/final |
 | Alt+S | spelling suggestions for the word at the cursor |
 | Alt+P | show the cast and cover lines of the source |
-| F3 / F4 / F5 | typewriter, scene focus, dim the rest |
+| F5, Alt+O | build the PDF next to the play (in the background, one XeLaTeX run); open it in the viewer |
+| F3 / F4 / F8 | typewriter, scene focus, dim the rest |
 | F6 | the theme: paper, sepia, night, high contrast, dark |
 | F7 | page view: A4 sheets broken where the PDF breaks, numbered |
 | ^Z ^Y, ^C ^X ^V | undo, redo, copy, cut, paste |
@@ -156,8 +157,14 @@ read-only. Earlier versions go to `~/.local/share/dactile/history`.
   the end of the source line, so a `%` there joins the next line to it.
 
 ```sh
-xelatex oyun.tex && xelatex oyun.tex
+xelatex oyun.tex
 ```
+
+Who is in each scene, under its heading, the class only learns at the scene's
+end, so it keeps the casts in the `.aux` for the next run. Dactile writes them
+there before each F5, and on every save once there is an `.aux`, so one run is
+enough; after editing elsewhere, the class
+warns "Rerun to get them right", and a second run fixes it.
 
 The class grew out of [tiyatro-latex](https://github.com/D4shwood/tiyatro-latex)
 and was rewritten for Dactile. The idea of characters as commands comes from
@@ -166,7 +173,8 @@ its code is used here.
 
 ## Roadmap
 
-PDFs from inside the app, actor copies, importing from Word and more: see
+The outline board, moving scenes, entrances and exits, actor copies,
+importing from Word and more: see
 [TODO.md](TODO.md).
 
 ## License

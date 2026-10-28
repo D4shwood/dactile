@@ -75,8 +75,8 @@ karakter kartları da gelir). Taslaklar geldikleri oyunun üstünde ağaç gibi
 birikir, en yenisi en üstte; ana ekran en son çalıştığın oyunda açılır. F2
 dosya yöneticisindeki gibi oyunun adını kendi satırında değiştirir: yeni başlığı
 yazarsın, dosya adı ve yanındaki dosyalar da onu izler (taslak, dosya adının
-sonundaki numarasını korur). Shift+F2 başlığı ve dosya adını ayrı ayrı sorar;
-iki kez Del onu masaüstünün çöp kutusuna atar, `u` geri getirir.
+sonundaki numarasını korur). Shift+F2 başlığı ve dosya adını ayrı ayrı sorar; `p`
+PDF'ini açar; iki kez Del onu masaüstünün çöp kutusuna atar, `u` geri getirir.
 
 | Yazınca | Olan |
 |---|---|
@@ -111,7 +111,8 @@ durur; tıklayınca oraya gider.
 | Alt+I | oyun bilgisi (başlık, yazar, taslak no…) ve taslak/final |
 | Alt+S | imleçteki kelime için yazım önerileri |
 | Alt+P | kaynaktaki kişi ve oyun bilgisi satırlarını aç |
-| F3 / F4 / F5 | daktilo, sahne odağı, gerisini soldur |
+| F5, Alt+O | PDF'i oyunun yanına derle (arka planda, tek XeLaTeX geçişi); görüntüleyicide aç |
+| F3 / F4 / F8 | daktilo, sahne odağı, gerisini soldur |
 | F6 | tema: kâğıt, sepya, gece, yüksek kontrast, koyu |
 | F7 | sayfa görünümü: PDF'in böldüğü yerlerden bölünmüş, numaralı A4 yapraklar |
 | ^Z ^Y, ^C ^X ^V | geri al, yinele, kopyala, kes, yapıştır |
@@ -158,8 +159,14 @@ Sınıf [tex/](tex/) klasöründe; Dactile onu kendi içinde taşır.
   satırın sonunda biter; oradaki bir `%` sonraki satırı ona ekler.
 
 ```sh
-xelatex oyun.tex && xelatex oyun.tex
+xelatex oyun.tex
 ```
+
+Sınıf, her sahnede kimin olduğunu (başlığın altındaki liste) ancak sahne bitince
+öğrenir; bu yüzden listeleri bir sonraki geçiş için `.aux` dosyasında tutar.
+Dactile onları her F5'ten önce, `.aux` varken her kayıtta da oraya yazar;
+böylece tek geçiş yeter. Başka bir
+yerde düzenlendiyse sınıf "Rerun to get them right" der; ikinci geçiş düzeltir.
 
 Sınıf [tiyatro-latex](https://github.com/D4shwood/tiyatro-latex)'ten doğdu ve
 Dactile için yeniden yazıldı. Karakterleri komut olarak tanımlama fikri Davide
@@ -168,7 +175,8 @@ geliyor; onun kodu burada kullanılmıyor.
 
 ## Yol haritası
 
-Uygulamanın içinden PDF, oyuncu kopyaları, Word'den içe aktarma ve dahası:
+İskelet panosu, sahne taşıma, giriş-çıkışlar, oyuncu kopyaları, Word'den
+içe aktarma ve dahası:
 bkz. [TODO.md](TODO.md).
 
 ## Lisans

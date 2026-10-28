@@ -38,11 +38,13 @@
 % the margin, so a rehearsal can say "line 112". Dactile shows the same numbers.
 
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesExplPackage{tiyatro-core}{2026-10-26}{1.1.0}{Dactile: characters, lines, scenes, acts}
+\ProvidesExplPackage{tiyatro-core}{2026-10-28}{1.2.0}{Dactile: characters, lines, scenes, acts}
 \RequirePackage{xspace}
 
 \msg_new:nnn { tiyatro } { hash }
   { '\iow_char:N\##1'~is~not~a~heading;~printed~as~it~is.~Write~\iow_char:N\\\iow_char:N\#~for~a~plain~\iow_char:N\#. }
+\msg_new:nnn { tiyatro } { rerun }
+  { Scene~casts~have~changed.~Rerun~to~get~them~right. }
 \msg_new:nnn { tiyatro } { redefined }
   { The~alias~'#1'~replaces~an~existing~command~\iow_char:N\\#1. }
 
@@ -57,6 +59,7 @@
 \seq_new:N \g__tiy_cover_seq         % aliases of starred characters
 \seq_new:N \g__tiy_heard_seq         % aliases in the current scene, first seen first
 \tl_new:N \g__tiy_scene_tl           % "I-2": the current scene, for the .aux file
+\bool_new:N \g__tiy_rerun_bool       % a heading showed another cast than the scene had
 \int_new:N \g__tiy_group_int
 \int_new:N \g__tiy_number_int
 \dim_new:N \g__tiy_widest_dim
@@ -290,11 +293,20 @@
   { \seq_if_in:NnF \g__tiy_heard_seq {#1} { \seq_gput_right:Nn \g__tiy_heard_seq {#1} } }
 
 % Who was in each scene is only known at its end, so it goes to the .aux file
-% and the heading shows it from the second run on.
+% and the heading shows it from the second run on. Dactile writes the casts
+% into the .aux before a run, so one run is enough; if the heading still showed
+% another cast than the scene had, a rerun warning.
 \cs_new_protected:Npn \tiyatrocast #1#2 { \tl_gset:cn { g__tiy_cast_#1_tl } {#2} }
 
 \cs_new_protected:Npn \__tiy_scene_end:
   {
+    \tl_if_empty:NF \g__tiy_scene_tl
+      {
+        \tl_set:Ne \l_tmpa_tl { \seq_use:Nn \g__tiy_heard_seq { , } }
+        \tl_set:Ne \l_tmpb_tl
+          { \tl_if_exist:cT { g__tiy_cast_ \g__tiy_scene_tl _tl } { \tl_use:c { g__tiy_cast_ \g__tiy_scene_tl _tl } } }
+        \tl_if_eq:NNF \l_tmpa_tl \l_tmpb_tl { \bool_gset_true:N \g__tiy_rerun_bool }
+      }
     \bool_lazy_or:nnF { \tl_if_empty_p:N \g__tiy_scene_tl } { \seq_if_empty_p:N \g__tiy_heard_seq }
       {
         \iow_now:Ne \@auxout
@@ -512,6 +524,7 @@
     \__tiy_scene_end:
     \__tiy_curtain:n { \curtainlocalizedtext }
     \__tiy_curtain:n { \scriptendlocalizedtext }
+    \bool_if:NT \g__tiy_rerun_bool { \msg_warning:nn { tiyatro } { rerun } }
   }
 
 % ------------------------------------------------------------------ cast table
