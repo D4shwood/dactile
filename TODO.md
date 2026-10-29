@@ -83,6 +83,9 @@ Each milestone ends with a demo and a beta, published once approved.
 
 ## 1.x
 
+- A brutalist home screen, on `b`: kept on the `brutal-home` branch (raw
+  concrete grey, black rules, one oxide red), hidden until it is developed
+
 - Revision tracking: version diffs and revision marks
 - A play as a folder, acts in separate files with `\input`
 - Sharing within a troupe; director's notes
