@@ -1,4 +1,4 @@
-The third beta of Dactile, a terminal app for writing stage plays in the
+The first beta of Dactile 0.2, a terminal app for writing stage plays in the
 syntax of the tiyatro XeLaTeX class. Linux x86_64 only for now.
 
 ```sh
@@ -7,53 +7,52 @@ cd dactile-*-x86_64-linux
 ./dactile install
 ```
 
-Run `dactile install` again after updating: the class is new too (1.1.0).
+Run `dactile install` again after updating: the class is new too (1.2.0).
 
-## New since beta.2
+## New since 0.1.0-beta.3
 
-**The class (1.1.0)**
-- Headings as `#` lines: `#perde Title`, `#sahne Place — Time`,
-  `#sahne[2.1] Place`, `#önsöz`, `#notlar` (and `#act`, `#scene`, `#preface`,
-  `#notes`). `\perde[…]` and `\sahne[…]` work as before; `\#` prints a `#`.
-- A preface (`\onsoz`) and notes for the director (`\notlar`), each on a page
-  of its own. Options: `nohash`, and `nonotes` to leave the notes out of a copy.
-- A play with nobody in its cast yet compiles (it did not, so new plays failed).
+**The PDF, from inside the app**
+- F5 builds the PDF next to the play, in the background, in one XeLaTeX run:
+  Dactile writes who is in each scene into the `.aux` first, so the scene
+  headings are right the first time. A plain `xelatex` by hand is right in one
+  run too once Dactile has saved the play.
+- The class (1.2.0) says "Rerun to get them right" when a heading showed
+  another cast than the scene had; the build then runs once more by itself.
+- Alt+O opens the PDF, `p` on the home screen too, "Open the PDF" on ^P; it
+  never opens by itself. If a build fails, Alt+L opens its log.
+- `dactile pdf <play>` builds from the shell.
+- Dim the rest moved from F5 to F8.
 
-**The page**
-- The play on a paper page in the middle of the screen; five themes on F6:
-  paper, sepia, night, high contrast, dark.
-- The cover and the cast table drawn as the PDF prints them; prefaces, notes,
-  old `\section*` headings and `\clearpage` too; the curtain at each act's end.
-- F7: page view, A4-shaped sheets broken where the PDF breaks, numbered.
-- On a wide screen, the play's outline in the margin; a click goes there.
+**No build errors**
+- What would stop XeLaTeX is underlined faintly as you write; the cursor on it
+  says what in the status line.
+- `&`, `$`, `^`, a stray `_` and a `%` before a number (`%50`) are escaped
+  quietly on save.
+- A brace left open or one too many, or a command nobody defined, stops F5 at
+  its place (`\sein` → "write `\se{}in`"); F5 again builds anyway.
+- `dactile check <play>` lists them without changing anything.
 
-**Writing**
-- `#` at a line's start opens the headings; `SELİN:` makes a line for SELİN;
-  Tab takes the faint suggestion of who speaks next; a pasted draft takes the
-  play's shape (`NAME: …` lines, `(…)` directions, `#…` headings).
-- ^G: mark acts and scenes, hide them (as `%~` lines, out of the PDF), throw
-  them in the play's trash, put them back, or destroy them (a copy stays in
-  the history).
-- ^O: merge two characters, or split one, giving the scenes you pick to a new
-  character.
-- ^P: the command palette.
-- F1: a keyboard; press a key or point at it to see what it does.
-- Forms escape `& % $ # _` in what they write (a `&` on the cover broke the
-  PDF before).
-
-**Around it**
-- The home screen: the plays beside a card of the chosen one; `d` copies a
-  play, `f` starts a new draft of it.
-- Animations: gliding scroll, headings typing themselves out, windows
-  unrolling, messages fading. A setting turns them off.
+**The home screen**
+- The chosen play's first page stands beside the list, as tall as the screen,
+  laid out as the writer lays it out, in its theme.
+- Under the list: the play as a strip of its scenes, the scenes with their
+  times, and who speaks how much.
+- Drafts stack upward as a tree, the newest on top, and the screen opens on
+  the play worked on last.
+- F2 renames a play in its row, as a file manager does; its files follow and a
+  draft keeps its number. Shift+F2 gives the title and file name apart.
+- Del twice sends a play to the desktop's trash; `u` brings it back.
+- `?` shows every key; the key bar keeps the common ones.
 
 It is a beta: keep a copy of anything precious, and report what breaks.
 
 ---
 
-Dactile'ın üçüncü betası. Başlıca yenilikler: `#sahne`, `#perde`, `#önsöz`,
-`#notlar` başlıkları; kâğıt sayfa ve beş tema; A4 sayfa görünümü (F7); kenar
-haritası; sahneleri gizleme, çöp kutusu ve yok etme (^G); karakter birleştirme
-ve bölme (^O); komut paleti (^P); klavyeli yardım (F1); ana ekranda kopya ve
-yeni taslak; animasyonlar. Güncelledikten sonra `dactile install`'u yeniden
-çalıştır: sınıf da yeni (1.1.0). Ayrıntılar README.tr.md dosyasında.
+Dactile 0.2'nin ilk betası. Başlıca yenilikler: PDF artık uygulamanın içinden
+F5 ile, arka planda ve tek XeLaTeX geçişinde derleniyor (Alt+O açar, Alt+L
+logu açar); XeLaTeX'i durduracak yerler yazarken soluk çizgiyle gösteriliyor,
+basit olanlar kayıtta sessizce düzeltiliyor; ana ekranda seçili oyunun ilk
+sayfası, sahne şeridi ve kim ne kadar konuşuyor; taslaklar yukarı doğru ağaç;
+F2 ile satırda ad değiştirme; çöp kutusu. "Gerisini soldur" F5'ten F8'e
+taşındı. Güncelledikten sonra `dactile install`'u yeniden çalıştır: sınıf da
+yeni (1.2.0). Ayrıntılar README.tr.md dosyasında.

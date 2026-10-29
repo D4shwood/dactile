@@ -10,7 +10,7 @@ setup, the README and release. Published as 0.1.0-beta.3.
 
 Each milestone ends with a demo and a beta, published once approved.
 
-1. ~~**M8 PDF builds**~~ Done → 0.2.0-beta.1
+1. ~~**M8 PDF builds**~~ Done, published as 0.2.0-beta.1
    - ~~One pass, not two.~~ Done: Dactile writes the scene casts into the
      `.aux` (from the outline, what the class would write) before each build,
      and on every save once there is one, so a plain `xelatex` is right in
