@@ -168,7 +168,8 @@ Sınıf [tex/](tex/) klasöründe; Dactile onu kendi içinde taşır.
   - kişiler tablosuna girmeyenler (`\gizlikarakter`)
   - replik içinde geçen ad (`\setinlinename`)
 - **Replik** kaynak satırın sonuna kadar sürer; ad kendi sütununda durur.
-- **Yönergeler:** `\aliasdo` zincirleri, `\action`, `\stagedir`, `\middir`, `\ic`, `\beat`.
+- **Yönergeler:** `\aliasdo` zincirleri, `\action`, `\stagedir`, `\middir`, `\ic`, `\beat`;
+  giriş-çıkışlar, `\girer{se,oz}` → (SELİN ile OZAN girerler.), `\cikar{se}`.
 - **Perdeler ve sahneler** otomatik numaralanır. Sahne başlığında o sahnede kimlerin olduğu yazar; bunun için iki derleme gerekir.
 - **Başlıklar `#` satırı olarak:** `#perde Başlık`, `#sahne Yer — Zaman`,
   `#sahne[2.1] Yer`, `#önsöz`, `#notlar` (`#act`, `#scene`, `#preface`,
@@ -185,8 +186,8 @@ Sınıf [tex/](tex/) klasöründe; Dactile onu kendi içinde taşır.
   | final | serif | tek | yok | yıldızlı karakterler |
 
 - **Seçenekler:** `nohash` `#`'i yeniden sıradan bir karakter yapar; `nonotes`
-  rejisöre notları o kopyadan çıkarır. Bir `#` satırı, replik gibi, kaynak
-  satırın sonunda biter; oradaki bir `%` sonraki satırı ona ekler.
+  rejisöre notları o kopyadan çıkarır. Bir `#` satırı kaynak satırın sonunda
+  ya da üstündeki bir `%` yorumunda biter.
 
 ```sh
 xelatex oyun.tex

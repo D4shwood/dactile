@@ -168,7 +168,8 @@ read-only. Earlier versions go to `~/.local/share/dactile/history`.
   line (`\setinlinename`)
 - a line of dialogue runs to the end of the source line, with the name in a
   column of its own
-- directions: `\aliasdo` chains, `\action`, `\stagedir`, `\middir`, `\ic`, `\beat`
+- directions: `\aliasdo` chains, `\action`, `\stagedir`, `\middir`, `\ic`, `\beat`;
+  entrances and exits, `\girer{se,oz}` → (SELİN ile OZAN girerler.), `\cikar{se}`
 - acts and scenes with automatic numbers. Each scene heading lists who appears
   in it; this needs a second run.
 - headings as `#` lines: `#perde Title`, `#sahne Place — Time`,
@@ -185,8 +186,8 @@ read-only. Earlier versions go to `~/.local/share/dactile/history`.
   | final | serif | single | none | the starred characters |
 
 - options: `nohash` makes `#` an ordinary character again; `nonotes` leaves the
-  director's notes out of a copy. A `#` line, like a line of dialogue, ends at
-  the end of the source line, so a `%` there joins the next line to it.
+  director's notes out of a copy. A `#` line ends at the end of the source
+  line, or at a `%` comment on it.
 
 ```sh
 xelatex oyun.tex

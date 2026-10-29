@@ -28,6 +28,12 @@ pub enum Kind {
     Action {
         text: Range<usize>,
     },
+    /// `\girer{se,oz}` or `\cikar{se}`: an entrance or an exit, printed as a
+    /// direction.
+    Move {
+        enter: bool,
+        aliases: Vec<String>,
+    },
     /// `\stagedir{…}` (centred) or `\middir{…}` (right).
     Stage {
         text: Range<usize>,
@@ -119,7 +125,11 @@ impl Block {
     pub fn numbered(&self) -> bool {
         matches!(
             self.kind,
-            Kind::Line { .. } | Kind::Do { .. } | Kind::Action { .. } | Kind::Stage { .. }
+            Kind::Line { .. }
+                | Kind::Do { .. }
+                | Kind::Action { .. }
+                | Kind::Stage { .. }
+                | Kind::Move { .. }
         )
     }
 }
@@ -270,6 +280,18 @@ fn classify(text: &str, span: Range<usize>, cast: &Cast) -> Kind {
                 },
             }
         }
+        "girer" | "cikar" => match tex::group(text, after) {
+            Some(arg) => Kind::Move {
+                enter: name == "girer",
+                aliases: arg
+                    .inner
+                    .split(',')
+                    .map(|a| a.trim().to_string())
+                    .filter(|a| !a.is_empty())
+                    .collect(),
+            },
+            None => Kind::Other,
+        },
         "perde" | "act" => Kind::Act {
             title: tex::optional(text, after)
                 .map(|o| o.inner.to_string())
@@ -664,6 +686,13 @@ mod tests {
                 Kind::Line { alias, .. } => alias.clone(),
                 Kind::Do { aliases, .. } => format!("{}do", aliases.join("+")),
                 Kind::Action { .. } => "action".into(),
+                Kind::Move { enter, aliases } => {
+                    format!(
+                        "{}:{}",
+                        if *enter { "girer" } else { "cikar" },
+                        aliases.join(",")
+                    )
+                }
                 Kind::Stage { right, .. } => if *right { "middir" } else { "stagedir" }.into(),
                 Kind::Act { title, .. } => format!("perde:{title}"),
                 Kind::Scene { place, label, .. } => {

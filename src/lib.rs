@@ -20,6 +20,7 @@ pub mod shelf;
 pub mod sidecar;
 pub mod source;
 pub mod spell;
+pub mod stage;
 pub mod structure;
 pub mod tex;
 pub mod timing;

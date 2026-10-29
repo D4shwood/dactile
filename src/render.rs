@@ -1048,6 +1048,28 @@ impl Builder<'_> {
                     self.flow(b, &glyphs, 0, self.width, Align::Center, None, row + used);
                 }
             }
+            Kind::Move { enter, aliases } => {
+                // As the class prints it: (SELİN ile OZAN girerler.)
+                let names: Vec<String> = aliases
+                    .iter()
+                    .map(|a| self.doc.cast.get(a).map_or(a.clone(), |c| c.script.clone()))
+                    .collect();
+                let and = format!(" {} ", lang::l("ile", "and"));
+                let who = match names.split_last() {
+                    Some((last, rest)) if !rest.is_empty() => {
+                        format!("{}{and}{last}", rest.join(", "))
+                    }
+                    _ => names.join(""),
+                };
+                let verb = match (enter, names.len() > 1) {
+                    (true, false) => lang::l("girer", "enters"),
+                    (true, true) => lang::l("girerler", "enter"),
+                    (false, false) => lang::l("çıkar", "exits"),
+                    (false, true) => lang::l("çıkarlar", "exit"),
+                };
+                let glyphs = chip(&format!("({who} {verb}.)"), Style::Direction, lead);
+                self.flow(b, &glyphs, 0, self.width, Align::Left, Some(span.end), row);
+            }
             Kind::Beat => {
                 let glyphs = chip(lang::l("(Sus.)", "(Pause.)"), Style::Direction, lead);
                 self.flow(b, &glyphs, 0, self.width, Align::Left, Some(span.end), row);

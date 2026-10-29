@@ -23,6 +23,7 @@
 % underlined and \ic{text} is an inline direction.
 %
 %   \action{...}  \stagedir{...}  \middir{...}  \beat
+%   \girer{alias,alias}  \cikar{alias}       (SELİN ile OZAN girerler.)
 %   \perde[Title]  \sahne[Place — Time][manual number]  \kisiler
 %   \onsoz[Title]  \notlar[Title]          a preface, notes for the director
 %
@@ -272,6 +273,25 @@
 
 \NewDocumentCommand \ic { m } { { \actionfont (#1) } }
 \NewDocumentCommand \beat { } { \ic { \beattext } }
+
+% Entrances and exits: a direction with the names as under a scene heading;
+% the characters are in the scene.
+\seq_new:N \l__tiy_move_seq
+\seq_new:N \l__tiy_move_names_seq
+\NewDocumentCommand \girer { m } { \__tiy_move:nnn {#1} { \entertext } { \enterpluraltext } }
+\NewDocumentCommand \cikar { m } { \__tiy_move:nnn {#1} { \exittext } { \exitpluraltext } }
+\cs_new_protected:Npn \__tiy_move:nnn #1#2#3
+  {
+    \seq_set_from_clist:Nn \l__tiy_move_seq {#1}
+    \seq_map_inline:Nn \l__tiy_move_seq { \__tiy_heard:n {##1} }
+    \seq_set_map:NNn \l__tiy_move_names_seq \l__tiy_move_seq { \__tiy_cast_name:n {##1} }
+    \action
+      {
+        \seq_use:Nnnn \l__tiy_move_names_seq { ~ \andtext {} ~ } { ,~ } { ~ \andtext {} ~ }
+        \c_space_tl
+        \int_compare:nNnTF { \seq_count:N \l__tiy_move_seq } > { 1 } {#3} {#2} .
+      }
+  }
 
 % One number per line of dialogue or direction, in the margin, draft only.
 \cs_new_protected:Npn \__tiy_number:

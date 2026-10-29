@@ -132,6 +132,13 @@ impl Outline {
                         s.direction_words += lex::count_words(&text[t.clone()]);
                     }
                 }
+                Kind::Move { aliases, .. } => {
+                    if let Some(s) = open.as_mut() {
+                        for a in aliases {
+                            heard(&mut s.cast, a);
+                        }
+                    }
+                }
                 Kind::Action { text: t } | Kind::Stage { text: t, .. } => {
                     if let Some(s) = open.as_mut() {
                         s.direction_words += lex::count_words(&text[t.clone()]);

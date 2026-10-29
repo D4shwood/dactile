@@ -57,3 +57,15 @@ pdftotext ids.pdf - | grep -q 'İç % yarı — Gece$' || { pdftotext ids.pdf - 
 pdftotext ids.pdf - | grep -q 'Sahne 2.5 – Dış$' || { echo "FAIL: heading with a comment"; exit 1; }
 ! pdftotext ids.pdf - | grep -q '@k3\|not' || { echo "FAIL: a comment printed"; exit 1; }
 echo "ok: comments on headings"
+
+# Entrances and exits: printed as directions, the characters in the scene.
+printf '\\documentclass{tiyatro}\n\\karakter{SELİN}{se}\n\\karakter{OZAN}{oz}\n\\karakter{İHTİYAR}{ih}\n\\begin{document}\n#sahne Ev\n\\girer{se}\n\\se Merhaba.\n\\girer{oz,ih}\n\\cikar{se}\n\\end{document}\n' > moves.tex
+for run in 1 2; do
+    xelatex -interaction=nonstopmode -halt-on-error moves.tex > /dev/null 2>&1 || { grep -A6 '^! ' moves.log; echo "FAIL: moves"; exit 1; }
+done
+pdftotext moves.pdf - > moves.txt
+grep -q '(SELİN girer.)' moves.txt || { cat moves.txt; echo "FAIL: \\girer"; exit 1; }
+grep -q '(OZAN ile İHTİYAR girerler.)' moves.txt || { cat moves.txt; echo "FAIL: two enter"; exit 1; }
+grep -q '(SELİN çıkar.)' moves.txt || { cat moves.txt; echo "FAIL: \\cikar"; exit 1; }
+grep -qxF '\tiyatrocast{-1}{se,oz,ih}' moves.aux || { cat moves.aux; echo "FAIL: moves cast"; exit 1; }
+echo "ok: entrances and exits"

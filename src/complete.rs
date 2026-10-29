@@ -139,7 +139,7 @@ pub fn items(doc: &Doc, block: Option<usize>) -> Vec<Item> {
             action: insert(&text, text.len()),
         });
     }
-    let commands: [(&str, &str, Action); 8] = [
+    let commands: [(&str, &str, Action); 10] = [
         (
             "sahne",
             lang::l(
@@ -184,6 +184,19 @@ pub fn items(doc: &Doc, block: Option<usize>) -> Vec<Item> {
             "beat",
             lang::l("kısa sessizlik: (Sus.)", "a short pause"),
             insert("\\beat", 5),
+        ),
+        (
+            "girer",
+            lang::l(
+                "giriş: (SELİN girer.); kısaltmalar virgülle",
+                "an entrance: (SELİN girer.); aliases with commas",
+            ),
+            insert("\\girer{}", 7),
+        ),
+        (
+            "cikar",
+            lang::l("çıkış: (SELİN çıkar.)", "an exit: (SELİN çıkar.)"),
+            insert("\\cikar{}", 7),
         ),
     ];
     for (key, label, action) in commands {

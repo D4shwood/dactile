@@ -63,30 +63,27 @@ Each milestone ends with a demo and a beta, published once approved.
    - Before the first move, split or merge of a session the play as it was
      is kept as a new draft; the writing goes on in the play itself, the
      status line names the draft.
-3. **M10 entrances and exits** → 0.2.0-beta.3
+3. ~~**M10 entrances and exits**~~ Done, kept small; goes out with M11
    - `\girer{…}` / `\cikar{…}` in the class, printed as a direction:
-     "(SELİN girer.)", "(SELİN ile OZAN girerler.)".
-   - Guessed from directions, a wide list with its endings: girer, gelir,
-     döner, sahneye çıkar / çıkar, gider, çekilir, kaybolur…
-   - Each scene starts empty; who the opening direction names is on stage,
-     and whoever speaks has come in.
-   - Where unsure ("SELİN kapıya yürür."), a faint chip at the direction's
-     end: Alt+⏎ writes the command, Alt+⌫ says no, never asked again
-     (in the sidecar).
-   - A faint underline when someone who went out speaks; (içeriden),
-     (dışarıdan), (sesi), (telefonda) before the line lift it.
-   - The cards and the strip show who is on stage at each scene's start and
-     at the cursor.
-4. **M11 actors** → 0.2.0-beta.4
+     "(SELİN girer.)", "(SELİN ile OZAN girerler.)"; in the `\` menu.
+   - `src/stage.rs` reads who is on stage, quietly: the commands, and verbs
+     in directions (girer, gelir, sahneye çıkar / çıkar, gider…); each scene
+     starts empty, the opening directions and whoever speaks fill it.
+   - Nothing on screen while writing: no chips, no underlines. It feeds M11
+     (doubling, entrances in actor copies) and a check run on demand (1.x).
+4. **M11 actors** → 0.2.0-beta.3
    - Casting, actor ↔ role, in the sidecar; in the cast panel, and on the
      cover if wanted.
    - Actor copies, a class option on top of M8: the role's lines highlighted,
      the others whole but faint, scenes without the role down to their heading.
    - A scene/actor table, for planning rehearsals; printable.
+   - Doubling: one actor in two roles never on stage at once, with time to
+     change between an exit and the next entrance (from `src/stage.rs`).
+   - In an actor copy, a mark where the role enters and exits.
    - A role's view in the writer: its lines lit, the rest dimmed.
    - Statistics: lines, words and time by role; scene lengths.
    - Rehearsal mode: to be described; a placeholder for now.
-5. **M12 import** → 0.2.0-beta.5
+5. **M12 import** → 0.2.0-beta.4
    - From `.docx` (italics as directions, bold as names), plain text and
      Markdown, `.odt`, and PDFs with text (the preview matters most there).
    - All through text, then the shaping a paste already gets: `NAME: …`,
@@ -102,6 +99,9 @@ Each milestone ends with a demo and a beta, published once approved.
    - An AUR package (`dactile-bin`) from the release workflow.
 
 ## 1.x
+
+- A continuity check, run on demand (never while writing): someone who
+  went out speaks again, someone who never leaves; from `src/stage.rs`
 
 - A brutalist home screen, on `b`: kept on the `brutal-home` branch (raw
   concrete grey, black rules, one oxide red), hidden until it is developed
