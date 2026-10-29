@@ -37,7 +37,7 @@ Each milestone ends with a demo and a beta, published once approved.
        there; F5 again builds anyway.
      - If XeLaTeX still fails: one line in the status line with the play's
        line number, and Alt+L opens the log. Each new case goes into the check.
-2. ~~**M9 the board**~~ Done, to be published as 0.2.0-beta.2
+2. ~~**M9 the board**~~ Done, published as 0.2.0-beta.2
    - Ctrl+G opens a strip beside the writing: acts and scenes as a tree, the
      cursor's scene lit and open with its summary. Hides itself when the
      paper and the strip don't fit, comes back when they do.
@@ -63,7 +63,7 @@ Each milestone ends with a demo and a beta, published once approved.
    - Before the first move, split or merge of a session the play as it was
      is kept as a new draft; the writing goes on in the play itself, the
      status line names the draft.
-3. ~~**M10 entrances and exits**~~ Done, kept small; goes out with M11
+3. ~~**M10 entrances and exits**~~ Done, kept small; its class commands in 0.2.0-beta.2
    - `\girer{…}` / `\cikar{…}` in the class, printed as a direction:
      "(SELİN girer.)", "(SELİN ile OZAN girerler.)"; in the `\` menu.
    - `src/stage.rs` reads who is on stage, quietly: the commands, and verbs
