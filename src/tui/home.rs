@@ -17,6 +17,9 @@ use ratatui::widgets::Paragraph;
 use std::path::{Path, PathBuf};
 use unicode_width::UnicodeWidthStr;
 
+/// How long a play's page takes to unroll.
+const PAGE_OPENS: std::time::Duration = std::time::Duration::from_millis(220);
+
 /// How long the home screen types itself out.
 const TYPE_FOR: std::time::Duration = std::time::Duration::from_millis(2200);
 
@@ -50,6 +53,21 @@ pub struct Home {
     thrown: Option<(String, Vec<dactile::trash::Moved>)>,
     /// The chosen play's title being changed in its row (F2).
     inline: Option<Inline>,
+    /// The chosen play's first page as the writer lays it out, kept until
+    /// the play or the file changes.
+    page: Option<Page>,
+    /// When the page of another play came: it unrolls.
+    page_born: std::time::Instant,
+    page_for: Option<PathBuf>,
+    /// `?`: every key in a window.
+    keys_open: bool,
+}
+
+struct Page {
+    path: PathBuf,
+    modified: Option<std::time::SystemTime>,
+    width: u16,
+    rows: Vec<dactile::render::Row>,
 }
 
 /// A title typed over in its row, as a file manager renames.
@@ -80,6 +98,10 @@ impl Home {
             arming: None,
             thrown: None,
             inline: None,
+            page: None,
+            page_born: std::time::Instant::now(),
+            page_for: None,
+            keys_open: false,
         };
         h.refresh(cfg);
         // On the play worked on last.
@@ -138,8 +160,15 @@ impl Home {
             }
             return Action::Stay;
         }
+        if std::mem::take(&mut self.keys_open) {
+            // Any key closes the keys; Esc and ? do nothing else.
+            if matches!(k.code, KeyCode::Esc | KeyCode::Char('?')) {
+                return Action::Stay;
+            }
+        }
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
         match k.code {
+            KeyCode::Char('?') => self.keys_open = true,
             KeyCode::Char('q') | KeyCode::Esc => return Action::Quit,
             KeyCode::Char('c') if ctrl => return Action::Quit,
             KeyCode::Up => self.sel = self.sel.saturating_sub(1),
@@ -318,7 +347,8 @@ impl Home {
     pub fn animating(&self, cfg: &Config) -> bool {
         cfg.animations
             && (self.born.elapsed() < TYPE_FOR
-                || self.form_born.elapsed() < std::time::Duration::from_millis(160))
+                || self.form_born.elapsed() < std::time::Duration::from_millis(160)
+                || self.page_born.elapsed() < PAGE_OPENS)
     }
 
     /// How much of `s` has been typed so far, `delay` after the screen came.
@@ -840,37 +870,57 @@ impl Home {
             ];
             f.render_widget(Paragraph::new(lines).style(theme::base()), body);
         } else {
-            // The list, and a card for the chosen play when there is room.
-            let card_w = if body.width >= 90 { 40 } else { 0 };
-            let list = Rect {
+            // The list, and the chosen play's first page when there is room,
+            // as tall as the screen.
+            let page_w = if body.width >= 90 {
+                (body.width * 42 / 100).clamp(44, 64)
+            } else {
+                0
+            };
+            let mut list = Rect {
                 width: body
                     .width
-                    .saturating_sub(card_w + if card_w > 0 { 4 } else { 0 }),
+                    .saturating_sub(page_w + if page_w > 0 { 5 } else { 0 }),
                 ..body
             };
+            // A line of the whole shelf at the list's foot, while the list
+            // leaves room for it.
+            if self.plays.len() * 3 + 2 <= list.height as usize {
+                self.draw_footing(
+                    f,
+                    Rect {
+                        y: list.y + list.height - 1,
+                        height: 1,
+                        ..list
+                    },
+                );
+                list.height -= 2;
+            }
             self.draw_list(f, list);
-            if card_w > 0
-                && let Some(p) = self.plays.get(self.sel)
-            {
-                let card = Rect {
-                    x: body.x + body.width - card_w,
-                    width: card_w,
-                    height: body.height.min(16),
-                    ..body
+            if page_w > 0 {
+                let page = Rect {
+                    x: body.x + body.width - page_w,
+                    width: page_w,
+                    y: area.y + 5,
+                    // Its shadow ends above the message line.
+                    height: area.height.saturating_sub(8),
                 };
-                draw_card(f, card, p, cfg.theme());
+                let path = self.plays.get(self.sel).map(|p| p.path.clone());
+                if path != self.page_for {
+                    self.page_for = path;
+                    self.page_born = std::time::Instant::now();
+                }
+                let before = (cfg.animations && self.page_born.elapsed() < PAGE_OPENS)
+                    .then(|| f.buffer_mut().clone());
+                self.draw_page(f, page, cfg.theme());
+                if let Some(before) = before {
+                    super::anim::unroll(f.buffer_mut(), &before, self.page_born, PAGE_OPENS);
+                }
             }
         }
-        // The spell checker, so a missing dictionary is noticed here.
+        // A missing dictionary is noticed here.
         let dict = match spell::find() {
-            Some((aff, _)) => Span::styled(
-                lang::f(
-                    "yazım denetimi: {}",
-                    "spell check: {}",
-                    &[&config::tilde(&aff.with_extension(""))],
-                ),
-                Style::default().fg(FAINT),
-            ),
+            Some(_) => Span::raw(""),
             None => Span::styled(
                 lang::l(
                     "Türkçe sözlük yok, yazım denetimi kapalı: paru -S hunspell-tr",
@@ -905,14 +955,9 @@ impl Home {
             &[
                 ("⏎", lang::l("aç", "open")),
                 ("n", lang::l("yeni oyun", "new play")),
-                ("o", lang::l("dosya aç", "open a file")),
-                ("d", lang::l("kopya", "copy")),
                 ("f", lang::l("yeni taslak", "new draft")),
                 ("p", "PDF"),
-                ("F2", lang::l("ad", "rename")),
-                ("Del", lang::l("çöpe", "trash")),
-                ("s", lang::l("ayarlar", "settings")),
-                ("q", lang::l("çık", "quit")),
+                ("?", lang::l("bütün tuşlar", "all keys")),
             ]
         };
         let mut spans = Vec::new();
@@ -932,6 +977,9 @@ impl Home {
                 height: 1,
             },
         );
+        if self.keys_open {
+            draw_keys(f, area);
+        }
         if let Some(form) = &self.form {
             // The form unrolls over what was there.
             let opens = std::time::Duration::from_millis(160);
@@ -940,6 +988,125 @@ impl Home {
             popup::draw_form(f, area, form);
             if let Some(before) = before {
                 super::anim::unroll(f.buffer_mut(), &before, self.form_born, opens);
+            }
+        }
+    }
+
+    /// "3 oyun · 4 taslak · ≈ 1 sa 52 dk": the shelf in one faint line.
+    fn draw_footing(&self, f: &mut Frame, area: Rect) {
+        let drafts = self.plays.iter().filter(|p| p.parent.is_some()).count();
+        let roots = self.plays.len() - drafts;
+        // The plays' own running times, not their drafts' again.
+        let secs: u32 = self
+            .plays
+            .iter()
+            .filter(|p| p.parent.is_none())
+            .map(|p| p.secs)
+            .sum();
+        let mut s = lang::f("{} oyun", "{} plays", &[&roots]);
+        if drafts > 0 {
+            s.push_str(&lang::f(" · {} taslak", " · {} drafts", &[&drafts]));
+        }
+        s.push_str(&format!(" · ≈ {}", timing::format(secs)));
+        f.render_widget(
+            Paragraph::new(s).style(theme::base().fg(FAINT)),
+            Rect {
+                x: area.x + 2,
+                width: area.width.saturating_sub(2),
+                ..area
+            },
+        );
+    }
+
+    /// The chosen play's first page, laid out as the writer lays it out, on
+    /// paper as tall as the screen, its foot fading as if it went on.
+    fn draw_page(&mut self, f: &mut Frame, area: Rect, theme_name: &str) {
+        let Some(p) = self.plays.get(self.sel) else {
+            return;
+        };
+        let pal = theme::palette(theme_name);
+        // The paper, and its shadow on the right and below.
+        let paper = Rect {
+            width: area.width.saturating_sub(1),
+            height: area.height.saturating_sub(1),
+            ..area
+        };
+        let text_w = paper.width.saturating_sub(6);
+        let modified = dactile::file::modified(&p.path);
+        let fresh = self
+            .page
+            .as_ref()
+            .is_some_and(|c| c.path == p.path && c.modified == modified && c.width == text_w);
+        if !fresh {
+            self.page = std::fs::read_to_string(&p.path).ok().map(|text| {
+                let doc = dactile::render::Doc::new(&text);
+                let lay = dactile::render::layout(
+                    &text,
+                    &doc,
+                    dactile::render::Options {
+                        width: text_w,
+                        raw_block: None,
+                        raw_all: false,
+                        preamble_open: false,
+                        focus_scene: None,
+                        page_rows: None,
+                    },
+                );
+                Page {
+                    path: p.path.clone(),
+                    modified,
+                    width: text_w,
+                    // Without the folded preamble's line.
+                    rows: lay.rows.into_iter().filter(|r| r.block.is_some()).collect(),
+                }
+            });
+        }
+        let Some(page) = &self.page else {
+            draw_card(
+                f,
+                Rect {
+                    height: area.height.min(16),
+                    ..area
+                },
+                p,
+                theme_name,
+            );
+            return;
+        };
+        let buf = f.buffer_mut();
+        for y in area.y..area.y + area.height {
+            for x in area.x..area.x + area.width {
+                let on_paper = x < paper.x + paper.width && y < paper.y + paper.height;
+                let shadow = !on_paper && x > area.x && y > area.y;
+                let bg = if on_paper {
+                    pal.bg
+                } else if shadow {
+                    theme::SHADOW
+                } else {
+                    theme::BG
+                };
+                buf[(x, y)].set_char(' ').set_style(Style::default().bg(bg));
+            }
+        }
+        // A row of paper above the text, one below.
+        let room = paper.height.saturating_sub(2) as usize;
+        let fade = 4.min(room);
+        for (i, row) in page.rows.iter().take(room).enumerate() {
+            let y = paper.y + 1 + i as u16;
+            // The last rows fade into the paper.
+            let t = (i + fade + 1).saturating_sub(room) as f32 / (fade + 1) as f32;
+            for c in &row.cells {
+                let x = paper.x + 3 + c.col;
+                if x >= paper.x + paper.width - 3 {
+                    continue;
+                }
+                let mut st = theme::on(c.style, pal);
+                if t > 0.0
+                    && let Some(fg) = st.fg
+                {
+                    st = st.fg(super::anim::mix(fg, pal.bg, t));
+                }
+                buf[(x, y)].set_char(c.ch).set_style(st);
             }
         }
     }
@@ -1086,6 +1253,55 @@ impl Home {
 
 /// The chosen play's cover in miniature, on a page like the writer's, with
 /// its numbers under it.
+/// `?`: every key of the home screen.
+fn draw_keys(f: &mut Frame, area: Rect) {
+    let keys: [(&str, &str, &str); 12] = [
+        ("⏎", "oyunu aç", "open the play"),
+        ("n", "yeni oyun", "a new play"),
+        (
+            "o",
+            "başka yerden bir .tex aç",
+            "open a .tex from elsewhere",
+        ),
+        ("d", "kopyasını çıkar", "make a copy"),
+        ("f", "yeni taslak", "a new draft"),
+        ("p", "PDF'i aç", "open the PDF"),
+        ("F2", "adını satırda değiştir", "rename in its row"),
+        (
+            "Shift+F2",
+            "başlık ve dosya adı ayrı",
+            "title and file name apart",
+        ),
+        ("Del Del", "çöp kutusuna", "to the trash"),
+        ("u", "çöpten geri getir", "back from the trash"),
+        ("s", "ayarlar", "settings"),
+        ("q", "çık", "quit"),
+    ];
+    let w = 46u16.min(area.width.saturating_sub(4));
+    let h = keys.len() as u16 + 4;
+    let r = Rect {
+        x: area.x + area.width.saturating_sub(w) / 2,
+        y: area.y + area.height.saturating_sub(h) / 3,
+        width: w,
+        height: h.min(area.height),
+    };
+    popup::float(f, r);
+    f.render_widget(popup::panel(lang::l("tuşlar", "keys")), r);
+    let lines: Vec<Line> = keys
+        .iter()
+        .map(|&(k, tr, en)| {
+            Line::from(vec![
+                Span::styled(format!("{k:>9}  "), Style::default().fg(BEIGE)),
+                Span::styled(
+                    if lang::is_tr() { tr } else { en },
+                    Style::default().fg(MUTED),
+                ),
+            ])
+        })
+        .collect();
+    f.render_widget(Paragraph::new(lines).style(theme::base()), popup::inner(r));
+}
+
 fn draw_card(f: &mut Frame, area: Rect, p: &Play, theme_name: &str) {
     let pal = theme::palette(theme_name);
     let base = Style::default().fg(pal.fg).bg(pal.bg);

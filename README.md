@@ -75,8 +75,10 @@ from as a tree, the newest on top, and the home screen opens on the play you
 worked on last. F2 renames a play right in its row, as a file manager does:
 type the new title, and its file, and the files that go with it, follow (a
 draft keeps its number at the end of its file name). Shift+F2 gives the title
-and the file name separately. `p` opens its PDF. Del, pressed twice, sends it to the desktop's trash, and `u` brings
-it back.
+and the file name separately. `p` opens its PDF. Del, pressed twice, sends
+it to the desktop's trash, and `u` brings it back; `?` lists every key.
+Beside the list stands the chosen play's first page, as tall as the screen,
+laid out as the writer lays it out, in the writer's theme.
 
 | Type | You get |
 |---|---|

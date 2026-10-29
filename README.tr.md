@@ -76,7 +76,9 @@ birikir, en yenisi en üstte; ana ekran en son çalıştığın oyunda açılır
 dosya yöneticisindeki gibi oyunun adını kendi satırında değiştirir: yeni başlığı
 yazarsın, dosya adı ve yanındaki dosyalar da onu izler (taslak, dosya adının
 sonundaki numarasını korur). Shift+F2 başlığı ve dosya adını ayrı ayrı sorar; `p`
-PDF'ini açar; iki kez Del onu masaüstünün çöp kutusuna atar, `u` geri getirir.
+PDF'ini açar; iki kez Del onu masaüstünün çöp kutusuna atar, `u` geri getirir;
+`?` bütün tuşları gösterir. Listenin yanında seçili oyunun ilk sayfası durur:
+ekran boyunca, yazıcıdaki gibi dizilmiş, yazıcının temasında.
 
 | Yazınca | Olan |
 |---|---|
