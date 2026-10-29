@@ -6,7 +6,7 @@ use super::theme::{self, BEIGE, CLARET, FAINT, FG, MUTED, WARN};
 use chrono::{DateTime, Local};
 use dactile::config::{self, Config};
 use dactile::lang::{self, Lang};
-use dactile::library::{self, Play};
+use dactile::library::{self, Play, draft_tag, fork_name};
 use dactile::{outline, spell, timing};
 use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -1077,6 +1077,7 @@ impl Home {
                         preamble_open: false,
                         focus_scene: None,
                         page_rows: None,
+                        summaries: None,
                     },
                 )
                 .rows
@@ -1590,41 +1591,6 @@ fn inline_name(path: &Path, title: &str, draft: Option<&str>) -> String {
         _ => stem[library::draft_base(&stem).len()..].to_string(),
     };
     format!("{fresh}{tail}.tex")
-}
-
-/// A draft number as a file name ends with it: letters, digits and dots
-/// stay, the rest becomes a dash (`İkinci el` → `ikinci-el`).
-fn draft_tag(draft: &str) -> String {
-    let tag: String = draft
-        .trim()
-        .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() || c == '.' {
-                c.to_ascii_lowercase().to_string()
-            } else {
-                let f = dactile::cast::fold_ascii(&c.to_string());
-                if f.is_empty() { "-".into() } else { f }
-            }
-        })
-        .collect();
-    tag.trim_matches('-').to_string()
-}
-
-/// `kar-masali.tex` with draft 0.2 → `kar-masali-0.2.tex`; from
-/// `kar-masali-0.2.tex`, 0.3 → `kar-masali-0.3.tex`.
-fn fork_name(src: &Path, draft: &str) -> String {
-    let stem = src
-        .file_stem()
-        .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_default();
-    // Without an earlier draft's number at its end.
-    let base = library::draft_base(&stem).to_string();
-    let draft = draft_tag(draft);
-    if draft.is_empty() {
-        format!("{base}-2.tex")
-    } else {
-        format!("{base}-{draft}.tex")
-    }
 }
 
 /// A path typed in a form: `~/…`, absolute, or inside the plays folder.

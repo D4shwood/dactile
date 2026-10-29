@@ -22,6 +22,8 @@ pub struct Scene {
     /// What the heading shows: the manual number (`\sahne[…][2.1]`) or `number`.
     pub label: String,
     pub place: String,
+    /// The id at its heading (`%@k3`), that its summary goes by.
+    pub id: Option<String>,
     /// Index of its `\sahne` block; the scene runs to `end` (exclusive).
     pub block: usize,
     pub end: usize,
@@ -96,6 +98,7 @@ impl Outline {
                         number,
                         label: label.clone().unwrap_or_else(|| number.to_string()),
                         place: place.clone(),
+                        id: crate::structure::id_in(&text[b.span.clone()]).map(str::to_string),
                         block: i,
                         end: i + 1,
                         cast: Vec::new(),

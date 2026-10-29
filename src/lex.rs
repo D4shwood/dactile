@@ -194,7 +194,9 @@ fn classify(text: &str, span: Range<usize>, cast: &Cast) -> Kind {
     }
     let lead = span.start + (s.len() - trimmed.len());
     if trimmed.starts_with('#') {
-        let Some((word, label, rest)) = hash_line(trimmed) else {
+        // A comment ends the heading: `#sahne Meydan %@k3`.
+        let code = tex::comment_start(trimmed).map_or(trimmed, |c| &trimmed[..c]);
+        let Some((word, label, rest)) = hash_line(code) else {
             return Kind::Other;
         };
         return match heading(word) {
@@ -613,6 +615,14 @@ mod tests {
             Kind::Scene {
                 place: "Meydan".into(),
                 label: Some("2.1".into()),
+                hash: true
+            }
+        );
+        assert_eq!(
+            kind("#sahne Meydan \\% yarı %@k3"),
+            Kind::Scene {
+                place: "Meydan \\% yarı".into(),
+                label: None,
                 hash: true
             }
         );

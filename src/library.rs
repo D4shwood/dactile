@@ -149,6 +149,54 @@ pub fn draft_base(stem: &str) -> &str {
         .map_or(stem, |(b, _)| b)
 }
 
+/// A draft number as a file name ends with it: letters, digits and dots
+/// stay, the rest becomes a dash (`İkinci el` → `ikinci-el`).
+pub fn draft_tag(draft: &str) -> String {
+    let tag: String = draft
+        .trim()
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '.' {
+                c.to_ascii_lowercase().to_string()
+            } else {
+                let f = crate::cast::fold_ascii(&c.to_string());
+                if f.is_empty() { "-".into() } else { f }
+            }
+        })
+        .collect();
+    tag.trim_matches('-').to_string()
+}
+
+/// `kar-masali.tex` with draft 0.2 → `kar-masali-0.2.tex`; from
+/// `kar-masali-0.2.tex`, 0.3 → `kar-masali-0.3.tex`.
+pub fn fork_name(src: &Path, draft: &str) -> String {
+    let stem = src
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
+    // Without an earlier draft's number at its end.
+    let base = draft_base(&stem).to_string();
+    let draft = draft_tag(draft);
+    if draft.is_empty() {
+        format!("{base}-2.tex")
+    } else {
+        format!("{base}-{draft}.tex")
+    }
+}
+
+/// The play as it is now, kept as a draft of it next to it: the same text
+/// under `play-0.2.tex` (its draft number), its cards and words along.
+pub fn keep_draft(play: &Path, text: &str) -> anyhow::Result<PathBuf> {
+    let draft = info::get(text, "draft").unwrap_or_default();
+    let dir = play.parent().map(Path::to_path_buf).unwrap_or_default();
+    let path = free_path(&dir, &fork_name(play, &crate::tex::unescape_text(&draft)));
+    crate::file::write_atomic(&path, text)?;
+    let mut side = crate::sidecar::Sidecar::load(play).unwrap_or_default();
+    side.parent = play.file_name().map(|n| n.to_string_lossy().to_string());
+    side.save(&path)?;
+    Ok(path)
+}
+
 /// The plays in the order of their tree, growing upward: each play's drafts
 /// above it, the newest on top, and the families most recently changed
 /// first. With each, whether it and every play it comes from is the topmost
@@ -555,6 +603,27 @@ mod tests {
         }));
         crate::trash::restore(&moved).unwrap();
         assert!(b.exists() && d.join("b.pdf").exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn kept_as_a_draft() {
+        let d = std::env::temp_dir().join(format!("dactile-keep-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let play = d.join("kar.tex");
+        let text = "\\title{Kar}\n\\draft{0.2}\n\\begin{document}\n\\end{document}\n";
+        std::fs::write(&play, text).unwrap();
+        let mut side = crate::sidecar::Sidecar::default();
+        side.summaries.insert("k1".into(), "Kar yağar.".into());
+        side.save(&play).unwrap();
+        let kept = keep_draft(&play, text).unwrap();
+        assert_eq!(kept, d.join("kar-0.2.tex"));
+        assert_eq!(std::fs::read_to_string(&kept).unwrap(), text);
+        let s = crate::sidecar::Sidecar::load(&kept).unwrap();
+        assert_eq!(s.parent.as_deref(), Some("kar.tex"));
+        assert_eq!(s.summaries["k1"], "Kar yağar.");
+        // Once more: a name of its own.
+        assert_eq!(keep_draft(&play, text).unwrap(), d.join("kar-0.2-2.tex"));
         let _ = std::fs::remove_dir_all(&d);
     }
 }

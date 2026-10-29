@@ -2,7 +2,8 @@
 # Compiles the example play with the class in draft and final mode (and with
 # the director's notes left out), a new play with nobody in it yet, and checks
 # the scene casts the class wrote, the rerun warning when they were stale, and
-# a run with the casts seeded as Dactile does. Run from anywhere: tex/test/run.sh
+# a run with the casts seeded as Dactile does, and comments on # headings.
+# Run from anywhere: tex/test/run.sh
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(mktemp -d)
@@ -48,3 +49,11 @@ printf '\\relax\n\\tiyatrocast{I-1}{se,oz,ih}\n\\tiyatrocast{I-2}{ka,co,hep,se}\
 xelatex -interaction=nonstopmode -halt-on-error ornek-oyun.tex > /dev/null 2>&1
 ! grep -q 'Rerun to get them right' ornek-oyun.log || { echo "FAIL: seeded run asks for a rerun"; exit 1; }
 echo "ok: one pass when seeded"
+
+# A comment on a # heading ends there: Dactile's scene ids (`%@k3`).
+printf '\\documentclass{tiyatro}\n\\karakter{SELİN}{se}\n\\title{Yeni}\n\\begin{document}\n#perde Bir %%@a1\n\n#sahne İç \\%% yarı — Gece %%@k3\n\n\\se Merhaba.\n\n#sahne[2.5] Dış %% bir not {x}\n\\se Tekrar.\n\\end{document}\n' > ids.tex
+xelatex -interaction=nonstopmode -halt-on-error ids.tex > /dev/null 2>&1 || { grep -A6 '^! ' ids.log; echo "FAIL: ids"; exit 1; }
+pdftotext ids.pdf - | grep -q 'İç % yarı — Gece$' || { pdftotext ids.pdf - | head -20; echo "FAIL: heading with an id"; exit 1; }
+pdftotext ids.pdf - | grep -q 'Sahne 2.5 – Dış$' || { echo "FAIL: heading with a comment"; exit 1; }
+! pdftotext ids.pdf - | grep -q '@k3\|not' || { echo "FAIL: a comment printed"; exit 1; }
+echo "ok: comments on headings"

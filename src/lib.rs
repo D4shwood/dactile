@@ -20,6 +20,7 @@ pub mod shelf;
 pub mod sidecar;
 pub mod source;
 pub mod spell;
+pub mod structure;
 pub mod tex;
 pub mod timing;
 pub mod trash;
@@ -54,6 +55,6 @@ pub mod class {
 mod tests {
     #[test]
     fn class_version() {
-        assert_eq!(super::class::version(), "1.2.0");
+        assert_eq!(super::class::version(), "1.3.0");
     }
 }

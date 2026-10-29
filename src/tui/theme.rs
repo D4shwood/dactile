@@ -142,6 +142,7 @@ pub fn on(s: S, p: &Palette) -> Style {
         S::Under => st.add_modifier(Modifier::UNDERLINED),
         S::Heading => st.fg(p.heading).add_modifier(Modifier::BOLD),
         S::SceneCast => st.fg(p.muted),
+        S::Summary => st.fg(p.faint).add_modifier(Modifier::ITALIC),
         S::Faint => st.fg(p.faint),
         S::RawCmd => st.fg(p.heading),
         S::Warn => st.fg(p.warn),

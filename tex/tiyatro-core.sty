@@ -38,7 +38,7 @@
 % the margin, so a rehearsal can say "line 112". Dactile shows the same numbers.
 
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesExplPackage{tiyatro-core}{2026-10-28}{1.2.0}{Dactile: characters, lines, scenes, acts}
+\ProvidesExplPackage{tiyatro-core}{2026-10-29}{1.3.0}{Dactile: characters, lines, scenes, acts}
 \RequirePackage{xspace}
 
 \msg_new:nnn { tiyatro } { hash }
@@ -468,13 +468,22 @@
       {
         \group_begin:
         \char_set_catcode_active:N \^^M
+        % A comment on the line ends there, not with the next line.
+        \char_set_catcode_other:N \%
         \tiy@hashline
       }
   }
 
 \seq_new:N \l__tiy_hash_seq
 \tl_new:N \l__tiy_hash_tl
+\tl_new:N \l__tiy_hash_line_tl
 \cs_new_protected:Npn \tiy@hashdo #1
+  {
+    \tl_set:Nn \l__tiy_hash_line_tl {#1}
+    \regex_replace_once:nnN { \% .* \Z } { } \l__tiy_hash_line_tl
+    \exp_args:NV \__tiy_hashdo:n \l__tiy_hash_line_tl
+  }
+\cs_new_protected:Npn \__tiy_hashdo:n #1
   {
     \regex_extract_once:nnNTF
       { \A ([^\s\[]+) (?: \[ ([^\]]*) \] )? \s* (.*?) \s* \Z } {#1} \l__tiy_hash_seq

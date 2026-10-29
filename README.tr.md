@@ -109,7 +109,8 @@ durur; tıklayınca oraya gider.
 |---|---|
 | ^P | komut paleti: her şey adıyla — yeni sahne, temalar, sayfa görünümü, animasyonlar… |
 | ^O | kişiler: düzenle, kısaltmayı her yerde değiştir, sıra, karakter kartları; m birini ötekiyle birleştirir, b birini böler (seçtiğin sahneler yeni karaktere geçer) |
-| ^G | perdeler ve sahneler: oraya git; ␣ işaretler, h gizler (`%~` satırları, PDF'te yok), t oyunun çöp kutusuna atar; Tab çöp kutusu: r geri koyar, x x yok eder |
+| ^G, ^G ^G | yazının yanında sahne şeridi; hızlıca iki kez: pano (aşağıda) |
+| Alt+E, Alt+B, Alt+J | imlecin sahnesinin özeti; sahneyi imlecin satırından böl; sonrakiyle birleştir |
 | ^K | karakter ve komut ara |
 | ^F | bul ve değiştir |
 | Alt+I | oyun bilgisi (başlık, yazar, taslak no…) ve taslak/final |
@@ -127,8 +128,33 @@ durur; tıklayınca oraya gider.
 
 ![Kişiler](docs/cast.png)
 
-Dactile bir oyunun yanında `oyun.dactile.toml` tutar: karakter kartları ve
-yazım denetimi için oyunun kendi kelimeleri (PDF'e hiç girmez). Oyun açıkken
+### Pano
+
+^G yazının yanında bir şerit açar: perdeler ve sahneler, imlecin sahnesi
+vurgulu ve açık; özeti, süresi, içindekiler. Ekran sayfaya ve şeride darsa
+kenara çekilir. ^G'ye hızlıca iki kez basınca pano tam ekran açılır: liste ya
+da (Tab) kartlar; perdeler sütun, sahneler yer, süre, kişiler ve özetle kart.
+
+- ⏎ sahneye gider; `e` özetini yazar (bir iki cümle, PDF'e girmez; yazıcıda
+  da başlığın altında soluk durur, orada Alt+E).
+- Alt+↑↓ sahneyi bir yer kaydırır, perde sınırını geçince öbür perdeye düşer;
+  kartlarda Alt+←→ önceki ya da sonraki perdeye. `m` ile tutarsın, oklarla
+  yer seçersin, ⏎ bırakır. Perdeler bütün taşınır, işaretliler (␣) birlikte.
+  Her taşıma tek geri alma adımı.
+- `j` sahneyi sonrakiyle birleştirir: ikinci başlık yeriyle bir yönerge olur.
+  Yazıcıda Alt+B sahneyi imlecin satırından böler.
+- `n` yeni kart açar: gizli bir sahne (`%~`), ⏎ ile içine yazmak için açana
+  kadar PDF'te yok.
+- `h` gizler (`%~` satırları), `t` oyunun çöp kutusuna atar, `c` çöp kutusunu
+  gösterir: r geri koyar, x x yok eder.
+
+Bir oturumdaki ilk taşıma, bölme ya da birleştirmeden önce oyunun o anki hâli
+yanına taslak olarak saklanır (`oyun-0.2.tex`); sen oyunun kendisinde devam
+edersin. Özeti olan bir sahnenin başlığının sonunda PDF'in görmediği kısa bir
+kimlik durur, `#sahne Meydan %@k3`: özet sahne nereye giderse peşinden gider.
+
+Dactile bir oyunun yanında `oyun.dactile.toml` tutar: karakter kartları, sahne
+özetleri ve yazım denetimi için oyunun kendi kelimeleri (PDF'e hiç girmez). Oyun açıkken
 bir de `.oyun.tex.dactile-lock` durur; ikinci bir Dactile oyunu salt okunur
 açar. Eski sürümler `~/.local/share/dactile/history` içine gider.
 
@@ -179,8 +205,7 @@ geliyor; onun kodu burada kullanılmıyor.
 
 ## Yol haritası
 
-İskelet panosu, sahne taşıma, giriş-çıkışlar, oyuncu kopyaları, Word'den
-içe aktarma ve dahası:
+Giriş-çıkışlar, oyuncu kopyaları, Word'den içe aktarma ve dahası:
 bkz. [TODO.md](TODO.md).
 
 ## Lisans

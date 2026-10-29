@@ -108,7 +108,8 @@ screen the play's outline sits in the margin; a click goes there.
 |---|---|
 | ^P | the command palette: everything by name — new scene, themes, page view, animations… |
 | ^O | the cast: edit, rename an alias everywhere, order, character cards; m merges one into another, b splits one, giving the scenes you pick to a new character |
-| ^G | the acts and scenes: go there; ␣ marks, h hides (out of the PDF, as `%~` lines), t moves to the play's trash; Tab shows the trash: r puts back, x x destroys |
+| ^G, ^G ^G | the scene strip beside the writing; twice quickly, the board (below) |
+| Alt+E, Alt+B, Alt+J | the cursor's scene's summary; split the scene at the cursor's line; join it with the next |
 | ^K | search characters and commands |
 | ^F | find and replace |
 | Alt+I | cover details (title, author, draft number…) and draft/final |
@@ -126,8 +127,35 @@ screen the play's outline sits in the margin; a click goes there.
 
 ![The cast](docs/cast.png)
 
-Next to a play Dactile keeps `oyun.dactile.toml`, with the character cards
-and the play's own words for the spell checker (the PDF never sees it), and
+### The board
+
+^G opens a strip beside the writing: the acts and scenes, the cursor's scene
+lit and open, with its summary, its length and who is in it. It steps aside
+when the screen is too narrow for the page and it. ^G twice quickly opens the
+board, full screen, as a list or (Tab) as cards: the acts as columns, the
+scenes as cards with place, length, cast and summary.
+
+- ⏎ goes to the scene; `e` writes its summary (a line or two, never printed,
+  shown faint under the heading in the writer too; Alt+E there).
+- Alt+↑↓ moves the scene a place, over an act's edge into the next one;
+  Alt+←→ on the cards to the act before or after. `m` picks it up, the arrows
+  choose where, ⏎ puts it down. Acts move whole, the marked ones (␣) together.
+  Each move is one undo.
+- `j` joins the scene with the next: the second heading becomes a direction
+  with its place. Alt+B in the writer splits a scene at the cursor's line.
+- `n` opens a new card: a hidden scene (`%~`), out of the PDF until ⏎ opens it
+  to write in.
+- `h` hides (as `%~` lines), `t` moves to the play's trash, `c` shows the
+  trash: r puts back, x x destroys.
+
+Before the first move, split or join of a session the play as it was is kept
+as a draft beside it (`oyun-0.2.tex`); you go on in the play itself. A scene
+with a summary carries a short id at its heading's end, `#sahne Meydan %@k3`,
+which the PDF never sees: the summary follows the scene wherever it goes.
+
+Next to a play Dactile keeps `oyun.dactile.toml`, with the character cards,
+the scene summaries and the play's own words for the spell checker (the PDF
+never sees it), and
 `.oyun.tex.dactile-lock` while the play is open, so a second Dactile opens it
 read-only. Earlier versions go to `~/.local/share/dactile/history`.
 
@@ -177,8 +205,7 @@ its code is used here.
 
 ## Roadmap
 
-The outline board, moving scenes, entrances and exits, actor copies,
-importing from Word and more: see
+Entrances and exits, actor copies, importing from Word and more: see
 [TODO.md](TODO.md).
 
 ## License

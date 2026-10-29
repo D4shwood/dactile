@@ -6,9 +6,8 @@ use dactile::cast::{Kind as CastKind, Row};
 use dactile::lang;
 use dactile::lex::{self, Kind};
 use dactile::render::Doc;
-use dactile::shelf::{Trashed, Unit, UnitKind};
+use dactile::shelf::Trashed;
 use dactile::sidecar::Sidecar;
-use dactile::timing;
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Modifier, Style};
@@ -306,25 +305,20 @@ pub struct ScenesPanel {
     pub trash_sel: usize,
     /// x was pressed once in the trash: once more destroys.
     pub confirm: bool,
+    /// Cards in columns instead of the list.
+    pub cards: bool,
+    /// Moving the selected unit: the place (`structure::places`) it would go.
+    pub grab: Option<usize>,
 }
 
-#[allow(clippy::too_many_arguments)]
-pub fn draw_scenes(
-    f: &mut Frame,
-    area: Rect,
-    doc: &Doc,
-    units: &[Unit],
-    marks: &std::collections::BTreeSet<usize>,
-    trash: &[Trashed],
-    wpm: u32,
-    p: &ScenesPanel,
-) {
-    let rows_wanted = if p.trash { trash.len() } else { units.len() };
+/// The play's trash, over the board.
+pub fn draw_trash(f: &mut Frame, area: Rect, trash: &[Trashed], p: &ScenesPanel) {
+    let rows_wanted = trash.len();
     let h = (rows_wanted + 6).max(8) as u16;
     let r = centered(area, 96, h);
     float(f, r);
     let inn = inner(r);
-    if p.trash {
+    {
         f.render_widget(
             panel(&lang::f("çöp kutusu — {}", "trash — {}", &[&trash.len()])),
             r,
@@ -384,117 +378,7 @@ pub fn draw_scenes(
                 ..inn
             },
         );
-        return;
     }
-    let total: u32 = doc
-        .outline
-        .scenes
-        .iter()
-        .map(|s| timing::scene_secs(s, wpm))
-        .sum();
-    f.render_widget(
-        panel(&lang::f(
-            "sahneler — toplam ≈ {}",
-            "scenes — total ≈ {}",
-            &[&timing::format(total)],
-        )),
-        r,
-    );
-    let rows = inn.height.saturating_sub(3) as usize;
-    let start = p
-        .sel
-        .saturating_sub(rows / 2)
-        .min(units.len().saturating_sub(rows));
-    let mut lines: Vec<Line> = Vec::new();
-    if units.is_empty() {
-        lines.push(Line::from(Span::styled(
-            lang::l(
-                "Henüz sahne yok: #sahne ile başla.",
-                "No scenes yet: start one with #sahne.",
-            ),
-            Style::default().fg(MUTED),
-        )));
-    }
-    for (n, u) in units.iter().enumerate().skip(start).take(rows) {
-        let sel = n == p.sel;
-        let marked = marks.contains(&u.span.start);
-        let scene = (!u.hidden && u.kind == UnitKind::Scene)
-            .then(|| doc.scene_of(doc.block_at(u.span.start)?))
-            .flatten()
-            .map(|s| &doc.outline.scenes[s]);
-        let stats = match (scene, u.hidden) {
-            (_, true) => lang::f("gizli · {} replik", "hidden · {} lines", &[&u.lines]),
-            (Some(s), _) => lang::f(
-                "{} replik · {} kelime · ≈ {}",
-                "{} lines · {} words · ≈ {}",
-                &[
-                    &s.lines,
-                    &s.words,
-                    &timing::format(timing::scene_secs(s, wpm)),
-                ],
-            ),
-            (None, _) => String::new(),
-        };
-        let indent = if u.kind == UnitKind::Scene { "  " } else { "" };
-        let room = (inn.width as usize).saturating_sub(stats.width() + 8);
-        let name = fit(&format!("{indent}{}", u.name()), room);
-        let gap = room.saturating_sub(name.width()) + 2;
-        let color = if u.hidden {
-            FAINT
-        } else if u.kind == UnitKind::Act {
-            CLARET
-        } else if sel {
-            BEIGE
-        } else {
-            FG
-        };
-        let mut style = Style::default().fg(color);
-        if u.kind == UnitKind::Act || sel {
-            style = style.add_modifier(Modifier::BOLD);
-        }
-        if u.hidden {
-            style = style.add_modifier(Modifier::ITALIC);
-        }
-        lines.push(row(
-            vec![
-                mark(sel),
-                Span::styled(
-                    if marked { "■ " } else { "□ " },
-                    Style::default().fg(if marked { WARN } else { FAINT }),
-                ),
-                Span::styled(name, style),
-                Span::raw(" ".repeat(gap)),
-                Span::styled(
-                    stats,
-                    Style::default().fg(if u.hidden { FAINT } else { MUTED }),
-                ),
-            ],
-            sel,
-            inn.width,
-        ));
-    }
-    f.render_widget(
-        Paragraph::new(lines).style(theme::base()),
-        Rect {
-            height: inn.height.saturating_sub(2),
-            ..inn
-        },
-    );
-    let n = marks.len();
-    let keys = if n > 0 {
-        lang::f(
-            "{} işaretli: h gizle/göster   t çöpe at   ␣ işaret   Esc kapat",
-            "{} marked: h hide/show   t to the trash   ␣ mark   Esc close",
-            &[&n],
-        )
-    } else {
-        lang::f(
-            "⏎ git   ␣ işaretle   h gizle/göster   t çöpe at   Tab çöp kutusu ({})   Esc kapat",
-            "⏎ go   ␣ mark   h hide/show   t to the trash   Tab trash ({})   Esc close",
-            &[&trash.len()],
-        )
-    };
-    keys_line(f, inn, &keys);
 }
 
 /// Splitting a character: its scenes, the picked ones going to the new one.

@@ -120,6 +120,8 @@ pub enum Style {
     /// The play's title on the cover preview.
     Title,
     SceneCast,
+    /// A scene's summary under its heading.
+    Summary,
     Faint,
     Raw,
     RawCmd,
@@ -203,7 +205,7 @@ impl Layout {
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Options {
+pub struct Options<'a> {
     pub width: u16,
     /// The block shown as raw source because it is being edited as such.
     pub raw_block: Option<usize>,
@@ -217,6 +219,9 @@ pub struct Options {
     /// Page view: the play in sheets this many rows of text tall, broken
     /// where the PDF breaks; None for one long sheet.
     pub page_rows: Option<u16>,
+    /// Scene summaries by id, shown faint under their headings; never in
+    /// the PDF.
+    pub summaries: Option<&'a std::collections::BTreeMap<String, String>>,
 }
 
 /// Rows of paper above and below the text of a sheet in page view; the
@@ -273,12 +278,13 @@ fn cw(c: char) -> u16 {
 }
 
 /// Lays the whole play out for a screen `opts.width` columns wide.
-pub fn layout(text: &str, doc: &Doc, opts: Options) -> Layout {
+pub fn layout(text: &str, doc: &Doc, opts: Options<'_>) -> Layout {
     let mut b = Builder {
         text,
         doc,
         out: Layout::default(),
         width: opts.width.max(20),
+        summaries: opts.summaries,
     };
     b.out.name_width = name_column(doc, b.width);
     // The PDF's act endings, and in page view its page breaks; never in the
@@ -492,6 +498,7 @@ struct Builder<'a> {
     doc: &'a Doc,
     out: Layout,
     width: u16,
+    summaries: Option<&'a std::collections::BTreeMap<String, String>>,
 }
 
 impl Builder<'_> {
@@ -1002,7 +1009,7 @@ impl Builder<'_> {
                     s.push_str(&format!(" — {}", place.trim()));
                 }
                 let glyphs = chip(&s, Style::Heading, lead);
-                let used = self.flow(
+                let mut used = self.flow(
                     b,
                     &glyphs,
                     0,
@@ -1022,6 +1029,21 @@ impl Builder<'_> {
                         .join(", ")
                         .chars()
                         .map(|c| Glyph::deco(c, Style::SceneCast, None))
+                        .collect();
+                    let more =
+                        self.flow(b, &glyphs, 0, self.width, Align::Center, None, row + used);
+                    used += more;
+                }
+                // The summary, faint: Dactile's, not the play's.
+                if let Some(text) = scene
+                    .and_then(|s| s.id.as_ref())
+                    .and_then(|id| self.summaries?.get(id))
+                    .map(|t| t.trim())
+                    .filter(|t| !t.is_empty())
+                {
+                    let glyphs: Vec<Glyph> = format!("“{text}”")
+                        .chars()
+                        .map(|c| Glyph::deco(c, Style::Summary, None))
                         .collect();
                     self.flow(b, &glyphs, 0, self.width, Align::Center, None, row + used);
                 }

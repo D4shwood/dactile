@@ -127,6 +127,12 @@ pub enum FormKind {
     Merge(String),
     /// A new character takes some of this one's scenes.
     Split(String),
+    /// The summary of the scene whose heading starts at `at`; back to the
+    /// board after, or not.
+    Summary(bool),
+    /// A new card on the board: a hidden scene at this place
+    /// (`structure::places`).
+    NewCard(usize),
 }
 
 pub struct Field {
@@ -544,6 +550,7 @@ pub fn label_of(key: &str) -> &str {
     match key {
         "Yer" => "Place",
         "Zaman" => "Time",
+        "Özet" => "Summary",
         "Başlık" => "Title",
         "Ad" => "Name",
         "Kısaltma" => "Alias",

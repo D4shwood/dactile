@@ -37,6 +37,9 @@ pub struct Sidecar {
     /// Character cards by alias.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub cards: BTreeMap<String, Card>,
+    /// A line or two about each scene, by the id at its heading (`%@k3`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub summaries: BTreeMap<String, String>,
 }
 
 pub fn path_for(play: &Path) -> PathBuf {
