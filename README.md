@@ -80,7 +80,9 @@ it to the desktop's trash, and `u` brings it back; `?` lists every key.
 Beside the list stands the chosen play's first page, as tall as the screen,
 laid out as the writer lays it out, in the writer's theme. Under the list,
 level with the page's foot: the play as a strip of its scenes, each as long
-as it plays, then its scenes with their times and who speaks how much.
+as it plays, then its scenes with their times and who speaks how much. `b`
+switches to a brutal neon look: every play in a ruled table, the raw state
+of things (PDF, check, lock, dictionary), every key always on screen.
 
 | Type | You get |
 |---|---|

@@ -37,6 +37,9 @@ pub struct Config {
     pub keyboard: String,
     /// Plays opened lately, newest first.
     pub recent: Vec<String>,
+    /// The home screen's look: "" (the page beside the list) or "brutal"
+    /// (a bare grid of everything).
+    pub home: String,
 }
 
 impl Default for Config {
@@ -56,6 +59,7 @@ impl Default for Config {
             pages: false,
             keyboard: "q".into(),
             recent: Vec::new(),
+            home: String::new(),
         }
     }
 }

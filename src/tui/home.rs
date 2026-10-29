@@ -75,6 +75,8 @@ struct Page {
     scenes: Vec<(String, String, u32, Option<usize>)>,
     /// Who speaks, most words first.
     voices: Vec<(String, usize)>,
+    /// What would stop XeLaTeX.
+    problems: usize,
 }
 
 /// A title typed over in its row, as a file manager renames.
@@ -176,6 +178,14 @@ impl Home {
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
         match k.code {
             KeyCode::Char('?') => self.keys_open = true,
+            KeyCode::Char('b') => {
+                cfg.home = if cfg.home == "brutal" {
+                    String::new()
+                } else {
+                    "brutal".into()
+                };
+                let _ = cfg.save();
+            }
             KeyCode::Char('q') | KeyCode::Esc => return Action::Quit,
             KeyCode::Char('c') if ctrl => return Action::Quit,
             KeyCode::Up => self.sel = self.sel.saturating_sub(1),
@@ -755,6 +765,13 @@ impl Home {
             self.form_kind = kind;
             self.form_born = std::time::Instant::now();
         }
+        if cfg.home == "brutal" && !self.first_run && !self.plays.is_empty() {
+            self.draw_brutal(f, cfg);
+            if let Some(form) = &self.form {
+                popup::draw_form(f, area, form);
+            }
+            return;
+        }
         f.render_widget(
             ratatui::widgets::Block::default().style(theme::base()),
             area,
@@ -1115,6 +1132,8 @@ impl Home {
                 .into_iter()
                 .map(|(a, n)| (doc.cast.get(&a).map_or(a, |c| c.script.clone()), n))
                 .collect();
+            let problems =
+                dactile::check::problems(&text, &doc, &dactile::check::known(&text, &doc)).len();
             Page {
                 path: p.path.clone(),
                 modified,
@@ -1122,6 +1141,7 @@ impl Home {
                 rows,
                 scenes,
                 voices,
+                problems,
             }
         });
     }
@@ -1469,11 +1489,424 @@ impl Home {
     }
 }
 
-/// The chosen play's cover in miniature, on a page like the writer's, with
-/// its numbers under it.
+// ------------------------------------------------------------------ brutal
+
+/// The bare look, in neon: a blue-black ground, cyan rules, magenta for
+/// what is chosen and what is wrong.
+const B_BG: ratatui::style::Color = ratatui::style::Color::Rgb(0x07, 0x07, 0x14);
+const B_FG: ratatui::style::Color = ratatui::style::Color::Rgb(0xe4, 0xf1, 0xff);
+const B_DIM: ratatui::style::Color = ratatui::style::Color::Rgb(0x5a, 0x6a, 0x8a);
+const B_RULE: ratatui::style::Color = ratatui::style::Color::Rgb(0x05, 0xd9, 0xe8);
+const B_SIGNAL: ratatui::style::Color = ratatui::style::Color::Rgb(0xff, 0x2a, 0x6d);
+
+/// `n` of `max` as a bar `room` wide, magenta fading to cyan along it.
+fn neon_bar(n: usize, max: usize, room: usize) -> Vec<Span<'static>> {
+    let len = if max == 0 {
+        0
+    } else {
+        (n * room).div_ceil(max)
+    };
+    (0..len)
+        .map(|i| {
+            let t = i as f32 / room.max(1) as f32;
+            Span::styled(
+                "█",
+                Style::default()
+                    .fg(super::anim::mix(B_SIGNAL, B_RULE, t))
+                    .bg(B_BG),
+            )
+        })
+        .collect()
+}
+
+impl Home {
+    /// The home screen as a bare grid: every play in a ruled table, the
+    /// chosen one's scenes and voices in boxes, the state of things in
+    /// another, every key along the foot. No shadow, no fade, no motion.
+    fn draw_brutal(&mut self, f: &mut Frame, cfg: &Config) {
+        use ratatui::widgets::{Block, BorderType, Borders};
+        let area = f.area();
+        let st = Style::default().fg(B_FG).bg(B_BG);
+        f.render_widget(Block::default().style(st), area);
+        let w = area.width as usize;
+        if area.height < 16 || w < 60 {
+            f.render_widget(Paragraph::new("DACTILE: TOO SMALL").style(st), area);
+            return;
+        }
+        // The name, inverted, across the top.
+        let ver = format!(" v{} ", env!("CARGO_PKG_VERSION"));
+        let name = " DACTILE //";
+        let bar = Style::default().fg(B_BG).bg(B_SIGNAL);
+        let on = (self.born.elapsed().as_millis() / 600).is_multiple_of(2);
+        let strip = "▓▒░ ░▒▓▒░  ░ ▒";
+        let fill = w.saturating_sub(name.len() + 2 + strip.chars().count() + ver.len());
+        f.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled(name, bar.add_modifier(Modifier::BOLD)),
+                Span::styled(if on { " █" } else { "  " }, bar),
+                Span::styled(" ".repeat(fill), bar),
+                Span::styled(strip, Style::default().fg(B_SIGNAL).bg(B_RULE)),
+                Span::styled(
+                    ver,
+                    Style::default()
+                        .fg(B_BG)
+                        .bg(B_RULE)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ])),
+            Rect { height: 1, ..area },
+        );
+        // Where the plays are, and how many bytes they take.
+        let bytes: u64 = self
+            .plays
+            .iter()
+            .filter_map(|p| std::fs::metadata(&p.path).ok())
+            .map(|m| m.len())
+            .sum();
+        let dir = config::tilde(&cfg.plays_dir());
+        let count = lang::f(
+            "{} DOSYA   {} KB ",
+            "{} FILES   {} KB ",
+            &[&self.plays.len(), &bytes.div_ceil(1024)],
+        );
+        f.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled(format!(" {dir}"), st),
+                Span::styled(
+                    format!(
+                        "{:>width$}",
+                        count,
+                        width = w.saturating_sub(dir.width() + 1)
+                    ),
+                    st.fg(B_DIM),
+                ),
+            ])),
+            Rect {
+                y: area.y + 1,
+                height: 1,
+                ..area
+            },
+        );
+        // The table: as many rows as plays, leaving the boxes room.
+        let foot = area.y + area.height - 1;
+        let status_h = 4u16;
+        let box_min = 7u16;
+        let top = area.y + 2;
+        let room = (foot - status_h).saturating_sub(top + 4 + box_min) as usize;
+        let shown = self.plays.len().min(room.max(1));
+        let start = self.sel.saturating_sub(shown - 1);
+        let (no_w, min_w, mod_w) = (4usize, 7usize, 18usize);
+        let mut file_w = 22usize;
+        let mut title_w = w.saturating_sub(6 + no_w + file_w + min_w + mod_w);
+        if title_w < 16 {
+            file_w = 0;
+            title_w = w.saturating_sub(5 + no_w + min_w + mod_w);
+        }
+        let mut cols = vec![no_w, title_w];
+        if file_w > 0 {
+            cols.push(file_w);
+        }
+        cols.extend([min_w, mod_w]);
+        let rule = |l: &str, m: &str, r: &str| {
+            let mid: Vec<String> = cols.iter().map(|&c| "━".repeat(c)).collect();
+            format!("{l}{}{r}", mid.join(m))
+        };
+        let cell = |s: &str, width: usize, right: bool| {
+            let s = popup::fit(s, width.saturating_sub(2));
+            if right {
+                format!(" {s:>x$} ", x = width - 2)
+            } else {
+                format!(" {s:<x$} ", x = width - 2)
+            }
+        };
+        let ruled = st.fg(B_RULE);
+        let row = |cells: Vec<String>, style: Style| {
+            let mut spans = vec![Span::styled("┃", ruled)];
+            for c in cells {
+                spans.push(Span::styled(c, style));
+                spans.push(Span::styled("┃", ruled));
+            }
+            Line::from(spans)
+        };
+        let mut head = vec![
+            cell("NO", no_w, false),
+            cell(lang::l("BAŞLIK", "TITLE"), title_w, false),
+        ];
+        if file_w > 0 {
+            head.push(cell(lang::l("DOSYA", "FILE"), file_w, false));
+        }
+        head.push(cell(lang::l("SÜRE", "TIME"), min_w, true));
+        head.push(cell(lang::l("DEĞİŞTİ", "MODIFIED"), mod_w, false));
+        let mut lines = vec![
+            Line::styled(rule("┏", "┳", "┓"), ruled),
+            row(head, st.fg(B_RULE).add_modifier(Modifier::BOLD)),
+            Line::styled(rule("┣", "╋", "┫"), ruled),
+        ];
+        for (i, p) in self.plays.iter().enumerate().skip(start).take(shown) {
+            let mut title = dactile::cast::upper_tr(&p.title);
+            if let Some(d) = &p.draft
+                && p.parent.is_some()
+            {
+                title = format!("{title} · {}", dactile::cast::upper_tr(d));
+            }
+            if let Some(parent) = &p.parent
+                && let Some(j) = self.plays.iter().position(|q| &q.path == parent)
+            {
+                title = format!("{title} ← {:02}", j + 1);
+            }
+            if i == self.sel
+                && let Some(e) = &self.inline
+            {
+                title = format!("{}▏", e.value);
+            }
+            let file = p
+                .path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let when = p
+                .modified
+                .map(|t| {
+                    DateTime::<Local>::from(t)
+                        .format("%Y-%m-%d %H:%M")
+                        .to_string()
+                })
+                .unwrap_or_default();
+            let mut cells = vec![
+                cell(&format!("{:02}", i + 1), no_w, false),
+                cell(&title, title_w, false),
+            ];
+            if file_w > 0 {
+                cells.push(cell(&file, file_w, false));
+            }
+            cells.push(cell(
+                &format!("{:02}:{:02}", p.secs / 60, p.secs % 60),
+                min_w,
+                true,
+            ));
+            cells.push(cell(&when, mod_w, false));
+            let chosen = Style::default()
+                .fg(B_BG)
+                .bg(B_SIGNAL)
+                .add_modifier(Modifier::BOLD);
+            lines.push(row(cells, if i == self.sel { chosen } else { st }));
+        }
+        lines.push(Line::styled(rule("┗", "┻", "┛"), ruled));
+        let table_h = lines.len() as u16;
+        f.render_widget(
+            Paragraph::new(lines),
+            Rect {
+                y: top,
+                height: table_h,
+                ..area
+            },
+        );
+        // The chosen play's scenes and voices, down to the status box.
+        self.load(0, cfg.wpm);
+        let boxes = Rect {
+            y: top + table_h,
+            height: (foot - status_h).saturating_sub(top + table_h),
+            ..area
+        };
+        let n = self.sel + 1;
+        let frame = |title: String| {
+            Block::default()
+                .borders(Borders::ALL)
+                .border_type(BorderType::Thick)
+                .border_style(st.fg(B_RULE))
+                .title(Span::styled(
+                    format!(" {title} "),
+                    Style::default()
+                        .fg(B_BG)
+                        .bg(B_RULE)
+                        .add_modifier(Modifier::BOLD),
+                ))
+                .style(st)
+        };
+        let left = Rect {
+            width: boxes.width * 2 / 5,
+            ..boxes
+        };
+        let right = Rect {
+            x: boxes.x + left.width,
+            width: boxes.width - left.width,
+            ..boxes
+        };
+        let (scenes, voices, problems) = match &self.page {
+            Some(pg) => (pg.scenes.clone(), pg.voices.clone(), pg.problems),
+            None => (Vec::new(), Vec::new(), 0),
+        };
+        let inner_l = left.width.saturating_sub(4) as usize;
+        let key_w = scenes.iter().map(|s| s.0.width()).max().unwrap_or(0) + 2;
+        let max = scenes.iter().map(|s| s.2 as usize).max().unwrap_or(0);
+        let lines: Vec<Line> = scenes
+            .iter()
+            .map(|(key, _, secs, _)| {
+                let time = format!("{:02}:{:02}  ", secs / 60, secs % 60);
+                let room = inner_l.saturating_sub(key_w + time.len());
+                let mut spans = vec![
+                    Span::styled(format!("{key:<key_w$}"), st.fg(B_RULE)),
+                    Span::styled(time, st),
+                ];
+                spans.extend(neon_bar(*secs as usize, max, room));
+                Line::from(spans)
+            })
+            .collect();
+        f.render_widget(
+            Paragraph::new(lines).block(
+                frame(lang::f(
+                    "{} / SAHNELER",
+                    "{} / SCENES",
+                    &[&format!("{n:02}")],
+                ))
+                .padding(ratatui::widgets::Padding::horizontal(1)),
+            ),
+            left,
+        );
+        let inner_r = right.width.saturating_sub(4) as usize;
+        let name_w = voices
+            .iter()
+            .map(|v| v.0.width())
+            .max()
+            .unwrap_or(0)
+            .min(inner_r / 3);
+        let max = voices.first().map_or(0, |v| v.1);
+        let lines: Vec<Line> = voices
+            .iter()
+            .map(|(name, words)| {
+                let count = format!("{words:>6}  ");
+                let room = inner_r.saturating_sub(name_w + 1 + count.len());
+                let mut spans = vec![
+                    Span::styled(format!("{:<name_w$} ", popup::fit(name, name_w)), st),
+                    Span::styled(count, st.fg(B_DIM)),
+                ];
+                spans.extend(neon_bar(*words, max, room));
+                Line::from(spans)
+            })
+            .collect();
+        f.render_widget(
+            Paragraph::new(lines).block(
+                frame(lang::f(
+                    "{} / KONUŞANLAR",
+                    "{} / VOICES",
+                    &[&format!("{n:02}")],
+                ))
+                .padding(ratatui::widgets::Padding::horizontal(1)),
+            ),
+            right,
+        );
+        // The state of things, raw.
+        let p = &self.plays[self.sel];
+        let pdf = dactile::build::pdf_path(&p.path);
+        let pdf_state = match std::fs::metadata(&pdf) {
+            Ok(m) => {
+                let when = m
+                    .modified()
+                    .map(|t| {
+                        DateTime::<Local>::from(t)
+                            .format("%Y-%m-%d %H:%M")
+                            .to_string()
+                    })
+                    .unwrap_or_default();
+                let stale = m.modified().ok() < p.modified;
+                format!(
+                    "{when}  {} KB{}",
+                    m.len().div_ceil(1024),
+                    if stale {
+                        lang::l("  ESKİ", "  STALE")
+                    } else {
+                        ""
+                    }
+                )
+            }
+            Err(_) => lang::l("YOK", "NONE").into(),
+        };
+        let lock = dactile::file::holder(&p.path).unwrap_or_else(|| lang::l("YOK", "NONE").into());
+        let dict = if spell::find().is_some() {
+            "tr_TR"
+        } else {
+            lang::l("YOK", "NONE")
+        };
+        let label = |s: &str| {
+            Span::styled(
+                format!(" {s} "),
+                Style::default()
+                    .fg(B_BG)
+                    .bg(B_RULE)
+                    .add_modifier(Modifier::BOLD),
+            )
+        };
+        let value = |s: String, alarm: bool| {
+            Span::styled(format!(" {s}   "), if alarm { st.fg(B_SIGNAL) } else { st })
+        };
+        let state = Line::from(vec![
+            label("PDF"),
+            value(pdf_state, false),
+            label(lang::l("DENETİM", "CHECK")),
+            value(lang::f("{} HATA", "{} ERR", &[&problems]), problems > 0),
+            label(lang::l("KİLİT", "LOCK")),
+            value(lock, false),
+            label(lang::l("SÖZLÜK", "DICT")),
+            value(dict.into(), dict != "tr_TR"),
+        ]);
+        let msg = match &self.message {
+            Some((m, warn)) => Line::styled(
+                dactile::cast::upper_tr(m),
+                if *warn { st.fg(B_SIGNAL) } else { st },
+            ),
+            None => Line::from(""),
+        };
+        f.render_widget(
+            Paragraph::new(vec![state, msg]).block(frame(lang::l("DURUM", "STATUS").into())),
+            Rect {
+                y: foot - status_h,
+                height: status_h,
+                ..area
+            },
+        );
+        // Every key, always.
+        let keys: &[(&str, &str, &str)] = &[
+            ("⏎", "AÇ", "OPEN"),
+            ("N", "YENİ", "NEW"),
+            ("F", "TASLAK", "DRAFT"),
+            ("D", "KOPYA", "COPY"),
+            ("O", "DOSYA", "FILE"),
+            ("P", "PDF", "PDF"),
+            ("F2", "AD", "RENAME"),
+            ("DEL", "ÇÖP", "TRASH"),
+            ("U", "GERİ", "UNDO"),
+            ("S", "AYAR", "SETTINGS"),
+            ("B", "GÖRÜNÜM", "LOOK"),
+            ("Q", "ÇIK", "QUIT"),
+        ];
+        let mut spans = Vec::new();
+        for &(k, tr, en) in keys {
+            spans.push(Span::styled(
+                format!("[{k}]"),
+                Style::default()
+                    .fg(B_BG)
+                    .bg(B_RULE)
+                    .add_modifier(Modifier::BOLD),
+            ));
+            spans.push(Span::styled(
+                format!(" {} ", if lang::is_tr() { tr } else { en }),
+                st,
+            ));
+        }
+        f.render_widget(
+            Paragraph::new(Line::from(spans)),
+            Rect {
+                y: foot,
+                height: 1,
+                ..area
+            },
+        );
+    }
+}
+
 /// `?`: every key of the home screen.
 fn draw_keys(f: &mut Frame, area: Rect) {
-    let keys: [(&str, &str, &str); 12] = [
+    let keys: [(&str, &str, &str); 13] = [
         ("⏎", "oyunu aç", "open the play"),
         ("n", "yeni oyun", "a new play"),
         (
@@ -1493,6 +1926,7 @@ fn draw_keys(f: &mut Frame, area: Rect) {
         ("Del Del", "çöp kutusuna", "to the trash"),
         ("u", "çöpten geri getir", "back from the trash"),
         ("s", "ayarlar", "settings"),
+        ("b", "brutal neon görünüm", "the brutal neon look"),
         ("q", "çık", "quit"),
     ];
     let w = 46u16.min(area.width.saturating_sub(4));
@@ -1520,6 +1954,8 @@ fn draw_keys(f: &mut Frame, area: Rect) {
     f.render_widget(Paragraph::new(lines).style(theme::base()), popup::inner(r));
 }
 
+/// The chosen play's cover in miniature, on a page like the writer's, with
+/// its numbers under it.
 fn draw_card(f: &mut Frame, area: Rect, p: &Play, theme_name: &str) {
     let pal = theme::palette(theme_name);
     let base = Style::default().fg(pal.fg).bg(pal.bg);

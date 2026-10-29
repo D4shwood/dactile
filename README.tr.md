@@ -80,7 +80,9 @@ PDF'ini açar; iki kez Del onu masaüstünün çöp kutusuna atar, `u` geri geti
 `?` bütün tuşları gösterir. Listenin yanında seçili oyunun ilk sayfası durur:
 ekran boyunca, yazıcıdaki gibi dizilmiş, yazıcının temasında. Listenin altında,
 sayfanın diplerine hizalı: oyunun sahnelerinden bir şerit (her sahne
-oynandığı kadar uzun), sahneler ve süreleri, kim ne kadar konuşuyor.
+oynandığı kadar uzun), sahneler ve süreleri, kim ne kadar konuşuyor. `b` brütal
+bir neon görünüme geçer: bütün oyunlar çizgili bir tabloda, durum ham hâliyle
+(PDF, denetim, kilit, sözlük), bütün tuşlar hep ekranda.
 
 | Yazınca | Olan |
 |---|---|
