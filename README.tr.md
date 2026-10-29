@@ -115,7 +115,7 @@ durur; tıklayınca oraya gider.
 | Alt+I | oyun bilgisi (başlık, yazar, taslak no…) ve taslak/final |
 | Alt+S | imleçteki kelime için yazım önerileri |
 | Alt+P | kaynaktaki kişi ve oyun bilgisi satırlarını aç |
-| F5, Alt+O | PDF'i oyunun yanına derle (arka planda, tek XeLaTeX geçişi); görüntüleyicide aç. XeLaTeX'i durduracak yerlerin altı yazarken soluk çizilir (imleç üstündeyken ne olduğu yazar); `&`, `$`, `^`, yersiz `_` ve `%50` kayıtta sessizce kaçırılır; kapanmamış bir `{` ya da tanımsız bir komut F5'i orada durdurur, F5 bir daha yine de derler |
+| F5, Alt+O, Alt+L | PDF'i oyunun yanına derle (arka planda, tek XeLaTeX geçişi); görüntüleyicide aç. XeLaTeX'i durduracak yerlerin altı yazarken soluk çizilir (imleç üstündeyken ne olduğu yazar); `&`, `$`, `^`, yersiz `_` ve `%50` kayıtta sessizce kaçırılır; kapanmamış bir `{` ya da tanımsız bir komut F5'i orada durdurur, F5 bir daha yine de derler; XeLaTeX yine de düşerse Alt+L logunu açar |
 | F3 / F4 / F8 | daktilo, sahne odağı, gerisini soldur |
 | F6 | tema: kâğıt, sepya, gece, yüksek kontrast, koyu |
 | F7 | sayfa görünümü: PDF'in böldüğü yerlerden bölünmüş, numaralı A4 yapraklar |

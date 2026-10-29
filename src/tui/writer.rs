@@ -596,6 +596,11 @@ impl Writer {
             KeyCode::F(8) => {
                 self.dim = !self.dim;
             }
+            KeyCode::Char('l') if alt => {
+                if let Err(e) = build::open_log(&self.path) {
+                    self.say(&format!("{e:#}"), true);
+                }
+            }
             KeyCode::Char('o') if alt => {
                 if let Err(e) = build::open(&build::pdf_path(&self.path)) {
                     self.say(&format!("{e:#}"), true);
@@ -2963,7 +2968,14 @@ impl Writer {
                     false,
                 );
             }
-            Err(e) => self.say(&lang::f("PDF olmadı: {}", "No PDF: {}", &[&e]), true),
+            Err(e) => self.say(
+                &lang::f(
+                    "PDF olmadı: {} (Alt+L log)",
+                    "No PDF: {} (Alt+L: the log)",
+                    &[&e],
+                ),
+                true,
+            ),
         }
     }
 
@@ -3652,6 +3664,12 @@ fn palette_items(q: &str) -> Vec<PItem> {
         ("Sahne odağı", "Scene focus", "F4", k(F(4), n)),
         ("PDF derle", "Build the PDF", "F5", k(F(5), n)),
         ("PDF'i aç", "Open the PDF", "Alt+O", k(Char('o'), a)),
+        (
+            "Derleme logunu aç",
+            "Open the build log",
+            "Alt+L",
+            k(Char('l'), a),
+        ),
         ("İmleç dışını soldur", "Dim the rest", "F8", k(F(8), n)),
         ("Sayfa görünümü", "Page view", "F7", k(F(7), n)),
         (

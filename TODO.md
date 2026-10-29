@@ -10,7 +10,7 @@ setup, the README and release. Published as 0.1.0-beta.3.
 
 Each milestone ends with a demo and a beta, published once approved.
 
-1. **M8 PDF builds** → 0.2.0-beta.1
+1. ~~**M8 PDF builds**~~ Done → 0.2.0-beta.1
    - ~~One pass, not two.~~ Done: Dactile writes the scene casts into the
      `.aux` (from the outline, what the class would write) before each build,
      and on every save once there is one, so a plain `xelatex` is right in
@@ -36,7 +36,7 @@ Each milestone ends with a demo and a beta, published once approved.
        defined (`\sein` → "write `\se{}in`"). No build, the cursor goes
        there; F5 again builds anyway.
      - If XeLaTeX still fails: one line in the status line with the play's
-       line number. Left: the log a key away; add each new case to the check.
+       line number, and Alt+L opens the log. Each new case goes into the check.
 2. **M9 structure** → 0.2.0-beta.2
    - An outline board, two views, a key between them:
      - a list: acts and scenes, a summary under each (the scene navigator,

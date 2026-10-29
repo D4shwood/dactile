@@ -288,8 +288,28 @@ pub fn open(pdf: &Path) -> anyhow::Result<()> {
             )
         );
     }
+    launch(pdf)
+}
+
+/// Opens the last build's log, where XeLaTeX says what stopped it.
+pub fn open_log(play: &Path) -> anyhow::Result<()> {
+    let log = play.with_extension("log");
+    if !log.exists() {
+        anyhow::bail!(
+            "{}",
+            lang::l(
+                "Henüz log yok: önce F5 ile derle.",
+                "No log yet: build with F5 first."
+            )
+        );
+    }
+    launch(&log)
+}
+
+/// The desktop's own program for the file, without waiting for it.
+fn launch(path: &Path) -> anyhow::Result<()> {
     let mut child = Command::new("xdg-open")
-        .arg(pdf)
+        .arg(path)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())

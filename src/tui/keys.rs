@@ -233,6 +233,14 @@ pub const BINDS: &[Bind] = &[
         "open the PDF in the viewer",
     ),
     b(
+        "L",
+        false,
+        true,
+        Cat::File,
+        "son derlemenin logunu aç",
+        "open the last build's log",
+    ),
+    b(
         "F8",
         false,
         false,
