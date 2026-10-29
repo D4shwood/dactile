@@ -78,7 +78,9 @@ yazarsın, dosya adı ve yanındaki dosyalar da onu izler (taslak, dosya adını
 sonundaki numarasını korur). Shift+F2 başlığı ve dosya adını ayrı ayrı sorar; `p`
 PDF'ini açar; iki kez Del onu masaüstünün çöp kutusuna atar, `u` geri getirir;
 `?` bütün tuşları gösterir. Listenin yanında seçili oyunun ilk sayfası durur:
-ekran boyunca, yazıcıdaki gibi dizilmiş, yazıcının temasında.
+ekran boyunca, yazıcıdaki gibi dizilmiş, yazıcının temasında. Listenin altında,
+sayfanın diplerine hizalı: oyunun sahnelerinden bir şerit (her sahne
+oynandığı kadar uzun), sahneler ve süreleri, kim ne kadar konuşuyor.
 
 | Yazınca | Olan |
 |---|---|

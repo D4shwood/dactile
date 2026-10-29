@@ -1112,7 +1112,11 @@ impl Builder<'_> {
     fn cover(&mut self, b: usize, lead: usize, end: usize) {
         let get = |name| {
             info::get(self.text, name)
-                .map(|v| v.replace("\\\\", " ").trim().to_string())
+                .map(|v| {
+                    crate::tex::unescape_text(&v.replace("\\\\", " "))
+                        .trim()
+                        .to_string()
+                })
                 .filter(|v| !v.is_empty())
         };
         let text = |s: &str, style| -> Vec<Glyph> {
@@ -1124,7 +1128,7 @@ impl Builder<'_> {
             .doc
             .title(self.text)
             .unwrap_or_else(|| lang::l("(başlıksız)", "(untitled)").into());
-        let title = cast::upper_tr(&title);
+        let title = cast::upper_tr(&crate::tex::unescape_text(&title));
         // Letter-spaced when it fits on one row.
         let wide = spaced(&title);
         let shown = if wide.width() + 4 <= self.width as usize {

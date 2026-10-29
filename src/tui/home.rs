@@ -7,7 +7,7 @@ use chrono::{DateTime, Local};
 use dactile::config::{self, Config};
 use dactile::lang::{self, Lang};
 use dactile::library::{self, Play};
-use dactile::{spell, timing};
+use dactile::{outline, spell, timing};
 use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::layout::Rect;
@@ -16,6 +16,9 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use std::path::{Path, PathBuf};
 use unicode_width::UnicodeWidthStr;
+
+/// From this width on, the scenes and the voices stand side by side.
+const ANATOMY_WIDE: u16 = 64;
 
 /// How long a play's page takes to unroll.
 const PAGE_OPENS: std::time::Duration = std::time::Duration::from_millis(220);
@@ -68,6 +71,10 @@ struct Page {
     modified: Option<std::time::SystemTime>,
     width: u16,
     rows: Vec<dactile::render::Row>,
+    /// "I.1", the place, how long it plays, and its act.
+    scenes: Vec<(String, String, u32, Option<usize>)>,
+    /// Who speaks, most words first.
+    voices: Vec<(String, usize)>,
 }
 
 /// A title typed over in its row, as a file manager renames.
@@ -897,6 +904,28 @@ impl Home {
                 list.height -= 2;
             }
             self.draw_list(f, list);
+            // What the list leaves, down to the page's foot: the play's
+            // anatomy.
+            self.load(page_w.saturating_sub(7), cfg.wpm);
+            // It stands on the list's foot, level with the page's: what is
+            // left between them is air.
+            let used = (self.plays.len() * 3).min(list.height as usize / 3 * 3) as u16;
+            let width = list.width.saturating_sub(2);
+            let foot = list.y + list.height;
+            let want = self.anatomy_height(width);
+            let free = foot.saturating_sub(list.y + used + 1);
+            if free >= 6 {
+                let height = want.min(free);
+                self.draw_anatomy(
+                    f,
+                    Rect {
+                        x: list.x + 2,
+                        y: foot - height,
+                        width,
+                        height,
+                    },
+                );
+            }
             if page_w > 0 {
                 let page = Rect {
                     x: body.x + body.width - page_w,
@@ -1018,29 +1047,27 @@ impl Home {
         );
     }
 
-    /// The chosen play's first page, laid out as the writer lays it out, on
-    /// paper as tall as the screen, its foot fading as if it went on.
-    fn draw_page(&mut self, f: &mut Frame, area: Rect, theme_name: &str) {
+    /// Reads the chosen play once, until it or the page's width changes: its
+    /// first page laid out `text_w` wide, its scenes and who speaks.
+    fn load(&mut self, text_w: u16, wpm: u32) {
         let Some(p) = self.plays.get(self.sel) else {
+            self.page = None;
             return;
         };
-        let pal = theme::palette(theme_name);
-        // The paper, and its shadow on the right and below.
-        let paper = Rect {
-            width: area.width.saturating_sub(1),
-            height: area.height.saturating_sub(1),
-            ..area
-        };
-        let text_w = paper.width.saturating_sub(6);
         let modified = dactile::file::modified(&p.path);
         let fresh = self
             .page
             .as_ref()
             .is_some_and(|c| c.path == p.path && c.modified == modified && c.width == text_w);
-        if !fresh {
-            self.page = std::fs::read_to_string(&p.path).ok().map(|text| {
-                let doc = dactile::render::Doc::new(&text);
-                let lay = dactile::render::layout(
+        if fresh {
+            return;
+        }
+        self.page = std::fs::read_to_string(&p.path).ok().map(|text| {
+            let doc = dactile::render::Doc::new(&text);
+            let rows = if text_w == 0 {
+                Vec::new()
+            } else {
+                dactile::render::layout(
                     &text,
                     &doc,
                     dactile::render::Options {
@@ -1051,16 +1078,207 @@ impl Home {
                         focus_scene: None,
                         page_rows: None,
                     },
-                );
-                Page {
-                    path: p.path.clone(),
-                    modified,
-                    width: text_w,
-                    // Without the folded preamble's line.
-                    rows: lay.rows.into_iter().filter(|r| r.block.is_some()).collect(),
+                )
+                .rows
+                .into_iter()
+                // Without the folded preamble's line.
+                .filter(|r| r.block.is_some())
+                .collect()
+            };
+            let o = &doc.outline;
+            let scenes = o
+                .scenes
+                .iter()
+                .map(|s| {
+                    // A number given by hand ("2.1") stands as it is.
+                    let key = match s.act {
+                        Some(a) if !s.label.contains('.') => {
+                            format!("{}.{}", outline::roman(o.acts[a].number), s.label)
+                        }
+                        _ => s.label.clone(),
+                    };
+                    (key, s.place.clone(), timing::scene_secs(s, wpm), s.act)
+                })
+                .collect();
+            let mut words: Vec<(String, usize)> = Vec::new();
+            for b in &doc.blocks[doc.body.clone()] {
+                if let dactile::lex::Kind::Line { alias, text: t } = &b.kind {
+                    let n = dactile::lex::spoken_words(&text, t.clone(), &doc.cast);
+                    match words.iter_mut().find(|(a, _)| a == alias) {
+                        Some(w) => w.1 += n,
+                        None => words.push((alias.clone(), n)),
+                    }
                 }
-            });
+            }
+            words.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
+            let voices = words
+                .into_iter()
+                .map(|(a, n)| (doc.cast.get(&a).map_or(a, |c| c.script.clone()), n))
+                .collect();
+            Page {
+                path: p.path.clone(),
+                modified,
+                width: text_w,
+                rows,
+                scenes,
+                voices,
+            }
+        });
+    }
+
+    /// The rows `draw_anatomy` takes `width` wide.
+    fn anatomy_height(&self, width: u16) -> u16 {
+        let Some(page) = &self.page else {
+            return 0;
+        };
+        let (scenes, voices) = (page.scenes.len(), page.voices.len());
+        // The timeline and a blank, then each part's heading and a blank.
+        let parts = if width >= ANATOMY_WIDE {
+            scenes.max(voices) + 2
+        } else {
+            scenes + 2 + 1 + voices + 2
+        };
+        (2 + parts) as u16
+    }
+
+    /// Under the list: the play as a strip of its scenes, then the scenes
+    /// and how long each plays, and who speaks how much, as thin bars.
+    fn draw_anatomy(&self, f: &mut Frame, area: Rect) {
+        let Some(page) = &self.page else {
+            return;
+        };
+        if area.height < 4 || area.width < 40 || page.scenes.is_empty() {
+            return;
         }
+        let w = area.width as usize;
+        // The whole play in one line: each scene as long as it plays, the
+        // acts in turn claret and grey.
+        let total: u32 = page.scenes.iter().map(|s| s.2.max(1)).sum();
+        let mut strip = Vec::new();
+        let mut used = 0usize;
+        let mut acc = 0u32;
+        for (i, sc) in page.scenes.iter().enumerate() {
+            acc += sc.2.max(1);
+            let end = (acc as usize * w).div_ceil(total as usize).min(w);
+            let len = end.saturating_sub(used);
+            if len == 0 {
+                continue;
+            }
+            let color = if sc.3.unwrap_or(0) % 2 == 0 {
+                CLARET
+            } else {
+                MUTED
+            };
+            // A gap between scenes, when there is room for one.
+            let last = i + 1 == page.scenes.len();
+            let body = if len > 1 && !last { len - 1 } else { len };
+            strip.push(Span::styled("━".repeat(body), Style::default().fg(color)));
+            if body < len {
+                strip.push(Span::raw(" "));
+            }
+            used = end;
+        }
+        let mut out = vec![Line::from(strip), Line::from("")];
+        let heading = |s: &str| {
+            let spaced: String = s.chars().map(|c| format!("{c} ")).collect();
+            Line::from(Span::styled(
+                spaced.trim_end().to_string(),
+                Style::default().fg(MUTED),
+            ))
+        };
+        let bar = |n: usize, max: usize, room: usize| -> String {
+            let len = if max == 0 {
+                0
+            } else {
+                (n * room).div_ceil(max)
+            };
+            "─".repeat(len.max(usize::from(n > 0)))
+        };
+        let wide = area.width >= ANATOMY_WIDE;
+        let cw = if wide { (w - 4) / 2 } else { w };
+        let key_w = page.scenes.iter().map(|s| s.0.width()).max().unwrap_or(0) + 2;
+        // The scenes: key, place, a bar, the time.
+        let max = page.scenes.iter().map(|s| s.2 as usize).max().unwrap_or(0);
+        let mut scenes = vec![heading(lang::l("SAHNELER", "SCENES")), Line::from("")];
+        for (key, place, secs, _) in &page.scenes {
+            let time = timing::format(*secs);
+            let room = cw.saturating_sub(key_w + 2 + time.width());
+            let place_w = room * 3 / 5;
+            let bar_room = room.saturating_sub(place_w + 1);
+            scenes.push(Line::from(vec![
+                Span::styled(format!("{key:<key_w$}"), Style::default().fg(CLARET)),
+                Span::styled(
+                    format!("{:<place_w$} ", popup::fit(place, place_w)),
+                    Style::default().fg(MUTED),
+                ),
+                Span::styled(
+                    format!("{:<bar_room$}", bar(*secs as usize, max, bar_room)),
+                    Style::default().fg(FAINT),
+                ),
+                Span::styled(format!("  {time}"), Style::default().fg(MUTED)),
+            ]));
+        }
+        // Who speaks: name, a bar, words.
+        let max = page.voices.first().map_or(0, |v| v.1);
+        let name_w = page
+            .voices
+            .iter()
+            .map(|v| v.0.width())
+            .max()
+            .unwrap_or(0)
+            .min(cw / 3);
+        let mut voices = vec![heading(lang::l("KONUŞANLAR", "VOICES")), Line::from("")];
+        for (name, n) in &page.voices {
+            let count = lang::f("{} kelime", "{} words", &[n]);
+            let bar_room = cw.saturating_sub(name_w + 2 + count.width() + 2);
+            voices.push(Line::from(vec![
+                Span::styled(
+                    format!("{:<name_w$}  ", popup::fit(name, name_w)),
+                    Style::default().fg(BEIGE),
+                ),
+                Span::styled(
+                    format!("{:<bar_room$}", bar(*n, max, bar_room)),
+                    Style::default().fg(CLARET),
+                ),
+                Span::styled(format!("  {count}"), Style::default().fg(MUTED)),
+            ]));
+        }
+        if wide {
+            let top = area.y + 2;
+            f.render_widget(Paragraph::new(out).style(theme::base()), area);
+            let col = |x: u16| Rect {
+                x,
+                y: top,
+                width: cw as u16,
+                height: area.height.saturating_sub(2),
+            };
+            f.render_widget(Paragraph::new(scenes).style(theme::base()), col(area.x));
+            f.render_widget(
+                Paragraph::new(voices).style(theme::base()),
+                col(area.x + cw as u16 + 4),
+            );
+        } else {
+            out.extend(scenes);
+            out.push(Line::from(""));
+            out.extend(voices);
+            f.render_widget(Paragraph::new(out).style(theme::base()), area);
+        }
+    }
+
+    /// The chosen play's first page, laid out as the writer lays it out, on
+    /// paper as tall as the screen, its foot fading as if it went on.
+    fn draw_page(&self, f: &mut Frame, area: Rect, theme_name: &str) {
+        let Some(p) = self.plays.get(self.sel) else {
+            return;
+        };
+        let pal = theme::palette(theme_name);
+        // The paper, and its shadow on the right and below.
+        let paper = Rect {
+            width: area.width.saturating_sub(1),
+            height: area.height.saturating_sub(1),
+            ..area
+        };
+        // Loaded by `load` already, `paper.width - 6` wide.
         let Some(page) = &self.page else {
             draw_card(
                 f,
