@@ -2,7 +2,8 @@
 # Compiles the example play with the class in draft and final mode (and with
 # the director's notes left out), a new play with nobody in it yet, and checks
 # the scene casts the class wrote, the rerun warning when they were stale, and
-# a run with the casts seeded as Dactile does, and comments on # headings.
+# a run with the casts seeded as Dactile does, comments on # headings,
+# entrances and exits, and actor copies.
 # Run from anywhere: tex/test/run.sh
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -69,3 +70,23 @@ grep -q '(OZAN ile İHTİYAR girerler.)' moves.txt || { cat moves.txt; echo "FAI
 grep -q '(SELİN çıkar.)' moves.txt || { cat moves.txt; echo "FAIL: \\cikar"; exit 1; }
 grep -qxF '\tiyatrocast{-1}{se,oz,ih}' moves.aux || { cat moves.aux; echo "FAIL: moves cast"; exit 1; }
 echo "ok: entrances and exits"
+
+# An actor's copy: their lines on a band, a marked entrance in bold, scenes
+# without them only headings; the casts as seeded, no rerun asked for.
+printf '\\documentclass{tiyatro}\n\\karakter{SELİN}{se}\n\\karakter{OZAN}{oz}\n\\title{Deneme}\n\\tiyatrocopy{se}{Deniz Kaya}\n\\tiyatrocopycover{I-1 (s.~\\pageref{tiy@I-1})}\n\\begin{document}\n\\maketitle\n#perde Bir\n#sahne Ev\n\\tiyatromark\\girer{se}\n\\se Merhaba.\n\\oz Hoş geldin.\n\\sedo Oturur.\n\\stagedir{Işık.}\n#sahne Yol\n\\end{document}\n' > copy.tex
+printf '\\relax\n\\tiyatrocast{I-1}{se,oz}\n\\tiyatrocast{I-2}{oz}\n' > copy.aux
+for run in 1 2; do
+    xelatex -interaction=nonstopmode -halt-on-error copy.tex > /dev/null 2>&1 || { grep -A6 '^! ' copy.log; echo "FAIL: copy"; exit 1; }
+done
+pdftotext copy.pdf - > copy.txt
+grep -q 'Deniz Kaya' copy.txt || { cat copy.txt; echo "FAIL: copy cover"; exit 1; }
+grep -q 'I-1 (s. 1)' copy.txt || { cat copy.txt; echo "FAIL: copy cover page"; exit 1; }
+grep -q 'SELİN, OZAN' copy.txt || { cat copy.txt; echo "FAIL: copy kept the seeded cast"; exit 1; }
+! grep -q 'Rerun to get them right' copy.log || { echo "FAIL: copy asks for a rerun"; exit 1; }
+echo "ok: an actor's copy"
+
+# \tiyatronoend: no curtain at the end.
+printf '\\documentclass{tiyatro}\n\\tiyatronoend\n\\begin{document}\nTablo.\n\\end{document}\n' > noend.tex
+xelatex -interaction=nonstopmode -halt-on-error noend.tex > /dev/null 2>&1 || { grep -A6 '^! ' noend.log; echo "FAIL: noend"; exit 1; }
+! pdftotext noend.pdf - | grep -q 'Son' || { echo "FAIL: noend printed the end"; exit 1; }
+echo "ok: no end"

@@ -3,8 +3,10 @@
 use super::anim;
 use super::board;
 use super::keys;
+use super::memorize::{self, Memo};
 use super::panels::{self, CastPanel, Entry, ScenesPanel};
 use super::popup::{self, Field, Form, FormKind, Menu, Verbs};
+use super::roles::{self, RolesPanel};
 use super::theme::{self, BEIGE, CLARET, FAINT, MUTED, WARN};
 use anyhow::Result;
 use dactile::buffer::{self, Buffer};
@@ -16,7 +18,7 @@ use dactile::file::{self, LockState};
 use dactile::lex::Kind;
 use dactile::outline;
 use dactile::render::{self, Doc, Layout, Options, Stop};
-use dactile::sidecar::Sidecar;
+use dactile::sidecar::{Casting, Sidecar};
 use dactile::source;
 use dactile::spell::{self, Speller};
 use dactile::{info, lang, library, shelf, structure, timing};
@@ -132,6 +134,11 @@ pub struct Writer {
     speller_rx: Option<Receiver<Result<Speller>>>,
     /// A PDF build running in the background, and since when.
     building: Option<(Receiver<Result<Built, Failed>>, Instant)>,
+    /// A table or actor copies being built: what came out (a file or a
+    /// folder) and how many PDFs.
+    aside: Option<(Receiver<Aside>, Instant)>,
+    /// The last of those, for `o` on F9's screen.
+    aside_out: Option<PathBuf>,
     /// What would stop XeLaTeX, underlined faintly.
     problems: Vec<Problem>,
     /// Where F5 last stopped for a problem: F5 there again builds anyway.
@@ -147,6 +154,10 @@ pub struct Writer {
     strip_key: Option<Instant>,
     /// The board shows cards rather than the list.
     board_cards: bool,
+    /// F9's screen, where it was left.
+    roles: RolesPanel,
+    /// Shift+F8: this role's lines lit, the rest faint (an alias).
+    role_view: Option<String>,
     /// The play as it was before this session's first move, split or
     /// merge, kept as a draft.
     kept: Option<PathBuf>,
@@ -173,6 +184,9 @@ pub struct View {
     pub animations: bool,
 }
 
+/// What a build beside the play made: where, and how many PDFs.
+type Aside = Result<(PathBuf, usize), Failed>;
+
 enum Popup {
     None,
     /// After a backslash: what can follow it.
@@ -194,6 +208,10 @@ enum Popup {
     Help(keys::Help),
     /// Alt+S: spelling suggestions for the word at `range`.
     Suggest(std::ops::Range<usize>, Vec<String>, usize),
+    /// F9: the casting, the scene/role table, the numbers (`self.roles`).
+    Roles,
+    /// Learning a role by heart.
+    Memorize(Memo),
 }
 
 impl Writer {
@@ -271,6 +289,8 @@ impl Writer {
             speller: None,
             speller_rx: None,
             building: None,
+            aside: None,
+            aside_out: None,
             problems: Vec::new(),
             stopped_at: None,
             known: HashSet::new(),
@@ -279,6 +299,8 @@ impl Writer {
             strip: false,
             strip_key: None,
             board_cards: false,
+            roles: RolesPanel::default(),
+            role_view: None,
             kept: None,
             quit: false,
         };
@@ -621,9 +643,11 @@ impl Writer {
                 );
             }
             KeyCode::F(5) => self.build(),
+            KeyCode::F(8) if shift => self.toggle_role_view(),
             KeyCode::F(8) => {
                 self.dim = !self.dim;
             }
+            KeyCode::F(9) => self.popup = Popup::Roles,
             KeyCode::Char('l') if alt => {
                 if let Err(e) = build::open_log(&self.path) {
                     self.say(&format!("{e:#}"), true);
@@ -1283,6 +1307,14 @@ impl Writer {
                 self.cast_key(k);
                 true
             }
+            Popup::Roles => {
+                self.roles_key(k);
+                true
+            }
+            Popup::Memorize(_) => {
+                self.memo_key(k);
+                true
+            }
             Popup::Scenes(p) => {
                 let units = shelf::units(&self.buf.text, &self.doc);
                 if p.trash {
@@ -1559,7 +1591,10 @@ impl Writer {
         };
         match k.code {
             KeyCode::Esc => {
-                self.popup = Popup::None;
+                self.popup = match form.kind {
+                    FormKind::Actor(_) | FormKind::CastingName(_) | FormKind::Wpm => Popup::Roles,
+                    _ => Popup::None,
+                };
                 return;
             }
             KeyCode::Up | KeyCode::BackTab => form.focus = (form.focus + n - 1) % n,
@@ -1654,6 +1689,61 @@ impl Writer {
                     self.reveal = Some((form.at.start, Instant::now()));
                 }
             }
+            FormKind::Actor(alias) => {
+                let actor = form.get("Oyuncu").trim().to_string();
+                if self.sidecar.castings.is_empty() {
+                    self.sidecar.castings.push(Casting {
+                        name: "A".into(),
+                        ..Casting::default()
+                    });
+                    self.sidecar.casting = 0;
+                }
+                let c = self.sidecar.casting.min(self.sidecar.castings.len() - 1);
+                let actors = &mut self.sidecar.castings[c].actors;
+                if actor.is_empty() {
+                    actors.remove(&alias);
+                } else {
+                    actors.insert(alias, actor);
+                }
+                self.save_sidecar();
+                self.popup = Popup::Roles;
+            }
+            FormKind::CastingName(new) => {
+                let name = form.get("Ad").trim().to_string();
+                if name.is_empty() {
+                    let e = lang::l(
+                        "Bir ad yaz: A, B, prömiyer…",
+                        "Give it a name: A, B, premiere…",
+                    );
+                    return Err(Box::new((form, e.into())));
+                }
+                if new || self.sidecar.castings.is_empty() {
+                    // A new one starts as a copy of the one in use.
+                    let actors = self
+                        .sidecar
+                        .current()
+                        .map(|c| c.actors.clone())
+                        .unwrap_or_default();
+                    self.sidecar.castings.push(Casting { name, actors });
+                    self.sidecar.casting = self.sidecar.castings.len() - 1;
+                } else {
+                    let c = self.sidecar.casting.min(self.sidecar.castings.len() - 1);
+                    self.sidecar.castings[c].name = name;
+                }
+                self.save_sidecar();
+                self.popup = Popup::Roles;
+            }
+            FormKind::Wpm => match form.get("Dakikada kelime").trim().parse::<u32>() {
+                Ok(n) if (30..=400).contains(&n) => {
+                    self.sidecar.wpm = Some(n);
+                    self.save_sidecar();
+                    self.popup = Popup::Roles;
+                }
+                _ => {
+                    let e = lang::l("30 ile 400 arası bir sayı.", "A number from 30 to 400.");
+                    return Err(Box::new((form, e.into())));
+                }
+            },
             FormKind::Summary(back) => {
                 let at = form.at.start;
                 self.set_summary(at, form.get("Özet"));
@@ -1772,6 +1862,12 @@ impl Writer {
                 let edits = dcast::merge(&self.buf.text, &self.doc.cast, &from, &into);
                 let cursor = self.buf.cursor.min(self.doc.parts.body.start);
                 self.buf.apply(&edits, cursor);
+                // Its actors, where the other has none.
+                for c in &mut self.sidecar.castings {
+                    if let Some(a) = c.actors.remove(&from) {
+                        c.actors.entry(into.clone()).or_insert(a);
+                    }
+                }
                 // The card: what was known about both.
                 if let Some(old) = self.sidecar.cards.remove(&from) {
                     let card = self.sidecar.cards.entry(into.clone()).or_default();
@@ -2372,6 +2468,16 @@ impl Writer {
                 );
             }
             PAct::Board => self.open_board(),
+            PAct::Memorize => match self.block().and_then(|b| self.doc.speaker(b)) {
+                Some(a) => self.open_memo(a.to_string(), false),
+                None => self.say(
+                    lang::l(
+                        "İmleci bir rolün satırına götür ya da F9'da rolü seçip z.",
+                        "Put the cursor on a role's line, or pick the role on F9 and press z.",
+                    ),
+                    true,
+                ),
+            },
             PAct::NewScene | PAct::NewAct => {
                 if self.editable() {
                     let at = self.buf.cursor;
@@ -2383,6 +2489,321 @@ impl Writer {
                 }
             }
             PAct::NewCharacter => self.popup = Popup::Form(self.character_form("", None)),
+        }
+    }
+
+    // ------------------------------------------------------------ casting
+
+    /// Memorizing `role` from its first line at or after the cursor.
+    fn open_memo(&mut self, role: String, back: bool) {
+        let cues = dactile::memorize::cues(&self.buf.text, &self.doc, &role);
+        let ours = memorize::ours(&cues);
+        let here = self.block().unwrap_or(0);
+        let at = ours
+            .iter()
+            .copied()
+            .find(|&i| cues[i].block >= here)
+            .or(ours.first().copied())
+            .unwrap_or(0);
+        let name = self
+            .doc
+            .cast
+            .get(&role)
+            .map_or(role.clone(), |c| c.script.clone());
+        self.popup = Popup::Memorize(Memo {
+            role,
+            name,
+            at,
+            shown: 0,
+            back,
+        });
+    }
+
+    fn memo_key(&mut self, k: KeyEvent) {
+        let Popup::Memorize(m) = &self.popup else {
+            return;
+        };
+        let cues = dactile::memorize::cues(&self.buf.text, &self.doc, &m.role);
+        let ours = memorize::ours(&cues);
+        let Popup::Memorize(m) = &mut self.popup else {
+            return;
+        };
+        let k_at = ours.iter().position(|&i| i == m.at).unwrap_or(0);
+        let next = ours.get(k_at + 1).copied();
+        match k.code {
+            KeyCode::Esc => {
+                self.popup = if m.back { Popup::Roles } else { Popup::None };
+            }
+            KeyCode::Char(' ') | KeyCode::Enter => {
+                if m.shown < 2 {
+                    m.shown += 1;
+                } else if let Some(n) = next {
+                    m.at = n;
+                    m.shown = 0;
+                } else {
+                    self.say(
+                        lang::l(
+                            "Rolün sonu. Esc kapatır.",
+                            "The end of the role. Esc closes.",
+                        ),
+                        false,
+                    );
+                }
+            }
+            KeyCode::Down | KeyCode::Right => {
+                if let Some(n) = next {
+                    m.at = n;
+                    m.shown = 0;
+                }
+            }
+            KeyCode::Backspace | KeyCode::Up | KeyCode::Left if k_at > 0 => {
+                m.at = ours[k_at - 1];
+                m.shown = 0;
+            }
+            _ => {}
+        }
+    }
+
+    /// Shift+F8: the cursor's speaker's lines lit, the rest faint; again, off.
+    fn toggle_role_view(&mut self) {
+        if self.role_view.take().is_some() {
+            self.say(lang::l("Rol görünümü kapalı.", "Role view off."), false);
+            return;
+        }
+        let who = self
+            .block()
+            .and_then(|b| self.doc.speaker(b))
+            .map(str::to_string);
+        match who.as_deref().and_then(|a| self.doc.cast.get(a)) {
+            Some(c) => {
+                self.say(
+                    &lang::f(
+                        "Rol görünümü: {}. Shift+F8 kapatır.",
+                        "Role view: {}. Shift+F8 turns it off.",
+                        &[&c.script],
+                    ),
+                    false,
+                );
+                self.role_view = who;
+            }
+            None => self.say(
+                lang::l(
+                    "İmleci bir rolün satırına götür, sonra Shift+F8.",
+                    "Put the cursor on a role's line, then Shift+F8.",
+                ),
+                true,
+            ),
+        }
+    }
+
+    /// Whether block `b` stays lit in the role view: the role's lines and
+    /// directions, its entrances and exits, and the headings.
+    fn role_lit(&self, b: usize) -> bool {
+        let Some(role) = &self.role_view else {
+            return true;
+        };
+        match self.doc.blocks.get(b).map(|b| &b.kind) {
+            Some(Kind::Line { alias, .. }) => alias == role,
+            Some(Kind::Do { aliases, .. } | Kind::Move { aliases, .. }) => aliases.contains(role),
+            Some(Kind::Act { .. } | Kind::Scene { .. } | Kind::Section { .. }) => true,
+            _ => false,
+        }
+    }
+
+    fn roles_key(&mut self, k: KeyEvent) {
+        let n = self.doc.cast.characters.len();
+        let scenes = self.doc.outline.scenes.len();
+        let castings = self.sidecar.castings.len();
+        let p = &mut self.roles;
+        p.sel = p.sel.min(n.saturating_sub(1));
+        p.row = p.row.min(scenes.saturating_sub(1));
+        if p.confirm {
+            p.confirm = false;
+            if k.code == KeyCode::Char('x') && castings > 0 {
+                let c = self.sidecar.casting.min(castings - 1);
+                self.sidecar.castings.remove(c);
+                self.sidecar.casting = c.saturating_sub(1);
+                self.save_sidecar();
+            }
+            return;
+        }
+        match (p.tab, k.code) {
+            (_, KeyCode::Esc | KeyCode::F(9)) => self.popup = Popup::None,
+            (_, KeyCode::Tab) => p.tab = p.tab.next(),
+            (_, KeyCode::BackTab) => p.tab = p.tab.next().next(),
+            (roles::Tab::Casting, KeyCode::Up) => p.sel = p.sel.saturating_sub(1),
+            (roles::Tab::Casting, KeyCode::Down) => p.sel = (p.sel + 1).min(n.saturating_sub(1)),
+            (roles::Tab::Casting, KeyCode::Left | KeyCode::Right) if castings > 1 => {
+                let c = self.sidecar.casting.min(castings - 1);
+                self.sidecar.casting = if k.code == KeyCode::Left {
+                    (c + castings - 1) % castings
+                } else {
+                    (c + 1) % castings
+                };
+                self.save_sidecar();
+            }
+            (roles::Tab::Casting, KeyCode::Enter) if n > 0 => {
+                let alias = self.doc.cast.characters[p.sel].alias.clone();
+                self.actor_form(alias);
+            }
+            (roles::Tab::Casting, KeyCode::Char('n')) => self.casting_form(true),
+            (roles::Tab::Casting, KeyCode::Char('r')) => self.casting_form(false),
+            (roles::Tab::Casting, KeyCode::Char('x')) if castings > 0 => p.confirm = true,
+            (roles::Tab::Casting, KeyCode::Char('k')) => self.actor_copies(),
+            (roles::Tab::Casting, KeyCode::Char('z')) if n > 0 => {
+                let alias = self.doc.cast.characters[p.sel].alias.clone();
+                self.open_memo(alias, true);
+            }
+            (roles::Tab::Table, KeyCode::Up) => p.row = p.row.saturating_sub(1),
+            (roles::Tab::Table, KeyCode::Down) => p.row = (p.row + 1).min(scenes.saturating_sub(1)),
+            (roles::Tab::Table, KeyCode::Left) => p.col = p.col.saturating_sub(1),
+            (roles::Tab::Table, KeyCode::Right) => p.col = (p.col + 1).min(n.saturating_sub(1)),
+            (roles::Tab::Table, KeyCode::Enter) if scenes > 0 => {
+                let b = self.doc.body.start + self.doc.outline.scenes[p.row].block;
+                let at = self.doc.blocks[b].span.start;
+                self.popup = Popup::None;
+                self.go(at, false);
+                self.relayout();
+                if let Some(s) = self.lay.next_stop(self.doc.blocks[b].span.end) {
+                    self.go(s.byte, false);
+                }
+            }
+            (roles::Tab::Table, KeyCode::Char('x')) => self.table_csv(),
+            (roles::Tab::Table, KeyCode::Char('p')) => self.table_pdf(),
+            (_, KeyCode::Char('o')) => match &self.aside_out {
+                Some(out) => {
+                    if let Err(e) = build::open(out) {
+                        self.say(&format!("{e:#}"), true);
+                    }
+                }
+                None => self.say(
+                    lang::l(
+                        "Henüz bir tablo PDF'i ya da oyuncu kopyası yok.",
+                        "No table PDF or actor copies yet.",
+                    ),
+                    false,
+                ),
+            },
+            (roles::Tab::Stats, KeyCode::Up) => p.scroll = p.scroll.saturating_sub(1),
+            (roles::Tab::Stats, KeyCode::Down) => p.scroll += 1,
+            (roles::Tab::Stats, KeyCode::PageUp) => p.scroll = p.scroll.saturating_sub(10),
+            (roles::Tab::Stats, KeyCode::PageDown) => p.scroll += 10,
+            (roles::Tab::Stats, KeyCode::Char('w')) => self.wpm_form(),
+            _ => {}
+        }
+    }
+
+    fn actor_form(&mut self, alias: String) {
+        if !self.editable() {
+            return;
+        }
+        let now = self.sidecar.actor(&alias).unwrap_or("").to_string();
+        let script = self
+            .doc
+            .cast
+            .get(&alias)
+            .map(|c| c.script.clone())
+            .unwrap_or_default();
+        let casting = self
+            .sidecar
+            .current()
+            .map(|c| c.name.clone())
+            .unwrap_or_else(|| "A".into());
+        // Everyone already cast somewhere, to pick with Tab.
+        let mut known: Vec<String> = self
+            .sidecar
+            .castings
+            .iter()
+            .flat_map(|c| c.actors.values().cloned())
+            .collect();
+        known.sort();
+        known.dedup();
+        self.popup = Popup::Form(Form {
+            kind: FormKind::Actor(alias),
+            title: lang::f(
+                "{} kimin? ({} dağıtımı; PDF'e girmez)",
+                "Who plays {}? (casting {}; never printed)",
+                &[&script, &casting],
+            ),
+            fields: vec![Field::text("Oyuncu", &now, known)],
+            focus: 0,
+            at: 0..0,
+            error: None,
+            confirmed: false,
+        });
+    }
+
+    fn casting_form(&mut self, new: bool) {
+        if !self.editable() {
+            return;
+        }
+        let now = if new {
+            String::new()
+        } else {
+            self.sidecar
+                .current()
+                .map(|c| c.name.clone())
+                .unwrap_or_default()
+        };
+        let title = if new && !self.sidecar.castings.is_empty() {
+            lang::l(
+                "yeni dağıtım (şimdikinin kopyası)",
+                "a new casting (a copy of this one)",
+            )
+        } else if new {
+            lang::l("yeni dağıtım", "a new casting")
+        } else {
+            lang::l("dağıtımın adı", "the casting's name")
+        };
+        self.popup = Popup::Form(Form {
+            kind: FormKind::CastingName(new),
+            title: title.into(),
+            fields: vec![Field::text("Ad", &now, Vec::new())],
+            focus: 0,
+            at: 0..0,
+            error: None,
+            confirmed: false,
+        });
+    }
+
+    fn wpm_form(&mut self) {
+        if !self.editable() {
+            return;
+        }
+        self.popup = Popup::Form(Form {
+            kind: FormKind::Wpm,
+            title: lang::l(
+                "bu oyunun konuşma hızı (süreler buna göre)",
+                "this play's pace (the times follow it)",
+            )
+            .into(),
+            fields: vec![Field::text(
+                "Dakikada kelime",
+                &self.wpm().to_string(),
+                Vec::new(),
+            )],
+            focus: 0,
+            at: 0..0,
+            error: None,
+            confirmed: false,
+        });
+    }
+
+    /// The scene/role table beside the play, for a spreadsheet.
+    fn table_csv(&mut self) {
+        let data = roles::Data::of(&self.buf.text, &self.doc, self.wpm());
+        let text = dactile::casting::csv(&self.doc, &self.sidecar, &data.table);
+        let path = dactile::casting::table_path(&self.path, "csv");
+        match dactile::file::write_atomic(&path, &text) {
+            Ok(()) => self.say(
+                &lang::f(
+                    "Tablo yazıldı: {}",
+                    "The table is written: {}",
+                    &[&dactile::config::tilde(&path)],
+                ),
+                false,
+            ),
+            Err(e) => self.say(&format!("{e:#}"), true),
         }
     }
 
@@ -3338,6 +3759,23 @@ impl Writer {
                 ),
             }
         }
+        if let Some((rx, since)) = &self.aside {
+            let since = *since;
+            match rx.try_recv() {
+                Ok(result) => {
+                    self.aside = None;
+                    self.aside_done(result);
+                }
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => self.aside = None,
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    let secs = since.elapsed().as_secs();
+                    self.message = Some((
+                        lang::f("Derleniyor… {} sn", "Building… {} s", &[&secs]),
+                        false,
+                    ));
+                }
+            }
+        }
         if let Some((rx, since)) = &self.building {
             let since = *since;
             match rx.try_recv() {
@@ -3477,6 +3915,85 @@ impl Writer {
         });
         self.building = Some((rx, Instant::now()));
         self.say(lang::l("PDF derleniyor…", "Building the PDF…"), false);
+    }
+
+    /// Builds something made from the play in the background.
+    fn start_aside(&mut self, job: impl FnOnce() -> Aside + Send + 'static) {
+        if self.aside.is_some() {
+            return;
+        }
+        let (tx, rx) = channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(job());
+        });
+        self.aside = Some((rx, Instant::now()));
+        self.say(lang::l("Derleniyor…", "Building…"), false);
+    }
+
+    fn aside_done(&mut self, result: Aside) {
+        match result {
+            Ok((out, n)) => {
+                let msg = if n == 1 {
+                    lang::f(
+                        "Hazır: {} (F9'da o açar)",
+                        "Ready: {} (o on F9 opens it)",
+                        &[&dactile::config::tilde(&out)],
+                    )
+                } else {
+                    lang::f(
+                        "{} PDF hazır: {} (F9'da o açar)",
+                        "{} PDFs ready: {} (o on F9 opens it)",
+                        &[&n, &dactile::config::tilde(&out)],
+                    )
+                };
+                self.aside_out = Some(out);
+                self.say(&msg, false);
+            }
+            Err(e) => self.say(&lang::f("Olmadı: {}", "Failed: {}", &[&e]), true),
+        }
+    }
+
+    /// A copy for each actor of the casting in use, all at once.
+    fn actor_copies(&mut self) {
+        use dactile::casting;
+        let all = casting::copies(&self.doc, &self.sidecar);
+        if all.is_empty() {
+            self.say(
+                lang::l("Önce rollere oyuncu yaz (⏎).", "Cast the roles first (⏎)."),
+                true,
+            );
+            return;
+        }
+        let text = &self.buf.text;
+        let stage = dactile::stage::read(text, &self.doc, &[]);
+        let table = casting::table(text, &self.doc, &stage);
+        let aux = build::casts(&self.doc.outline);
+        let dir = casting::copies_dir(&self.path);
+        let jobs: Vec<(String, PathBuf)> = all
+            .iter()
+            .map(|c| {
+                (
+                    casting::copy_tex(text, &self.doc, &stage, &table, self.wpm(), c),
+                    dir.join(c.file_name(&self.doc, &self.sidecar)),
+                )
+            })
+            .collect();
+        let play = self.path.clone();
+        self.start_aside(move || {
+            for (tex, out) in &jobs {
+                build::build_aside(&play, tex, &aux, out)?;
+            }
+            Ok((dir, jobs.len()))
+        });
+    }
+
+    fn table_pdf(&mut self) {
+        let data = roles::Data::of(&self.buf.text, &self.doc, self.wpm());
+        let tex =
+            dactile::casting::table_tex(&self.doc, &self.buf.text, &self.sidecar, &data.table);
+        let out = dactile::casting::table_path(&self.path, "pdf");
+        let play = self.path.clone();
+        self.start_aside(move || build::build_aside(&play, &tex, "", &out).map(|b| (b.pdf, 1)));
     }
 
     fn built(&mut self, result: Result<Built, Failed>) {
@@ -3643,6 +4160,25 @@ impl Writer {
             Popup::Form(form) => popup::draw_form(f, area, form),
             Popup::Cast(p) => {
                 panels::draw_cast(f, area, &self.doc, &self.buf.text, &self.sidecar, p)
+            }
+            Popup::Memorize(m) => {
+                let cues = dactile::memorize::cues(&self.buf.text, &self.doc, &m.role);
+                memorize::draw(f, area, &cues, m, self.sidecar.actor(&m.role));
+            }
+            Popup::Roles => {
+                let data = roles::Data::of(&self.buf.text, &self.doc, self.wpm());
+                roles::draw(
+                    f,
+                    area,
+                    &self.doc,
+                    &self.sidecar,
+                    &data,
+                    self.wpm(),
+                    &self.roles,
+                );
+                if self.message.is_some() {
+                    self.draw_status(f, status);
+                }
             }
             Popup::Scenes(p) => {
                 let units = shelf::units(&self.buf.text, &self.doc);
@@ -3852,6 +4388,8 @@ impl Writer {
             self.popup,
             Popup::Cast(_)
                 | Popup::Scenes(_)
+                | Popup::Roles
+                | Popup::Memorize(_)
                 | Popup::Split(_)
                 | Popup::Palette(..)
                 | Popup::Help(_)
@@ -3926,7 +4464,7 @@ impl Writer {
                     shown_chars += 1;
                 }
                 let mut style = theme::on(c.style, p);
-                if self.dim && !here {
+                if (self.dim && !here) || row.block.is_some_and(|b| !self.role_lit(b)) {
                     style = style.fg(p.faint);
                 }
                 if let Some(b) = c.byte
@@ -4066,6 +4604,11 @@ impl Writer {
         if self.dim {
             tags.push(lang::l("soluk", "dim"));
         }
+        let role_tag;
+        if let Some(c) = self.role_view.as_deref().and_then(|a| self.doc.cast.get(a)) {
+            role_tag = lang::f("rol: {}", "role: {}", &[&c.script]);
+            tags.push(&role_tag);
+        }
         let page;
         if self.pages && !self.lay.pages.is_empty() {
             let row = self.cursor_stop().map_or(0, |c| c.row);
@@ -4151,6 +4694,7 @@ pub enum PAct {
     NewAct,
     NewCharacter,
     Board,
+    Memorize,
 }
 
 /// An entry of the command palette.
@@ -4175,6 +4719,12 @@ fn palette_items(q: &str) -> Vec<PItem> {
             "Cast: edit, merge, split",
             "^O",
             k(Char('o'), c),
+        ),
+        (
+            "Dağıtım: oyuncular, sahne/rol tablosu, sayılar",
+            "Casting: actors, the scene/role table, numbers",
+            "F9",
+            k(F(9), n),
         ),
         (
             "Sahne şeridi: yazının yanında",
@@ -4248,6 +4798,18 @@ fn palette_items(q: &str) -> Vec<PItem> {
             k(Char('l'), a),
         ),
         ("İmleç dışını soldur", "Dim the rest", "F8", k(F(8), n)),
+        (
+            "Ezber: imleçteki rolün replikleri gizli",
+            "Memorize: the cursor's role's lines hidden",
+            "",
+            PAct::Memorize,
+        ),
+        (
+            "Rol görünümü: imleçteki rolün replikleri parlak",
+            "Role view: the cursor's role's lines lit",
+            "Shift+F8",
+            k(F(8), KeyModifiers::SHIFT),
+        ),
         ("Sayfa görünümü", "Page view", "F7", k(F(7), n)),
         (
             "Animasyonları aç/kapat",

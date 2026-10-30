@@ -133,6 +133,12 @@ pub enum FormKind {
     /// A new card on the board: a hidden scene at this place
     /// (`structure::places`).
     NewCard(usize),
+    /// Who plays this role (alias), in the casting in use.
+    Actor(String),
+    /// A casting's name: a new one, or the one in use renamed.
+    CastingName(bool),
+    /// The play's words a minute.
+    Wpm,
 }
 
 pub struct Field {
@@ -580,6 +586,7 @@ pub fn label_of(key: &str) -> &str {
         "Animasyonlar" => "Animations",
         "Şununla birleştir" => "Merge into",
         "Dosya" => "File",
+        "Oyuncu" => "Actor",
         other => other,
     }
 }

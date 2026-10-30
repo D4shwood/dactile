@@ -27,6 +27,12 @@
 %   \perde[Title]  \sahne[Place — Time][manual number]  \kisiler
 %   \onsoz[Title]  \notlar[Title]          a preface, notes for the director
 %
+% What Dactile writes into an actor's copy, in the preamble: the roles' lines
+% on a grey band, the rest faint, a marked entrance or exit in bold.
+%
+%   \tiyatrocopy{alias,alias}{Actor}   \tiyatrocopycover{...}   \tiyatromark
+%   \tiyatronoend                      no "Perde Sonu" and "Son" at the end
+%
 % A line that starts with # is a heading, up to the end of the line:
 %
 %   #perde Title        #sahne Place — Time        #sahne[2.1] Place
@@ -39,7 +45,7 @@
 % the margin, so a rehearsal can say "line 112". Dactile shows the same numbers.
 
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesExplPackage{tiyatro-core}{2026-10-29}{1.3.0}{Dactile: characters, lines, scenes, acts}
+\ProvidesExplPackage{tiyatro-core}{2026-10-30}{1.4.0}{Dactile: characters, lines, scenes, acts}
 \RequirePackage{xspace}
 
 \msg_new:nnn { tiyatro } { hash }
@@ -177,7 +183,7 @@
 \endgroup
 \ExplSyntaxOn
 
-\cs_new_protected:Npn \tiy@eol { \l__tiy_close_tl \par \group_end: }
+\cs_new_protected:Npn \tiy@eol { \l__tiy_close_tl \par \group_end: \__tiy_copy_end: }
 
 % The alias outside a line starts dialogue; inside one it is a name.
 \cs_new_protected:Npn \__tiy_who:n #1
@@ -191,6 +197,7 @@
   {
     \par
     \__tiy_heard:n {#1}
+    \__tiy_copy_line_open:n {#1}
     \group_begin:
     \bool_set_true:N \l__tiy_line_bool
     \tl_clear:N \l__tiy_close_tl
@@ -198,6 +205,7 @@
     \skip_set:Nn \leftskip { \maxcharlength }
     \dim_set:Nn \parindent { - \maxcharlength }
     \leavevmode
+    \__tiy_copy_line_style:n {#1}
     \__tiy_number:
     \parbox [ t ] { \maxcharlength }
       { \raggedright \__tiy_namefont:n {#1} \tl_use:c { g__tiy_script_#1_tl } }
@@ -211,6 +219,9 @@
     \bool_if:NF \l__tiy_do_bool
       {
         \par
+        \__tiy_copy_dir_open:
+        \bool_lazy_and:nnT { \g__tiy_copy_bool } { ! \g__tiy_shaded_bool }
+          { \clist_if_in:NnT \g__tiy_copy_clist {#1} { \__tiy_shade: } }
         \group_begin:
         \bool_set_true:N \l__tiy_do_bool
         \bool_set_true:N \l__tiy_line_bool
@@ -234,6 +245,7 @@
     \skip_zero:N \leftskip
     \dim_zero:N \parindent
     \noindent
+    \__tiy_copy_dir_style:
     \__tiy_number:
     \actionfont ( \seq_use:Nn \l__tiy_do_seq { ,~ } \c_space_tl
   }
@@ -244,13 +256,16 @@
   {
     \par
     \skip_vertical:n { 0.5ex }
+    \__tiy_copy_dir_open:
     \group_begin:
     \skip_zero:N \leftskip
     \dim_zero:N \parindent
     \noindent
+    \__tiy_copy_dir_style:
     \__tiy_number:
     \actionfont (#1) \par
     \group_end:
+    \__tiy_copy_end:
     \skip_vertical:n { 0.5ex }
   }
 
@@ -264,10 +279,15 @@
   {
     \par
     \skip_vertical:n { 1.5ex }
+    \__tiy_copy_dir_open:
+    \group_begin:
     \noindent
+    \__tiy_copy_dir_style:
     \__tiy_number:
     \parbox [ t ] { \linewidth } {#1}
     \par
+    \group_end:
+    \__tiy_copy_end:
     \skip_vertical:n { 1.5ex }
   }
 
@@ -302,6 +322,89 @@
     \fi
   }
 
+% ------------------------------------------------------------------ actor copies
+
+% \tiyatrocopy{se,oz}{Actor}: their lines on a grey band that breaks across
+% pages (framed), and their own \aliasdo directions; everything else but the
+% headings faint. \tiyatromark before a direction: it is their entrance or
+% exit, in bold on the band.
+\bool_new:N \g__tiy_copy_bool
+\clist_new:N \g__tiy_copy_clist
+\tl_new:N \g__tiy_copy_actor_tl
+\tl_new:N \g__tiy_copy_cover_tl
+\bool_new:N \g__tiy_mark_bool
+\bool_new:N \g__tiy_bold_bool
+\bool_new:N \g__tiy_shaded_bool
+\bool_new:N \g__tiy_noend_bool
+
+\NewDocumentCommand \tiyatrocopy { m m }
+  {
+    \RequirePackage { xcolor }
+    \RequirePackage { framed }
+    \definecolor { shadecolor } { gray } { 0.86 }
+    \colorlet { tiyfaint } { black!42 }
+    \bool_gset_true:N \g__tiy_copy_bool
+    \clist_gset:Nn \g__tiy_copy_clist {#1}
+    \tl_gset:Nn \g__tiy_copy_actor_tl {#2}
+  }
+\NewDocumentCommand \tiyatrocopycover { +m } { \tl_gset:Nn \g__tiy_copy_cover_tl {#1} }
+\NewDocumentCommand \tiyatromark { } { \bool_gset_true:N \g__tiy_mark_bool }
+\NewDocumentCommand \tiyatronoend { } { \bool_gset_true:N \g__tiy_noend_bool }
+
+\cs_new_protected:Npn \__tiy_shade:
+  {
+    \setlength \FrameSep { 3pt }
+    \begin { shaded }
+    \bool_gset_true:N \g__tiy_shaded_bool
+  }
+
+\cs_new_protected:Npn \__tiy_copy_end:
+  {
+    \bool_if:NT \g__tiy_shaded_bool
+      {
+        \bool_gset_false:N \g__tiy_shaded_bool
+        \end { shaded }
+      }
+  }
+
+\cs_new_protected:Npn \__tiy_copy_line_open:n #1
+  {
+    \bool_if:NT \g__tiy_copy_bool
+      { \clist_if_in:NnT \g__tiy_copy_clist {#1} { \__tiy_shade: } }
+  }
+
+\cs_new_protected:Npn \__tiy_copy_line_style:n #1
+  {
+    \bool_if:NT \g__tiy_copy_bool
+      { \clist_if_in:NnF \g__tiy_copy_clist {#1} { \color { tiyfaint } } }
+  }
+
+\cs_new_protected:Npn \__tiy_copy_dir_open:
+  {
+    \bool_if:NT \g__tiy_mark_bool
+      {
+        \bool_gset_false:N \g__tiy_mark_bool
+        \bool_if:NT \g__tiy_copy_bool
+          {
+            \bool_gset_true:N \g__tiy_bold_bool
+            \__tiy_shade:
+          }
+      }
+  }
+
+\cs_new_protected:Npn \__tiy_copy_dir_style:
+  {
+    \bool_if:NTF \g__tiy_bold_bool
+      {
+        \bool_gset_false:N \g__tiy_bold_bool
+        \bfseries
+      }
+      {
+        \bool_lazy_and:nnT { \g__tiy_copy_bool } { ! \g__tiy_shaded_bool }
+          { \color { tiyfaint } }
+      }
+  }
+
 % ------------------------------------------------------------------ scenes and acts
 
 \newcounter { actcounter }
@@ -318,8 +421,17 @@
 % another cast than the scene had, a rerun warning.
 \cs_new_protected:Npn \tiyatrocast #1#2 { \tl_gset:cn { g__tiy_cast_#1_tl } {#2} }
 
+\cs_generate_variant:Nn \seq_set_from_clist:Nn { Nv }
+\cs_generate_variant:Nn \seq_gset_from_clist:Nn { Nv }
 \cs_new_protected:Npn \__tiy_scene_end:
   {
+    % An actor's copy leaves scenes out: the casts Dactile seeded stand.
+    \bool_if:NT \g__tiy_copy_bool
+      {
+        \seq_gclear:N \g__tiy_heard_seq
+        \tl_if_exist:cT { g__tiy_cast_ \g__tiy_scene_tl _tl }
+          { \seq_gset_from_clist:Nv \g__tiy_heard_seq { g__tiy_cast_ \g__tiy_scene_tl _tl } }
+      }
     \tl_if_empty:NF \g__tiy_scene_tl
       {
         \tl_set:Ne \l_tmpa_tl { \seq_use:Nn \g__tiy_heard_seq { , } }
@@ -339,7 +451,6 @@
     \tl_gclear:N \g__tiy_scene_tl
   }
 
-\cs_generate_variant:Nn \seq_set_from_clist:Nn { Nv }
 \cs_new_protected:Npn \__tiy_scene_cast:n #1
   {
     \tl_if_exist:cT { g__tiy_cast_#1_tl }
@@ -382,6 +493,7 @@
     { \scenetitlefont \scenetitlename \space #2 \tl_if_blank:nF {#1} { \sceneseparator #1 } }
     \par \nobreak
     { \scenecastfont \__tiy_scene_cast:V \g__tiy_scene_tl }
+    \bool_if:NT \g__tiy_copy_bool { \label { tiy@ \g__tiy_scene_tl } }
     \par \nobreak
     \skip_vertical:n { \aftersceneskip }
     \group_end:
@@ -551,8 +663,11 @@
   {
     \__tiy_unhide:
     \__tiy_scene_end:
-    \__tiy_curtain:n { \curtainlocalizedtext }
-    \__tiy_curtain:n { \scriptendlocalizedtext }
+    \bool_if:NF \g__tiy_noend_bool
+      {
+        \__tiy_curtain:n { \curtainlocalizedtext }
+        \__tiy_curtain:n { \scriptendlocalizedtext }
+      }
     \bool_if:NT \g__tiy_rerun_bool { \msg_warning:nn { tiyatro } { rerun } }
   }
 

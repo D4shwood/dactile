@@ -6,6 +6,7 @@
 pub mod buffer;
 pub mod build;
 pub mod cast;
+pub mod casting;
 pub mod check;
 pub mod complete;
 pub mod config;
@@ -14,6 +15,7 @@ pub mod info;
 pub mod lang;
 pub mod lex;
 pub mod library;
+pub mod memorize;
 pub mod outline;
 pub mod render;
 pub mod shelf;
@@ -56,6 +58,6 @@ pub mod class {
 mod tests {
     #[test]
     fn class_version() {
-        assert_eq!(super::class::version(), "1.3.0");
+        assert_eq!(super::class::version(), "1.4.0");
     }
 }

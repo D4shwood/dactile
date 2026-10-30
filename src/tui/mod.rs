@@ -4,8 +4,10 @@ mod anim;
 mod board;
 mod home;
 mod keys;
+mod memorize;
 mod panels;
 mod popup;
+mod roles;
 mod theme;
 mod writer;
 

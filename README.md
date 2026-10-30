@@ -109,6 +109,7 @@ screen the play's outline sits in the margin; a click goes there.
 | ^P | the command palette: everything by name — new scene, themes, page view, animations… |
 | ^O | the cast: edit, rename an alias everywhere, order, character cards; m merges one into another, b splits one, giving the scenes you pick to a new character |
 | ^G, ^G ^G | the scene strip beside the writing; twice quickly, the board (below) |
+| F9 | casting: who plays whom, the scene/role table, the numbers (below) |
 | Alt+E, Alt+B, Alt+J | the cursor's scene's summary; split the scene at the cursor's line; join it with the next |
 | ^K | search characters and commands |
 | ^F | find and replace |
@@ -117,6 +118,7 @@ screen the play's outline sits in the margin; a click goes there.
 | Alt+P | show the cast and cover lines of the source |
 | F5, Alt+O, Alt+L | build the PDF next to the play (in the background, one XeLaTeX run); open it in the viewer. What would stop XeLaTeX is underlined faintly as you write (the cursor on it says what); `&`, `$`, `^`, a stray `_` and `%50` are escaped quietly on save; a brace left open or a command nobody defined stops F5 there, and F5 again builds anyway; if XeLaTeX still fails, Alt+L opens its log |
 | F3 / F4 / F8 | typewriter, scene focus, dim the rest |
+| Shift+F8 | role view: the cursor's role lit, the rest faint |
 | F6 | the theme: paper, sepia, night, high contrast, dark |
 | F7 | page view: A4 sheets broken where the PDF breaks, numbered |
 | ^Z ^Y, ^C ^X ^V | undo, redo, copy, cut, paste |
@@ -153,9 +155,34 @@ as a draft beside it (`oyun-0.2.tex`); you go on in the play itself. A scene
 with a summary carries a short id at its heading's end, `#sahne Meydan %@k3`,
 which the PDF never sees: the summary follows the scene wherever it goes.
 
+### Casting
+
+F9 opens who plays whom, full screen, in three views (Tab):
+
+- **casting**: the roles, each with its actor (⏎ to write one in), its lines,
+  words, time and scenes. A play can have several castings, an A and a B
+  lineup: ←→ between them, `n` a new one (a copy of this one), `r` renames,
+  `x` deletes. `k` builds a copy for each actor; `z` memorizes the role.
+- **table**: the scenes down, the roles across, ● where a role speaks and ○
+  where it is on stage without a line; ⏎ goes to the scene, `x` writes it as
+  CSV (`oyun-tablo.csv`), `p` as a landscape PDF (`oyun-tablo.pdf`).
+- **numbers**: lines, words, time and share by role, scene and act lengths;
+  `w` sets the play's pace in words a minute.
+
+An actor's copy (`oyun-kopyalar/Actor (ROLE).pdf`) has their lines on a grey
+band and the rest whole but faint, their entrances and exits in bold, the
+scenes they are not in down to their headings, and a cover with their name,
+their scenes with pages, and how much they say. `o` opens the last table or
+copies. Actors' names stay in the sidecar; the play's own PDF never shows
+them.
+
+Memorizing (`z` on F9, or "Memorize" on ^P for the cursor's role) shows the
+cues before each of the role's lines and hides the line: Space shows the
+first letters of its words, Space again all of it, then the next one.
+
 Next to a play Dactile keeps `oyun.dactile.toml`, with the character cards,
-the scene summaries and the play's own words for the spell checker (the PDF
-never sees it), and
+the scene summaries, the castings and the play's own words for the spell
+checker (the PDF never sees it), and
 `.oyun.tex.dactile-lock` while the play is open, so a second Dactile opens it
 read-only. Earlier versions go to `~/.local/share/dactile/history`.
 
@@ -188,6 +215,10 @@ read-only. Earlier versions go to `~/.local/share/dactile/history`.
 - options: `nohash` makes `#` an ordinary character again; `nonotes` leaves the
   director's notes out of a copy. A `#` line ends at the end of the source
   line, or at a `%` comment on it.
+- actor copies, written by Dactile into a copy of the play's preamble:
+  `\tiyatrocopy{se}{Actor}` puts that role's lines on a grey band (the
+  `framed` and `xcolor` packages) and fades the rest, `\tiyatromark` before a
+  direction makes it bold, `\tiyatrocopycover{…}` adds to the cover.
 
 ```sh
 xelatex oyun.tex
@@ -206,8 +237,7 @@ its code is used here.
 
 ## Roadmap
 
-Entrances and exits, actor copies, importing from Word and more: see
-[TODO.md](TODO.md).
+Importing from Word and more: see [TODO.md](TODO.md).
 
 ## License
 

@@ -269,8 +269,16 @@ pub const BINDS: &[Bind] = &[
         false,
         false,
         Cat::View,
-        "imleç dışını soldur",
-        "dim all but the cursor's line",
+        "imleç dışını soldur; Shift+F8: imleçteki rolün replikleri parlak, kalanı soluk",
+        "dim all but the cursor's line; Shift+F8: the cursor's role lit, the rest faint",
+    ),
+    b(
+        "F9",
+        false,
+        false,
+        Cat::Panel,
+        "dağıtım: oyuncular, sahne/rol tablosu, sayılar",
+        "casting: actors, the scene/role table, numbers",
     ),
     b(
         "F6",

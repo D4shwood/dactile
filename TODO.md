@@ -71,18 +71,21 @@ Each milestone ends with a demo and a beta, published once approved.
      starts empty, the opening directions and whoever speaks fill it.
    - Nothing on screen while writing: no chips, no underlines. It feeds M11
      (doubling, entrances in actor copies) and a check run on demand (1.x).
-4. **M11 actors** → 0.2.0-beta.3
-   - Casting, actor ↔ role, in the sidecar; in the cast panel, and on the
-     cover if wanted.
-   - Actor copies, a class option on top of M8: the role's lines highlighted,
-     the others whole but faint, scenes without the role down to their heading.
-   - A scene/actor table, for planning rehearsals; printable.
-   - Doubling: one actor in two roles never on stage at once, with time to
-     change between an exit and the next entrance (from `src/stage.rs`).
-   - In an actor copy, a mark where the role enters and exits.
-   - A role's view in the writer: its lines lit, the rest dimmed.
-   - Statistics: lines, words and time by role; scene lengths.
-   - Rehearsal mode: to be described; a placeholder for now.
+4. ~~**M11 actors**~~ Done, to be published as 0.2.0-beta.3
+   - F9, full screen: castings in the sidecar (several per play, an A and a
+     B lineup), an actor per role; the play's own PDF never shows them.
+   - Actor copies, all at once (`oyun-kopyalar/`): the role's lines on a grey
+     band, the rest faint, their entrances and exits bold (from
+     `src/stage.rs`), scenes without them down to their headings, a cover
+     with the actor, their scenes and pages, lines, words and time. Class
+     1.4.0: `\tiyatrocopy`, `\tiyatromark`, `\tiyatrocopycover`.
+   - The scene/role table: on F9, as CSV, as a landscape PDF.
+   - Numbers: lines, words, time and share by role; scene and act lengths;
+     the play's pace.
+   - Shift+F8: the cursor's role lit, the rest faint.
+   - Memorizing: the cues, the role's line hidden; Space shows first
+     letters, then all of it.
+   - Doubling (one actor in two roles never on at once) left for later.
 5. **M12 import** → 0.2.0-beta.4
    - From `.docx` (italics as directions, bold as names), plain text and
      Markdown, `.odt`, and PDFs with text (the preview matters most there).
@@ -99,6 +102,9 @@ Each milestone ends with a demo and a beta, published once approved.
    - An AUR package (`dactile-bin`) from the release workflow.
 
 ## 1.x
+
+- Doubling: one actor in two roles never on stage at once, with time to
+  change between an exit and the next entrance (from `src/stage.rs`)
 
 - A continuity check, run on demand (never while writing): someone who
   went out speaks again, someone who never leaves; from `src/stage.rs`

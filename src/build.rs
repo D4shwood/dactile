@@ -137,67 +137,11 @@ pub fn build(play: &Path) -> Result<Built, Failed> {
     let log_path = play.with_extension("log");
     // A table of contents is one run behind, like the casts without Dactile.
     let toc = text.contains("\\tableofcontents");
+    let path = format!(".:{}:", classes.display());
     let mut runs = 0;
     loop {
         runs += 1;
-        let mut child = Command::new("xelatex")
-            .args([
-                "-interaction=nonstopmode",
-                "-halt-on-error",
-                "-file-line-error",
-            ])
-            .arg(name)
-            .current_dir(dir)
-            // `.` first, then the class from the app, then TeX's own places.
-            .env("TEXINPUTS", format!(".:{}:", classes.display()))
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(|e| {
-                failed(if e.kind() == std::io::ErrorKind::NotFound {
-                    lang::l(
-                        "XeLaTeX bulunamadı: TeX Live'ı kur (xelatex komutu).",
-                        "XeLaTeX not found: install TeX Live (the xelatex command).",
-                    )
-                    .into()
-                } else {
-                    format!("xelatex: {e}")
-                })
-            })?;
-        let begun = Instant::now();
-        let status = loop {
-            match child.try_wait() {
-                Ok(Some(s)) => break s,
-                Ok(None) if begun.elapsed() > TIMEOUT => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(failed(
-                        lang::l(
-                            "XeLaTeX takıldı; durduruldu.",
-                            "XeLaTeX got stuck; stopped.",
-                        )
-                        .into(),
-                    ));
-                }
-                Ok(None) => std::thread::sleep(Duration::from_millis(50)),
-                Err(e) => return Err(failed(format!("xelatex: {e}"))),
-            }
-        };
-        let log = fs::read(&log_path)
-            .map(|b| String::from_utf8_lossy(&b).into_owned())
-            .unwrap_or_default();
-        if !status.success() {
-            return Err(error_in(&log, &name.to_string_lossy()).unwrap_or_else(|| {
-                failed(
-                    lang::l(
-                        "XeLaTeX durdu; ayrıntı .log dosyasında.",
-                        "XeLaTeX stopped; the .log has the details.",
-                    )
-                    .into(),
-                )
-            }));
-        }
+        let log = xelatex(dir, name.as_ref(), &path, &log_path)?;
         let again = log.contains("Rerun to get") || (toc && runs == 1);
         if !again || runs >= MAX_RUNS {
             let pdf = pdf_path(play);
@@ -218,6 +162,121 @@ pub fn build(play: &Path) -> Result<Built, Failed> {
             });
         }
     }
+}
+
+/// One XeLaTeX run of `name` in `dir`, with TEXINPUTS `path`: its log, or
+/// what stopped it.
+fn xelatex(dir: &Path, name: &Path, path: &str, log_path: &Path) -> Result<String, Failed> {
+    let mut child = Command::new("xelatex")
+        .args([
+            "-interaction=nonstopmode",
+            "-halt-on-error",
+            "-file-line-error",
+        ])
+        .arg(name)
+        .current_dir(dir)
+        .env("TEXINPUTS", path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| {
+            failed(if e.kind() == std::io::ErrorKind::NotFound {
+                lang::l(
+                    "XeLaTeX bulunamadı: TeX Live'ı kur (xelatex komutu).",
+                    "XeLaTeX not found: install TeX Live (the xelatex command).",
+                )
+                .into()
+            } else {
+                format!("xelatex: {e}")
+            })
+        })?;
+    let begun = Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(s)) => break s,
+            Ok(None) if begun.elapsed() > TIMEOUT => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(failed(
+                    lang::l(
+                        "XeLaTeX takıldı; durduruldu.",
+                        "XeLaTeX got stuck; stopped.",
+                    )
+                    .into(),
+                ));
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(50)),
+            Err(e) => return Err(failed(format!("xelatex: {e}"))),
+        }
+    };
+    let log = fs::read(log_path)
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .unwrap_or_default();
+    if !status.success() {
+        return Err(error_in(&log, &name.to_string_lossy()).unwrap_or_else(|| {
+            failed(
+                lang::l(
+                    "XeLaTeX durdu; ayrıntı .log dosyasında.",
+                    "XeLaTeX stopped; the .log has the details.",
+                )
+                .into(),
+            )
+        }));
+    }
+    Ok(log)
+}
+
+/// Builds a document made from a play (an actor's copy, the scene table) in
+/// a folder of its own, and puts its PDF at `out`. The play's folder is
+/// searched after it, for what the play takes from there; `aux` seeds its
+/// `.aux`.
+pub fn build_aside(play: &Path, tex: &str, aux: &str, out: &Path) -> Result<Built, Failed> {
+    let start = Instant::now();
+    let classes = class_dir().map_err(|e| failed(format!("{e:#}")))?;
+    let work = dirs::cache_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("dactile")
+        .join(format!("work-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&work);
+    let made = (|| -> anyhow::Result<PathBuf> {
+        fs::create_dir_all(&work)?;
+        let src = work.join("dactile-aside.tex");
+        fs::write(&src, tex)?;
+        seed(&src, aux, true)?;
+        Ok(src)
+    })()
+    .map_err(|e| failed(format!("{e:#}")));
+    let result = made.and_then(|src| {
+        let home = play
+            .parent()
+            .filter(|d| !d.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        let home = fs::canonicalize(home).unwrap_or(home.to_path_buf());
+        let path = format!(".:{}:{}:", home.display(), classes.display());
+        let name = Path::new("dactile-aside.tex");
+        let log_path = src.with_extension("log");
+        let mut runs = 0;
+        loop {
+            runs += 1;
+            let log = xelatex(&work, name, &path, &log_path)?;
+            if !(log.contains("Rerun") && runs < MAX_RUNS) {
+                if let Some(d) = out.parent() {
+                    fs::create_dir_all(d).map_err(|e| failed(format!("{}: {e}", d.display())))?;
+                }
+                fs::copy(src.with_extension("pdf"), out)
+                    .map_err(|_| failed(lang::l("PDF çıkmadı.", "No PDF came out.").into()))?;
+                return Ok(Built {
+                    pdf: out.to_path_buf(),
+                    pages: pages_in(&log),
+                    runs,
+                    took: start.elapsed(),
+                });
+            }
+        }
+    });
+    let _ = fs::remove_dir_all(&work);
+    result
 }
 
 /// The first error in a log written with `-file-line-error`: `./play.tex:42:

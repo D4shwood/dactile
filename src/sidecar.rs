@@ -23,6 +23,15 @@ impl Card {
     }
 }
 
+/// Who plays whom, one of a play's castings ("A", "B").
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Casting {
+    pub name: String,
+    /// Actors by the alias of the role.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub actors: BTreeMap<String, String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Sidecar {
     /// Words per minute for the running time; the default when absent.
@@ -34,12 +43,21 @@ pub struct Sidecar {
     /// The play this one is a draft of: its file name, next to it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent: Option<String>,
+    /// Which of `castings` is in use.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub casting: usize,
     /// Character cards by alias.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub cards: BTreeMap<String, Card>,
     /// A line or two about each scene, by the id at its heading (`%@k3`).
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub summaries: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub castings: Vec<Casting>,
+}
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
 }
 
 pub fn path_for(play: &Path) -> PathBuf {
@@ -79,11 +97,29 @@ impl Sidecar {
         crate::file::write_atomic(&path, &text)
     }
 
-    /// An alias changed: its card follows.
+    /// An alias changed: its card and its actors follow.
     pub fn rename(&mut self, old: &str, new: &str) {
         if let Some(c) = self.cards.remove(old) {
             self.cards.insert(new.to_string(), c);
         }
+        for c in &mut self.castings {
+            if let Some(a) = c.actors.remove(old) {
+                c.actors.insert(new.to_string(), a);
+            }
+        }
+    }
+
+    /// The casting in use, if there is one.
+    pub fn current(&self) -> Option<&Casting> {
+        self.castings.get(self.casting)
+    }
+
+    /// Who plays the role in the casting in use.
+    pub fn actor(&self, alias: &str) -> Option<&str> {
+        self.current()
+            .and_then(|c| c.actors.get(alias))
+            .map(String::as_str)
+            .filter(|a| !a.is_empty())
     }
 
     pub fn add_word(&mut self, w: &str) {
@@ -115,11 +151,23 @@ mod tests {
             },
         );
         s.add_word("Değirmenci");
+        s.castings.push(Casting {
+            name: "A".into(),
+            actors: [("se".to_string(), "Deniz Kaya".to_string())].into(),
+        });
+        s.castings.push(Casting {
+            name: "B".into(),
+            actors: BTreeMap::new(),
+        });
+        s.summaries.insert("k1".into(), "Kar yağar.".into());
         s.save(&play).unwrap();
         let back = Sidecar::load(&play).unwrap();
         assert_eq!(back, s);
         s.rename("se", "sel");
         assert!(s.cards.contains_key("sel") && !s.cards.contains_key("se"));
+        assert_eq!(s.actor("sel"), Some("Deniz Kaya"));
+        s.casting = 1;
+        assert_eq!(s.actor("sel"), None);
         // Empty: the file goes.
         Sidecar::default().save(&play).unwrap();
         assert!(!path_for(&play).exists());

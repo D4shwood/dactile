@@ -110,6 +110,7 @@ durur; tıklayınca oraya gider.
 | ^P | komut paleti: her şey adıyla — yeni sahne, temalar, sayfa görünümü, animasyonlar… |
 | ^O | kişiler: düzenle, kısaltmayı her yerde değiştir, sıra, karakter kartları; m birini ötekiyle birleştirir, b birini böler (seçtiğin sahneler yeni karaktere geçer) |
 | ^G, ^G ^G | yazının yanında sahne şeridi; hızlıca iki kez: pano (aşağıda) |
+| F9 | dağıtım: kim kimi oynuyor, sahne/rol tablosu, sayılar (aşağıda) |
 | Alt+E, Alt+B, Alt+J | imlecin sahnesinin özeti; sahneyi imlecin satırından böl; sonrakiyle birleştir |
 | ^K | karakter ve komut ara |
 | ^F | bul ve değiştir |
@@ -118,6 +119,7 @@ durur; tıklayınca oraya gider.
 | Alt+P | kaynaktaki kişi ve oyun bilgisi satırlarını aç |
 | F5, Alt+O, Alt+L | PDF'i oyunun yanına derle (arka planda, tek XeLaTeX geçişi); görüntüleyicide aç. XeLaTeX'i durduracak yerlerin altı yazarken soluk çizilir (imleç üstündeyken ne olduğu yazar); `&`, `$`, `^`, yersiz `_` ve `%50` kayıtta sessizce kaçırılır; kapanmamış bir `{` ya da tanımsız bir komut F5'i orada durdurur, F5 bir daha yine de derler; XeLaTeX yine de düşerse Alt+L logunu açar |
 | F3 / F4 / F8 | daktilo, sahne odağı, gerisini soldur |
+| Shift+F8 | rol görünümü: imleçteki rolün replikleri parlak, kalanı soluk |
 | F6 | tema: kâğıt, sepya, gece, yüksek kontrast, koyu |
 | F7 | sayfa görünümü: PDF'in böldüğü yerlerden bölünmüş, numaralı A4 yapraklar |
 | ^Z ^Y, ^C ^X ^V | geri al, yinele, kopyala, kes, yapıştır |
@@ -153,8 +155,34 @@ yanına taslak olarak saklanır (`oyun-0.2.tex`); sen oyunun kendisinde devam
 edersin. Özeti olan bir sahnenin başlığının sonunda PDF'in görmediği kısa bir
 kimlik durur, `#sahne Meydan %@k3`: özet sahne nereye giderse peşinden gider.
 
+### Dağıtım
+
+F9 kimin kimi oynadığını tam ekran açar; üç görünüm var (Tab):
+
+- **dağıtım**: roller, her birinin oyuncusu (⏎ ile yazılır), repliği,
+  kelimesi, süresi ve sahneleri. Bir oyunun birden çok dağıtımı olabilir, A ve
+  B kadrosu gibi: ←→ aralarında gezer, `n` yenisini açar (şimdikinin
+  kopyası), `r` adını değiştirir, `x` siler. `k` her oyuncuya bir kopya
+  çıkarır; `z` rolü ezberletir.
+- **tablo**: sahneler satırda, roller sütunda; ● rol konuşuyor, ○ sahnede ama
+  konuşmuyor. ⏎ sahneye gider, `x` CSV (`oyun-tablo.csv`), `p` yatay bir PDF
+  (`oyun-tablo.pdf`) yazar.
+- **sayılar**: rol başına replik, kelime, süre ve pay; sahne ve perde
+  uzunlukları. `w` oyunun konuşma hızını (dakikada kelime) ayarlar.
+
+Oyuncu kopyasında (`oyun-kopyalar/Oyuncu (ROL).pdf`) oyuncunun replikleri
+gri bir zemin üstünde, gerisi tam ama soluk; giriş ve çıkışları kalın;
+olmadığı sahnelerden yalnız başlık kalır. Kapakta adı, sahneleri ve
+sayfaları, ne kadar konuştuğu yazar. `o` son tabloyu ya da kopyaları açar.
+Oyuncu adları sidecar'da kalır; oyunun kendi PDF'i onları hiç göstermez.
+
+Ezber (F9'da `z`, ya da ^P'de "Ezber" ile imleçteki rol) rolün her
+repliğinden önceki satırları gösterir, repliği gizler: Boşluk kelimelerin ilk
+harflerini, bir daha hepsini gösterir, sonra sıradakine geçer.
+
 Dactile bir oyunun yanında `oyun.dactile.toml` tutar: karakter kartları, sahne
-özetleri ve yazım denetimi için oyunun kendi kelimeleri (PDF'e hiç girmez). Oyun açıkken
+özetleri, dağıtımlar ve yazım denetimi için oyunun kendi kelimeleri (PDF'e hiç
+girmez). Oyun açıkken
 bir de `.oyun.tex.dactile-lock` durur; ikinci bir Dactile oyunu salt okunur
 açar. Eski sürümler `~/.local/share/dactile/history` içine gider.
 
@@ -188,6 +216,10 @@ Sınıf [tex/](tex/) klasöründe; Dactile onu kendi içinde taşır.
 - **Seçenekler:** `nohash` `#`'i yeniden sıradan bir karakter yapar; `nonotes`
   rejisöre notları o kopyadan çıkarır. Bir `#` satırı kaynak satırın sonunda
   ya da üstündeki bir `%` yorumunda biter.
+- **Oyuncu kopyaları**, Dactile'ın oyunun bir kopyasının önsözüne yazdığı
+  komutlarla: `\tiyatrocopy{se}{Oyuncu}` o rolün repliklerini gri zemine
+  koyar (`framed` ve `xcolor` paketleri) ve gerisini soldurur; bir yönergeden
+  önce `\tiyatromark` onu kalın yapar; `\tiyatrocopycover{…}` kapağa ekler.
 
 ```sh
 xelatex oyun.tex
@@ -206,8 +238,7 @@ geliyor; onun kodu burada kullanılmıyor.
 
 ## Yol haritası
 
-Giriş-çıkışlar, oyuncu kopyaları, Word'den içe aktarma ve dahası:
-bkz. [TODO.md](TODO.md).
+Word'den içe aktarma ve dahası: bkz. [TODO.md](TODO.md).
 
 ## Lisans
 
