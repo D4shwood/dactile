@@ -608,7 +608,11 @@ fn draw_card(f: &mut Frame, r: Rect, it: &Item, sel: bool, marked: bool, grabbin
         MUTED
     };
     let w = r.width.saturating_sub(4) as usize;
-    let label = it.label.split_whitespace().last().unwrap_or("").to_string();
+    // "Sahne 2" shows as "2"; "Ön Sahne" stays whole.
+    let label = match it.label.split_whitespace().last() {
+        Some(n) if n.starts_with(|c: char| c.is_ascii_digit()) => n.to_string(),
+        _ => it.label.clone(),
+    };
     let title = fit(
         &format!(
             "{}{label} · {}",

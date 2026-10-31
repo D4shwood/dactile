@@ -99,3 +99,11 @@ printf '\\documentclass{tiyatro}\n\\tiyatronoend\n\\begin{document}\nTablo.\n\\e
 xelatex -interaction=nonstopmode -halt-on-error noend.tex > /dev/null 2>&1 || { grep -A6 '^! ' noend.log; echo "FAIL: noend"; exit 1; }
 ! pdftotext noend.pdf - | grep -q 'Son' || { echo "FAIL: noend printed the end"; exit 1; }
 echo "ok: no end"
+
+# #önsahne: an unnumbered prologue; the next scene is still Sahne 1.
+printf '\\documentclass{tiyatro}\n\\karakter{SELİN}{se}\n\\begin{document}\n#perde Bir\n#önsahne Karanlık\n\\se Önce.\n#sahne Ev\n\\se Sonra.\n\\end{document}\n' > pro.tex
+xelatex -interaction=nonstopmode -halt-on-error pro.tex > /dev/null 2>&1 || { grep -A6 '^! ' pro.log; echo "FAIL: prologue"; exit 1; }
+pdftotext pro.pdf pro.txt
+grep -q 'Ön Sahne' pro.txt && grep -q 'Sahne 1' pro.txt || { cat pro.txt; echo "FAIL: prologue numbering"; exit 1; }
+grep -q 'tiyatrocast{I-0}{se}' pro.aux || { echo "FAIL: prologue cast key"; exit 1; }
+echo "ok: prologue"

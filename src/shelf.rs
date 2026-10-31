@@ -143,10 +143,9 @@ pub fn units(text: &str, doc: &Doc) -> Vec<Unit> {
                     block: i,
                     kind: UnitKind::Scene,
                     hidden: false,
-                    label: format!(
-                        "{} {}",
-                        crate::lang::l("Sahne", "Scene"),
-                        s.map_or(String::new(), |s| s.label.clone())
+                    label: s.map_or_else(
+                        || crate::lang::l("Sahne", "Scene").to_string(),
+                        |s| s.title(),
                     ),
                     title: place.clone(),
                     lines: s.map_or(0, |s| s.lines),

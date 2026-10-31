@@ -91,8 +91,8 @@ pub const BINDS: &[Bind] = &[
         false,
         false,
         Cat::Write,
-        "satır başında: #sahne, #perde, #önsöz, #notlar",
-        "at a line's start: #sahne, #perde, #önsöz, #notlar",
+        "satır başında: #sahne, #önsahne, #perde, #önsöz, #notlar",
+        "at a line's start: #sahne, #prologue, #perde, #önsöz, #notlar",
     ),
     b(
         ":",

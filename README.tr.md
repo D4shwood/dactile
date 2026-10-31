@@ -87,7 +87,7 @@ oynandığı kadar uzun), sahneler ve süreleri, kim ne kadar konuşuyor.
 | `\se ` (kısaltma ve boşluk) | SELİN'in repliği; tanımlanmamış bir kısaltma yeni karakter formunu açar |
 | `\sedo ` | bir yönerge, `(Selin …)`; oyunda en çok kullanılan fiiller önerilir |
 | `\` | öneri menüsü: karakterler (sahnedekiler önce), komutlar, makrolar |
-| satır başında `#` | başlıklar: `#sahne`, `#perde`, `#önsöz`, `#notlar` (rejisöre notlar) |
+| satır başında `#` | başlıklar: `#sahne`, `#önsahne`, `#perde`, `#önsöz`, `#notlar` (rejisöre notlar) |
 | `#sahne İç, Değirmen — Akşam` | doğrudan yazılmış bir sahne; `#` menüsünden seçilirse yer ve zaman sorulur |
 | satır başında `SELİN:` | SELİN'in repliği (adlarından biri, büyük küçük fark etmez); büyük harfle yazılmış bilinmeyen bir ad yeni karakter formunu açar |
 | boş satırda Tab | sıradaki konuşan, soluk gösterilir: son konuşandan öncekisi |
@@ -207,6 +207,8 @@ Sınıf [tex/](tex/) klasöründe; Dactile onu kendi içinde taşır.
   `#sahne[2.1] Yer`, `#önsöz`, `#notlar` (`#act`, `#scene`, `#preface`,
   `#notes` de olur). `\#` bir `#` basar; `\perde[…]` ve `\sahne[…]` eskisi
   gibi çalışır.
+- **Ön sahne:** `#önsahne Yer` (ya da `\onsahne[Yer]`) numarasız bir
+  "Ön Sahne" başlığı basar; ardından gelen `#sahne` yine Sahne 1 olur.
 - **Önsöz** (`\onsoz`) ve **rejisöre notlar** (`\notlar`), her biri kendi
   sayfasında.
 - **Kişiler tablosu** (`\kisiler`) ve kapak.

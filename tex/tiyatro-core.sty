@@ -24,7 +24,7 @@
 %
 %   \action{...}  \stagedir{...}  \middir{...}  \beat
 %   \girer{alias,alias}  \cikar{alias}       (SELİN ile OZAN girerler.)
-%   \perde[Title]  \sahne[Place — Time][manual number]  \kisiler
+%   \perde[Title]  \sahne[Place — Time][manual number]  \onsahne[Place]  \kisiler
 %   \onsoz[Title]  \notlar[Title]          a preface, notes for the director
 %
 % What Dactile writes into an actor's copy, in the preamble: the roles' lines
@@ -38,9 +38,9 @@
 % A line that starts with # is a heading, up to the end of the line:
 %
 %   #perde Title        #sahne Place — Time        #sahne[2.1] Place
-%   #önsöz              #notlar
+%   #önsahne Place      #önsöz              #notlar
 %
-% (#scene, #act, #preface, #notes too; \# prints a #; the class option nohash
+% (#scene, #act, #prologue, #preface, #notes too, and #onsahne; \# prints a #; the class option nohash
 % turns this off.)
 %
 % In draft mode every line of dialogue and every direction gets one number in
@@ -493,21 +493,34 @@
     \tl_gset:Ne \g__tiy_scene_tl { \theact - \thescene }
     \skip_vertical:n { \baselineskip }
     \tl_if_blank:nTF {#2}
-      { \__tiy_scene_title:ne {#1} { \thescene } }
-      { \__tiy_scene_title:nn {#1} {#2} }
+      { \__tiy_scene_title:ne {#1} { \exp_not:N \scenetitlename \c_space_tl \thescene } }
+      { \__tiy_scene_title:nn {#1} { \scenetitlename \c_space_tl #2 } }
     \setlength \parskip { 0.5 \baselineskip }
   }
 \NewCommandCopy \scene \sahne
 
+% \onsahne[Place]: a prologue before the act's first scene. Its heading has no
+% number and the next \sahne is still Sahne 1; its cast goes by "I-0".
+\NewDocumentCommand \onsahne { O{} }
+  {
+    \__tiy_unhide:
+    \__tiy_scene_end:
+    \tl_gset:Ne \g__tiy_scene_tl { \theact - 0 }
+    \skip_vertical:n { \baselineskip }
+    \__tiy_scene_title:nn {#1} { \prologuename }
+    \setlength \parskip { 0.5 \baselineskip }
+  }
+\NewCommandCopy \prologue \onsahne
+
 \cs_new_protected:Npn \__tiy_scene_title:nn #1#2
   {
     \tl_if_blank:nTF {#1}
-      { \addcontentsline { toc } { section } { \scenetitlename \space #2 } }
-      { \addcontentsline { toc } { section } { \scenetitlename \space #2 \sceneseparator #1 } }
+      { \addcontentsline { toc } { section } {#2} }
+      { \addcontentsline { toc } { section } { #2 \sceneseparator #1 } }
     \vspace* { \beforesceneskip }
     \group_begin:
     \centering
-    { \scenetitlefont \scenetitlename \space #2 \tl_if_blank:nF {#1} { \sceneseparator #1 } }
+    { \scenetitlefont #2 \tl_if_blank:nF {#1} { \sceneseparator #1 } }
     \par \nobreak
     { \scenecastfont \__tiy_scene_cast:V \g__tiy_scene_tl }
     \bool_if:NT \g__tiy_copy_bool { \label { tiy@ \g__tiy_scene_tl } }
@@ -642,6 +655,9 @@
           {
             { sahne } { \__tiy_hash_use:N \sahne }
             { scene } { \__tiy_hash_use:N \sahne }
+            { önsahne } { \__tiy_hash_use:N \onsahne }
+            { onsahne } { \__tiy_hash_use:N \onsahne }
+            { prologue } { \__tiy_hash_use:N \onsahne }
             { perde } { \__tiy_hash_use:N \perde }
             { act } { \__tiy_hash_use:N \perde }
             { önsöz } { \__tiy_hash_use:N \onsoz }

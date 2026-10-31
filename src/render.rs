@@ -394,9 +394,9 @@ pub fn layout(text: &str, doc: &Doc, opts: Options<'_>) -> Layout {
                     format!(" — {}", scene.place.trim())
                 };
                 let s = lang::f(
-                    "▸ Sahne {}{} · {} replik",
-                    "▸ Scene {}{} · {} lines",
-                    &[&scene.label, &place, &scene.lines],
+                    "▸ {}{} · {} replik",
+                    "▸ {}{} · {} lines",
+                    &[&scene.title(), &place, &scene.lines],
                 );
                 let glyphs = chip(&s, Style::Faint, doc.blocks[i].span.start);
                 let width = b.width;
@@ -996,8 +996,8 @@ impl Builder<'_> {
             }
             Kind::Scene { place, .. } => {
                 let scene = self.doc.scene_of(b).map(|s| &self.doc.outline.scenes[s]);
-                let label = scene.map_or("?".to_string(), |s| s.label.clone());
-                let mut s = format!("{} {label}", lang::l("Sahne", "Scene"));
+                let mut s =
+                    scene.map_or_else(|| format!("{} ?", lang::l("Sahne", "Scene")), |s| s.title());
                 if !place.trim().is_empty() {
                     s.push_str(&format!(" — {}", place.trim()));
                 }

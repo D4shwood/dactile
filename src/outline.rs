@@ -17,10 +17,12 @@ pub struct Act {
 pub struct Scene {
     /// Index into `Outline::acts`; None before the first act.
     pub act: Option<usize>,
-    /// The counter: 1, 2, 3… within its act.
+    /// The counter: 1, 2, 3… within its act; 0 for a prologue.
     pub number: usize,
     /// What the heading shows: the manual number (`\sahne[…][2.1]`) or `number`.
     pub label: String,
+    /// `#önsahne`: before the act's first scene, without a number.
+    pub prologue: bool,
     pub place: String,
     /// The id at its heading (`%@k3`), that its summary goes by.
     pub id: Option<String>,
@@ -43,6 +45,15 @@ impl Scene {
     pub fn key(&self, acts: &[Act]) -> String {
         let act = self.act.map_or(0, |a| acts[a].number);
         format!("{}-{}", roman(act), self.number)
+    }
+
+    /// "Sahne 2", or "Ön Sahne" for a prologue.
+    pub fn title(&self) -> String {
+        if self.prologue {
+            crate::lang::l("Ön Sahne", "Prologue").to_string()
+        } else {
+            format!("{} {}", crate::lang::l("Sahne", "Scene"), self.label)
+        }
     }
 }
 
@@ -89,14 +100,25 @@ impl Outline {
                         block: i,
                     });
                 }
-                Kind::Scene { place, label, .. } => {
+                Kind::Scene {
+                    place,
+                    label,
+                    prologue,
+                    ..
+                } => {
                     close(&mut open, i, &mut out.scenes);
                     let act = out.acts.len().checked_sub(1);
-                    let number = out.scenes.iter().filter(|s| s.act == act).count() + 1;
+                    let number = if *prologue {
+                        0
+                    } else {
+                        let before = out.scenes.iter().filter(|s| s.act == act && !s.prologue);
+                        before.count() + 1
+                    };
                     open = Some(Scene {
                         act,
                         number,
                         label: label.clone().unwrap_or_else(|| number.to_string()),
+                        prologue: *prologue,
                         place: place.clone(),
                         id: crate::structure::id_in(&text[b.span.clone()]).map(str::to_string),
                         block: i,
@@ -250,6 +272,30 @@ mod tests {
         assert_eq!(o.scene_at(last), Some(2));
         assert_eq!(o.act_at(last), Some(1));
         assert_eq!(o.scene_at(0), None);
+    }
+
+    #[test]
+    fn prologue_comes_before_scene_one() {
+        let t = "\\begin{document}\n#perde A\n#önsahne Karanlık\n#sahne Ev\n#perde B\n\\onsahne\n#sahne Yol\n\\end{document}";
+        let cast = Cast::default();
+        let blocks = lex::blocks(t, 0..t.len(), &cast);
+        let o = Outline::of(t, &blocks, &cast);
+        let got: Vec<(String, String)> = o
+            .scenes
+            .iter()
+            .map(|s| (s.key(&o.acts), s.title()))
+            .collect();
+        let want = [
+            ("I-0", "Ön Sahne"),
+            ("I-1", "Sahne 1"),
+            ("II-0", "Ön Sahne"),
+            ("II-1", "Sahne 1"),
+        ];
+        let want: Vec<(String, String)> = want
+            .iter()
+            .map(|(a, b)| (a.to_string(), b.to_string()))
+            .collect();
+        assert_eq!(got, want);
     }
 
     #[test]

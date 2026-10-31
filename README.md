@@ -87,7 +87,7 @@ as it plays, then its scenes with their times and who speaks how much.
 | `\se ` (an alias and a space) | a line for SELİN; an alias nobody declared opens the new-character form |
 | `\sedo ` | a direction, `(Selin …)`, with the verbs this play uses most |
 | `\` | the suggestion menu: characters (those in the scene first), commands, macros |
-| `#` at a line's start | the headings: `#sahne`, `#perde`, `#önsöz` (a preface), `#notlar` (notes for the director) |
+| `#` at a line's start | the headings: `#sahne`, `#önsahne` (a prologue), `#perde`, `#önsöz` (a preface), `#notlar` (notes for the director) |
 | `#sahne İç, Değirmen — Akşam` | a scene, typed straight; choosing it from the `#` menu asks for place and time |
 | `SELİN:` at a line's start | a line for SELİN (any of her names, any case); an unknown name in capitals opens the new-character form |
 | Tab on an empty line | who speaks next, shown faint: the one before the last speaker |
@@ -207,6 +207,8 @@ read-only. Earlier versions go to `~/.local/share/dactile/history`.
 - headings as `#` lines: `#perde Title`, `#sahne Place — Time`,
   `#sahne[2.1] Place`, `#önsöz`, `#notlar` (also `#act`, `#scene`, `#preface`,
   `#notes`). `\#` prints a `#`; `\perde[…]` and `\sahne[…]` work as before.
+- a prologue: `#önsahne Place` (or `#prologue`, `\onsahne[Place]`) prints an
+  unnumbered "Ön Sahne" heading; the next `#sahne` is still Scene 1.
 - a preface (`\onsoz`) and notes for the director (`\notlar`), each on a page
   of its own
 - the cast table (`\kisiler`) and a cover

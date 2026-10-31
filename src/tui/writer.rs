@@ -3418,11 +3418,7 @@ impl Writer {
             self.sidecar.summaries.insert(id, joined);
             self.save_sidecar();
         }
-        let label = format!(
-            "{} {}",
-            lang::l("Sahne", "Scene"),
-            self.doc.outline.scenes[k].label
-        );
+        let label = self.doc.outline.scenes[k].title();
         let kept = self.keep_shape();
         let cursor = self.buf.cursor.min(head.max(self.buf.cursor));
         self.buf.apply(&edits, cursor);
@@ -4838,7 +4834,7 @@ impl Writer {
         if let Some(s) = block.and_then(|b| self.doc.scene_of(b)) {
             let s = &self.doc.outline.scenes[s];
             parts.push(Span::styled(
-                format!(" · {} {}", lang::l("Sahne", "Scene"), s.label),
+                format!(" · {}", s.title()),
                 Style::default().fg(CLARET),
             ));
             parts.push(Span::styled(

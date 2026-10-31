@@ -79,8 +79,10 @@ pub fn cues(text: &str, doc: &Doc, role: &str) -> Vec<Cue> {
                 let s = doc.outline.scenes.get(scene);
                 scene += 1;
                 let word = if tr { "Sahne" } else { "Scene" };
-                let head = s.map_or(word.to_string(), |s| {
-                    format!("{word} {} — {}", s.label, s.place)
+                let head = s.map_or(word.to_string(), |s| match (s.prologue, tr) {
+                    (true, true) => format!("Ön Sahne — {}", s.place),
+                    (true, false) => format!("Prologue — {}", s.place),
+                    _ => format!("{word} {} — {}", s.label, s.place),
                 });
                 out.push(cue(b, None, head, false, true));
             }

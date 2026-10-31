@@ -45,11 +45,13 @@ pub enum Kind {
         /// Written as a `#` line.
         hash: bool,
     },
-    /// `\sahne[Place][Number]`, or `#sahne[Number] Place`.
+    /// `\sahne[Place][Number]`, or `#sahne[Number] Place`; with `prologue`,
+    /// `\onsahne[Place]` or `#önsahne Place`, which has no number.
     Scene {
         place: String,
         label: Option<String>,
         hash: bool,
+        prologue: bool,
     },
     /// `\onsoz[Title]`, `\notlar[Title]`, or `#önsöz`, `#notlar`.
     Section {
@@ -81,6 +83,7 @@ pub enum Section {
 pub enum Heading {
     Act,
     Scene,
+    Prologue,
     Section(Section),
 }
 
@@ -88,6 +91,7 @@ pub fn heading(word: &str) -> Option<Heading> {
     Some(match word {
         "perde" | "act" => Heading::Act,
         "sahne" | "scene" => Heading::Scene,
+        "önsahne" | "onsahne" | "prologue" => Heading::Prologue,
         "önsöz" | "onsoz" | "preface" => Heading::Section(Section::Preface),
         "notlar" | "notes" => Heading::Section(Section::Notes),
         _ => return None,
@@ -214,10 +218,13 @@ fn classify(text: &str, span: Range<usize>, cast: &Cast) -> Kind {
                 title: rest.to_string(),
                 hash: true,
             },
-            Some(Heading::Scene) => Kind::Scene {
+            Some(h @ (Heading::Scene | Heading::Prologue)) => Kind::Scene {
                 place: rest.to_string(),
-                label: label.map(str::to_string),
+                label: label
+                    .filter(|_| matches!(h, Heading::Scene))
+                    .map(str::to_string),
                 hash: true,
+                prologue: matches!(h, Heading::Prologue),
             },
             Some(Heading::Section(which)) => Kind::Section {
                 which,
@@ -309,15 +316,20 @@ fn classify(text: &str, span: Range<usize>, cast: &Cast) -> Kind {
                 .unwrap_or_default(),
             hash: false,
         },
-        "sahne" | "scene" => {
+        "sahne" | "scene" | "onsahne" | "prologue" => {
+            let prologue = matches!(name, "onsahne" | "prologue");
             let place = tex::optional(text, after);
-            let label = place.as_ref().and_then(|p| tex::optional(text, p.span.end));
+            let label = place
+                .as_ref()
+                .filter(|_| !prologue)
+                .and_then(|p| tex::optional(text, p.span.end));
             Kind::Scene {
                 place: place.map(|p| p.inner.to_string()).unwrap_or_default(),
                 label: label
                     .map(|l| l.inner.to_string())
                     .filter(|l| !l.trim().is_empty()),
                 hash: false,
+                prologue,
             }
         }
         "beat" if text[after..span.end].trim().is_empty() => Kind::Beat,
@@ -629,7 +641,8 @@ mod tests {
             Kind::Scene {
                 place: "İç, Değirmen — Akşam".into(),
                 label: None,
-                hash: true
+                hash: true,
+                prologue: false
             }
         );
         assert_eq!(
@@ -637,7 +650,8 @@ mod tests {
             Kind::Scene {
                 place: "Meydan".into(),
                 label: Some("2.1".into()),
-                hash: true
+                hash: true,
+                prologue: false
             }
         );
         assert_eq!(
@@ -645,7 +659,26 @@ mod tests {
             Kind::Scene {
                 place: "Meydan \\% yarı".into(),
                 label: None,
-                hash: true
+                hash: true,
+                prologue: false
+            }
+        );
+        assert_eq!(
+            kind("#önsahne Karanlık"),
+            Kind::Scene {
+                place: "Karanlık".into(),
+                label: None,
+                hash: true,
+                prologue: true
+            }
+        );
+        assert_eq!(
+            kind("\\onsahne[Karanlık]"),
+            Kind::Scene {
+                place: "Karanlık".into(),
+                label: None,
+                hash: false,
+                prologue: true
             }
         );
         assert_eq!(

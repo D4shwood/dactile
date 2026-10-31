@@ -49,10 +49,10 @@ fn insert(text: &str, cursor: usize) -> Action {
 /// words. `nl` ends the line a preface or notes heading takes.
 pub fn headings(nl: &str) -> Vec<Item> {
     let tr = lang::is_tr();
-    let (scene, act, preface, notes) = if tr {
-        ("sahne", "perde", "önsöz", "notlar")
+    let (scene, prologue, act, preface, notes) = if tr {
+        ("sahne", "önsahne", "perde", "önsöz", "notlar")
     } else {
-        ("scene", "act", "preface", "notes")
+        ("scene", "prologue", "act", "preface", "notes")
     };
     let line = |key: &str| {
         let text = format!("#{key}{nl}{nl}");
@@ -64,6 +64,19 @@ pub fn headings(nl: &str) -> Vec<Item> {
             label: lang::l("yeni sahne: yer ve zaman", "new scene: place and time").into(),
             group: Group::Command,
             action: Action::Scene,
+        },
+        Item {
+            key: prologue.into(),
+            label: lang::l(
+                "ön sahne: Sahne 1'den önce, numarasız",
+                "a prologue: before Scene 1, unnumbered",
+            )
+            .into(),
+            group: Group::Command,
+            action: {
+                let text = format!("#{prologue} ");
+                insert(&text, text.len())
+            },
         },
         Item {
             key: act.into(),
@@ -397,10 +410,10 @@ mod tests {
     fn heading_menu() {
         let h = headings("\n");
         let keys: Vec<&str> = h.iter().map(|i| i.key.as_str()).collect();
-        assert_eq!(keys, ["sahne", "perde", "önsöz", "notlar"]);
+        assert_eq!(keys, ["sahne", "önsahne", "perde", "önsöz", "notlar"]);
         assert_eq!(h[0].action, Action::Scene);
         assert_eq!(
-            h[2].action,
+            h[3].action,
             Action::Insert {
                 text: "#önsöz\n\n".into(),
                 cursor: 10

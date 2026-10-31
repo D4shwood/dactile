@@ -439,7 +439,7 @@ pub fn draw_split(
             .act
             .map(|a| format!("{}. ", dactile::outline::roman(doc.outline.acts[a].number)))
             .unwrap_or_default();
-        let mut name = format!("{act}{} {}", lang::l("Sahne", "Scene"), sc.label);
+        let mut name = format!("{act}{}", sc.title());
         if !sc.place.trim().is_empty() {
             name.push_str(&format!(" · {}", sc.place.trim()));
         }

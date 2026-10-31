@@ -197,8 +197,11 @@ fn print_outline(path: &PathBuf, aux: bool) -> Result<()> {
             format!(" — {}", s.place)
         };
         println!(
-            "  Sahne {}{place}  ·  {} replik, {} kelime (+{} yönerge)",
-            s.label, s.lines, s.words, s.direction_words
+            "  {}{place}  ·  {} replik, {} kelime (+{} yönerge)",
+            s.title(),
+            s.lines,
+            s.words,
+            s.direction_words
         );
         let names: Vec<String> = s.cast.iter().map(|a| name(a)).collect();
         println!("    {}", names.join(", "));
