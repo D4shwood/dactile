@@ -71,9 +71,9 @@ grep -q '(SELİN çıkar.)' moves.txt || { cat moves.txt; echo "FAIL: \\cikar"; 
 grep -qxF '\tiyatrocast{-1}{se,oz,ih}' moves.aux || { cat moves.aux; echo "FAIL: moves cast"; exit 1; }
 echo "ok: entrances and exits"
 
-# An actor's copy: their lines on a band, a marked entrance in bold, scenes
+# An actor's copy: their lines in bold, a marked entrance in bold, scenes
 # without them only headings; the casts as seeded, no rerun asked for.
-printf '\\documentclass{tiyatro}\n\\karakter{SELİN}{se}\n\\karakter{OZAN}{oz}\n\\title{Deneme}\n\\tiyatrocopy{se}{Deniz Kaya}\n\\tiyatrocopycover{I-1 (s.~\\pageref{tiy@I-1})}\n\\begin{document}\n\\maketitle\n#perde Bir\n#sahne Ev\n\\tiyatromark\\girer{se}\n\\se Merhaba.\n\\oz Hoş geldin.\n\\sedo Oturur.\n\\stagedir{Işık.}\n#sahne Yol\n\\end{document}\n' > copy.tex
+printf '\\documentclass{tiyatro}\n\\karakter{SELİN}{se}\n\\karakter{OZAN}{oz}\n\\title{Deneme}\n\\tiyatrocopy{se}{Deniz Kaya}\n\\tiyatrocopycover{I-1 (s.~\\pageref{tiy@I-1})}\n\\begin{document}\n\\maketitle\n#perde Bir\n#sahne Ev\n\\tiyatromark\\girer{se}\n\\se Merhaba.\n\\oz \\tiyatrogap{3}\n\\sedo Oturur.\n\\stagedir{Işık.}\n#sahne Yol\n\\end{document}\n' > copy.tex
 printf '\\relax\n\\tiyatrocast{I-1}{se,oz}\n\\tiyatrocast{I-2}{oz}\n' > copy.aux
 for run in 1 2; do
     xelatex -interaction=nonstopmode -halt-on-error copy.tex > /dev/null 2>&1 || { grep -A6 '^! ' copy.log; echo "FAIL: copy"; exit 1; }

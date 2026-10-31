@@ -163,17 +163,21 @@ F9 opens who plays whom, full screen, in three views (Tab):
   words, time and scenes. A play can have several castings, an A and a B
   lineup: ←→ between them, `n` a new one (a copy of this one), `r` renames,
   `x` deletes. `k` builds a copy for each actor, and for each role nobody
-  is cast in yet (`ROLE.pdf`); `z` memorizes the role.
+  is cast in yet (`ROLE.pdf`): 1 full, 2 rehearsal, 3 rehearsal light;
+  `z` memorizes the role.
 - **table**: the scenes down, the roles across, ● where a role speaks and ○
   where it is on stage without a line; ⏎ goes to the scene, `x` writes it as
   CSV (`oyun-tablo.csv`), `p` as a landscape PDF (`oyun-tablo.pdf`).
 - **numbers**: lines, words, time and share by role, scene and act lengths;
   `w` sets the play's pace in words a minute.
 
-An actor's copy (`oyun-kopyalar/Actor (ROLE).pdf`) has their lines on a grey
-band and the rest whole but faint, their entrances and exits in bold, the
-scenes they are not in down to their headings, and a cover with their name,
-their scenes with pages, and how much they say. `o` opens the last table or
+An actor's copy (`oyun-kopyalar/Actor (ROLE).pdf`) has their lines in bold
+and the rest whole but faint, their entrances and exits in bold, the scenes
+they are not in down to their headings, and a cover with their name, their
+scenes with pages, and how much they say. A rehearsal copy (`… - prova.pdf`)
+keeps who speaks when but leaves the others' words out, with room for notes
+where they were, so the actor rehearses without reading them; the light one
+keeps the first one to three words of each (the same every time). `o` opens the last table or
 copies. Actors' names stay in the sidecar; the play's own PDF never shows
 them.
 
@@ -217,9 +221,10 @@ read-only. Earlier versions go to `~/.local/share/dactile/history`.
   director's notes out of a copy. A `#` line ends at the end of the source
   line, or at a `%` comment on it.
 - actor copies, written by Dactile into a copy of the play's preamble:
-  `\tiyatrocopy{se}{Actor}` puts that role's lines on a grey band (the
-  `framed` and `xcolor` packages) and fades the rest, `\tiyatromark` before a
-  direction makes it bold, `\tiyatrocopycover{…}` adds to the cover.
+  `\tiyatrocopy{se}{Actor}` puts that role's lines in bold and fades the
+  rest (the `xcolor` package), `\tiyatromark` before a direction makes it
+  bold, `\tiyatrocopycover{…}` adds to the cover, `\tiyatrogap{n}` leaves n
+  lines' room where a line's words were.
 
 ```sh
 xelatex oyun.tex

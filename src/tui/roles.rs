@@ -47,6 +47,8 @@ pub struct RolesPanel {
     pub scroll: usize,
     /// `x` once: the casting goes on a second.
     pub confirm: bool,
+    /// `k` once: which kind of copies, on a second.
+    pub pick: bool,
 }
 
 /// What the three views show, read once per frame.
@@ -152,7 +154,7 @@ pub fn draw(
     let keys = keys_text(p, side, wpm);
     f.render_widget(
         Paragraph::new(fit(&keys, area.width.saturating_sub(2) as usize))
-            .style(theme::base().fg(if p.confirm { BEIGE } else { FAINT })),
+            .style(theme::base().fg(if p.confirm || p.pick { BEIGE } else { FAINT })),
         Rect {
             x: area.x + 1,
             y: area.y + area.height.saturating_sub(1),
@@ -170,6 +172,13 @@ fn keys_text(p: &RolesPanel, side: &Sidecar, wpm: u32) -> String {
             "Delete the casting \"{}\"? x yes, any other key no",
             &[&name],
         );
+    }
+    if p.pick {
+        return lang::l(
+            "Kopyalar: 1 tam  2 prova (replikler boş)  3 prova, hafif (ilk kelimeler)  Esc vazgeç",
+            "Copies: 1 full  2 rehearsal (lines left blank)  3 rehearsal, light (first words)  Esc cancel",
+        )
+        .to_string();
     }
     match p.tab {
         Tab::Casting => lang::l(

@@ -28,9 +28,11 @@
 %   \onsoz[Title]  \notlar[Title]          a preface, notes for the director
 %
 % What Dactile writes into an actor's copy, in the preamble: the roles' lines
-% on a grey band, the rest faint, a marked entrance or exit in bold.
+% in bold, the rest faint, a marked entrance or exit in bold; in a rehearsal
+% copy the others' lines give way to a gap.
 %
 %   \tiyatrocopy{alias,alias}{Actor}   \tiyatrocopycover{...}   \tiyatromark
+%   \tiyatrogap{n}                      n empty lines' room, for notes
 %   \tiyatronoend                      no "Perde Sonu" and "Son" at the end
 %
 % A line that starts with # is a heading, up to the end of the line:
@@ -220,8 +222,8 @@
       {
         \par
         \__tiy_copy_dir_open:
-        \bool_lazy_and:nnT { \g__tiy_copy_bool } { ! \g__tiy_shaded_bool }
-          { \clist_if_in:NnT \g__tiy_copy_clist {#1} { \__tiy_shade: } }
+        \bool_lazy_and:nnT { \g__tiy_copy_bool } { ! \g__tiy_own_bool }
+          { \clist_if_in:NnT \g__tiy_copy_clist {#1} { \__tiy_own: } }
         \group_begin:
         \bool_set_true:N \l__tiy_do_bool
         \bool_set_true:N \l__tiy_line_bool
@@ -324,24 +326,21 @@
 
 % ------------------------------------------------------------------ actor copies
 
-% \tiyatrocopy{se,oz}{Actor}: their lines on a grey band that breaks across
-% pages (framed), and their own \aliasdo directions; everything else but the
-% headings faint. \tiyatromark before a direction: it is their entrance or
-% exit, in bold on the band.
+% \tiyatrocopy{se,oz}{Actor}: their lines in bold, their own \aliasdo
+% directions as they are; everything else but the headings faint.
+% \tiyatromark before a direction: it is their entrance or exit, in bold.
 \bool_new:N \g__tiy_copy_bool
 \clist_new:N \g__tiy_copy_clist
 \tl_new:N \g__tiy_copy_actor_tl
 \tl_new:N \g__tiy_copy_cover_tl
 \bool_new:N \g__tiy_mark_bool
 \bool_new:N \g__tiy_bold_bool
-\bool_new:N \g__tiy_shaded_bool
+\bool_new:N \g__tiy_own_bool
 \bool_new:N \g__tiy_noend_bool
 
 \NewDocumentCommand \tiyatrocopy { m m }
   {
     \RequirePackage { xcolor }
-    \RequirePackage { framed }
-    \definecolor { shadecolor } { gray } { 0.86 }
     \colorlet { tiyfaint } { black!42 }
     \bool_gset_true:N \g__tiy_copy_bool
     \clist_gset:Nn \g__tiy_copy_clist {#1}
@@ -351,32 +350,27 @@
 \NewDocumentCommand \tiyatromark { } { \bool_gset_true:N \g__tiy_mark_bool }
 \NewDocumentCommand \tiyatronoend { } { \bool_gset_true:N \g__tiy_noend_bool }
 
-\cs_new_protected:Npn \__tiy_shade:
-  {
-    \setlength \FrameSep { 3pt }
-    \begin { shaded }
-    \bool_gset_true:N \g__tiy_shaded_bool
-  }
+% n lines' room after a speaker's name, where their words were.
+\NewDocumentCommand \tiyatrogap { m }
+  { \mbox { } \prg_replicate:nn { #1 - 1 } { \newline \mbox { } } }
 
-\cs_new_protected:Npn \__tiy_copy_end:
-  {
-    \bool_if:NT \g__tiy_shaded_bool
-      {
-        \bool_gset_false:N \g__tiy_shaded_bool
-        \end { shaded }
-      }
-  }
+% Theirs, up to the end of the line or direction.
+\cs_new_protected:Npn \__tiy_own: { \bool_gset_true:N \g__tiy_own_bool }
+\cs_new_protected:Npn \__tiy_copy_end: { \bool_gset_false:N \g__tiy_own_bool }
 
 \cs_new_protected:Npn \__tiy_copy_line_open:n #1
   {
     \bool_if:NT \g__tiy_copy_bool
-      { \clist_if_in:NnT \g__tiy_copy_clist {#1} { \__tiy_shade: } }
+      { \clist_if_in:NnT \g__tiy_copy_clist {#1} { \__tiy_own: } }
   }
 
 \cs_new_protected:Npn \__tiy_copy_line_style:n #1
   {
     \bool_if:NT \g__tiy_copy_bool
-      { \clist_if_in:NnF \g__tiy_copy_clist {#1} { \color { tiyfaint } } }
+      {
+        \clist_if_in:NnTF \g__tiy_copy_clist {#1}
+          { \bfseries } { \color { tiyfaint } }
+      }
   }
 
 \cs_new_protected:Npn \__tiy_copy_dir_open:
@@ -387,7 +381,7 @@
         \bool_if:NT \g__tiy_copy_bool
           {
             \bool_gset_true:N \g__tiy_bold_bool
-            \__tiy_shade:
+            \__tiy_own:
           }
       }
   }
@@ -400,7 +394,7 @@
         \bfseries
       }
       {
-        \bool_lazy_and:nnT { \g__tiy_copy_bool } { ! \g__tiy_shaded_bool }
+        \bool_lazy_and:nnT { \g__tiy_copy_bool } { ! \g__tiy_own_bool }
           { \color { tiyfaint } }
       }
   }

@@ -21,7 +21,7 @@ pub struct Cue {
 
 /// What a line reads as: names for `\alias`, escapes as what they print,
 /// inline directions in parentheses.
-fn plain(text: &str, range: Range<usize>, cast: &Cast) -> String {
+pub(crate) fn plain(text: &str, range: Range<usize>, cast: &Cast) -> String {
     let mut out = String::new();
     for p in lex::inline(text, range, cast, false) {
         match p.kind {

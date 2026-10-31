@@ -35,6 +35,5 @@ jobs:
             setspace
             tools
             lm
-            framed
             xcolor
       - run: tex/test/run.sh

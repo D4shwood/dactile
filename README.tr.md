@@ -163,7 +163,8 @@ F9 kimin kimi oynadığını tam ekran açar; üç görünüm var (Tab):
   kelimesi, süresi ve sahneleri. Bir oyunun birden çok dağıtımı olabilir, A ve
   B kadrosu gibi: ←→ aralarında gezer, `n` yenisini açar (şimdikinin
   kopyası), `r` adını değiştirir, `x` siler. `k` her oyuncuya, oyuncusu
-  henüz yazılmamış her role de (`ROL.pdf`) bir kopya çıkarır; `z` rolü ezberletir.
+  henüz yazılmamış her role de (`ROL.pdf`) bir kopya çıkarır: 1 tam, 2 prova,
+  3 hafif prova; `z` rolü ezberletir.
 - **tablo**: sahneler satırda, roller sütunda; ● rol konuşuyor, ○ sahnede ama
   konuşmuyor. ⏎ sahneye gider, `x` CSV (`oyun-tablo.csv`), `p` yatay bir PDF
   (`oyun-tablo.pdf`) yazar.
@@ -171,9 +172,12 @@ F9 kimin kimi oynadığını tam ekran açar; üç görünüm var (Tab):
   uzunlukları. `w` oyunun konuşma hızını (dakikada kelime) ayarlar.
 
 Oyuncu kopyasında (`oyun-kopyalar/Oyuncu (ROL).pdf`) oyuncunun replikleri
-gri bir zemin üstünde, gerisi tam ama soluk; giriş ve çıkışları kalın;
-olmadığı sahnelerden yalnız başlık kalır. Kapakta adı, sahneleri ve
-sayfaları, ne kadar konuştuğu yazar. `o` son tabloyu ya da kopyaları açar.
+kalın, gerisi tam ama soluk; giriş ve çıkışları kalın; olmadığı sahnelerden
+yalnız başlık kalır. Kapakta adı, sahneleri ve sayfaları, ne kadar konuştuğu
+yazar. Prova kopyasında (`… - prova.pdf`) kimin ne sırayla konuştuğu durur
+ama ötekilerin sözleri yerine not alacak boşluk kalır; oyuncu onları okumadan
+prova eder. Hafif provada her replikten ilk bir-üç kelime kalır (her
+çıkarışta aynı). `o` son tabloyu ya da kopyaları açar.
 Oyuncu adları sidecar'da kalır; oyunun kendi PDF'i onları hiç göstermez.
 
 Ezber (F9'da `z`, ya da ^P'de "Ezber" ile imleçteki rol) rolün her
@@ -217,9 +221,10 @@ Sınıf [tex/](tex/) klasöründe; Dactile onu kendi içinde taşır.
   rejisöre notları o kopyadan çıkarır. Bir `#` satırı kaynak satırın sonunda
   ya da üstündeki bir `%` yorumunda biter.
 - **Oyuncu kopyaları**, Dactile'ın oyunun bir kopyasının önsözüne yazdığı
-  komutlarla: `\tiyatrocopy{se}{Oyuncu}` o rolün repliklerini gri zemine
-  koyar (`framed` ve `xcolor` paketleri) ve gerisini soldurur; bir yönergeden
-  önce `\tiyatromark` onu kalın yapar; `\tiyatrocopycover{…}` kapağa ekler.
+  komutlarla: `\tiyatrocopy{se}{Oyuncu}` o rolün repliklerini kalın yapar ve
+  gerisini soldurur (`xcolor` paketi); bir yönergeden önce `\tiyatromark` onu
+  kalın yapar; `\tiyatrocopycover{…}` kapağa ekler; `\tiyatrogap{n}` bir
+  repliğin sözleri yerine n satırlık boşluk bırakır.
 
 ```sh
 xelatex oyun.tex

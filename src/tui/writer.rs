@@ -2617,6 +2617,18 @@ impl Writer {
         let p = &mut self.roles;
         p.sel = p.sel.min(n.saturating_sub(1));
         p.row = p.row.min(scenes.saturating_sub(1));
+        if p.pick {
+            p.pick = false;
+            use dactile::casting::CopyKind;
+            let kind = match k.code {
+                KeyCode::Char('1') | KeyCode::Enter => CopyKind::Full,
+                KeyCode::Char('2') => CopyKind::Rehearsal,
+                KeyCode::Char('3') => CopyKind::Light,
+                _ => return,
+            };
+            self.actor_copies(kind);
+            return;
+        }
         if p.confirm {
             p.confirm = false;
             if k.code == KeyCode::Char('x') && castings > 0 {
@@ -2649,7 +2661,7 @@ impl Writer {
             (roles::Tab::Casting, KeyCode::Char('n')) => self.casting_form(true),
             (roles::Tab::Casting, KeyCode::Char('r')) => self.casting_form(false),
             (roles::Tab::Casting, KeyCode::Char('x')) if castings > 0 => p.confirm = true,
-            (roles::Tab::Casting, KeyCode::Char('k')) => self.actor_copies(),
+            (roles::Tab::Casting, KeyCode::Char('k')) => p.pick = true,
             (roles::Tab::Casting, KeyCode::Char('z')) if n > 0 => {
                 let alias = self.doc.cast.characters[p.sel].alias.clone();
                 self.open_memo(alias, true);
@@ -3955,12 +3967,15 @@ impl Writer {
 
     /// A copy for each actor of the casting in use, and for each role nobody
     /// is cast in, all at once.
-    fn actor_copies(&mut self) {
+    fn actor_copies(&mut self, kind: dactile::casting::CopyKind) {
         use dactile::casting;
         let text = &self.buf.text;
         let stage = dactile::stage::read(text, &self.doc, &[]);
         let table = casting::table(text, &self.doc, &stage);
-        let all = casting::copies(&self.doc, &self.sidecar, &table);
+        let mut all = casting::copies(&self.doc, &self.sidecar, &table);
+        for c in &mut all {
+            c.kind = kind;
+        }
         if all.is_empty() {
             self.say(lang::l("Sahnede kimse yok.", "Nobody is on stage."), true);
             return;

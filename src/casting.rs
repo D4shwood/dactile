@@ -260,6 +260,29 @@ pub fn table_tex(doc: &Doc, text: &str, side: &Sidecar, table: &[Vec<Presence>])
     o
 }
 
+/// What an actor's copy shows of the others' lines.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum CopyKind {
+    /// All of them, faint.
+    #[default]
+    Full,
+    /// Who speaks, and room for notes where their words were.
+    Rehearsal,
+    /// Who speaks, the first one to three words, and room for notes.
+    Light,
+}
+
+impl CopyKind {
+    /// What the file name and the cover say of it; nothing for a full copy.
+    fn label(self) -> Option<&'static str> {
+        match self {
+            CopyKind::Full => None,
+            CopyKind::Rehearsal => Some(crate::lang::l("prova", "rehearsal")),
+            CopyKind::Light => Some(crate::lang::l("prova, hafif", "rehearsal, light")),
+        }
+    }
+}
+
 /// One actor's copy: the roles they play in the casting in use. A role
 /// nobody is cast in gets a copy of its own, its actor empty.
 #[derive(Debug, Clone, PartialEq)]
@@ -267,11 +290,13 @@ pub struct ActorCopy {
     pub actor: String,
     /// Aliases, in the cast's order.
     pub aliases: Vec<String>,
+    pub kind: CopyKind,
 }
 
 impl ActorCopy {
     /// "Deniz Kaya (SELİN, OZAN).pdf", "SELİN.pdf" when uncast; the
-    /// casting's name first when there are others.
+    /// casting's name first when there are others, the kind last:
+    /// "SELİN - prova.pdf".
     pub fn file_name(&self, doc: &Doc, side: &Sidecar) -> String {
         let roles: Vec<&str> = self
             .aliases
@@ -282,11 +307,14 @@ impl ActorCopy {
             Some(c) if side.castings.len() > 1 => format!("{} - ", c.name),
             _ => String::new(),
         };
-        let name = if self.actor.is_empty() {
+        let mut name = if self.actor.is_empty() {
             format!("{casting}{}", roles.join(", "))
         } else {
             format!("{casting}{} ({})", self.actor, roles.join(", "))
         };
+        if let Some(kind) = self.kind.label() {
+            name = format!("{name} - {kind}");
+        }
         let safe: String = name
             .chars()
             .map(|c| {
@@ -312,6 +340,7 @@ pub fn copies(doc: &Doc, side: &Sidecar, table: &[Vec<Presence>]) -> Vec<ActorCo
                 uncast.push(ActorCopy {
                     actor: String::new(),
                     aliases: vec![c.alias.clone()],
+                    kind: CopyKind::Full,
                 });
             }
             continue;
@@ -321,6 +350,7 @@ pub fn copies(doc: &Doc, side: &Sidecar, table: &[Vec<Presence>]) -> Vec<ActorCo
             None => out.push(ActorCopy {
                 actor: actor.to_string(),
                 aliases: vec![c.alias.clone()],
+                kind: CopyKind::Full,
             }),
         }
     }
@@ -342,9 +372,42 @@ pub fn copies_dir(play: &std::path::Path) -> std::path::PathBuf {
     play.with_file_name(format!("{stem}-{word}"))
 }
 
-/// The play as an actor's copy: the class told whose lines to put on the
-/// band, their entrances and exits marked, the scenes they are not in down
-/// to their headings, and a cover with their scenes and how much they say.
+/// Room for a line in a rehearsal copy: about as many lines as it took, and
+/// one more to write in.
+fn gap_lines(words: &str) -> usize {
+    (words.chars().count().div_ceil(55) + 1).min(6)
+}
+
+/// One to three, the same for the same words every time.
+fn first_words(words: &str) -> usize {
+    let h = words.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| {
+        (h ^ b as u64).wrapping_mul(0x100_0000_01b3)
+    });
+    (h % 3) as usize + 1
+}
+
+/// What a rehearsal copy puts where someone else's line was.
+fn rehearsal_line(text: &str, range: std::ops::Range<usize>, doc: &Doc, kind: CopyKind) -> String {
+    let words = crate::memorize::plain(text, range, &doc.cast);
+    let gap = format!("\\tiyatrogap{{{}}}", gap_lines(&words));
+    if kind != CopyKind::Light {
+        return gap;
+    }
+    let all: Vec<&str> = words.split_whitespace().collect();
+    // Never the whole line.
+    let n = first_words(&words).min(all.len().saturating_sub(1));
+    if n == 0 {
+        return gap;
+    }
+    let head = all[..n].join(" ");
+    let head = head.trim_end_matches(|c: char| !c.is_alphanumeric());
+    format!("{}…{gap}", tex_text(head))
+}
+
+/// The play as an actor's copy: the class told whose lines to put in bold,
+/// their entrances and exits marked, the scenes they are not in down to
+/// their headings, and a cover with their scenes and how much they say. A
+/// rehearsal copy leaves the others' words out, or all but the first few.
 pub fn copy_tex(
     text: &str,
     doc: &Doc,
@@ -371,6 +434,21 @@ pub fn copy_tex(
             if to > from {
                 cut.push(from..to);
                 edits.push(crate::tex::Edit::new(from..to, ""));
+            }
+        }
+    }
+    // The others' words, in a rehearsal copy.
+    if copy.kind != CopyKind::Full {
+        for b in doc.body.clone() {
+            let block = &doc.blocks[b];
+            if let Kind::Line { alias, text: t } = &block.kind
+                && !copy.aliases.contains(alias)
+                && !cut.iter().any(|r| r.contains(&block.span.start))
+            {
+                edits.push(crate::tex::Edit::new(
+                    t.clone(),
+                    rehearsal_line(text, t.clone(), doc, copy.kind),
+                ));
             }
         }
     }
@@ -401,6 +479,16 @@ pub fn copy_tex(
         .collect();
     let page = if tr { "s." } else { "p." };
     let mut cover = String::from("\\small\n");
+    let what = match (copy.kind, tr) {
+        (CopyKind::Full, _) => None,
+        (CopyKind::Rehearsal, true) => Some("Prova kopyası"),
+        (CopyKind::Rehearsal, false) => Some("Rehearsal copy"),
+        (CopyKind::Light, true) => Some("Prova kopyası (hafif)"),
+        (CopyKind::Light, false) => Some("Rehearsal copy (light)"),
+    };
+    if let Some(what) = what {
+        cover.push_str(&format!("\\textit{{{what}}}\\par\\medskip\n"));
+    }
     if scenes.len() <= 24 {
         cover.push_str("\\begin{tabular}{@{}l l r@{}}\n");
         for &s in &scenes {
@@ -496,9 +584,10 @@ mod tests {
             all[0].file_name(&doc, &side),
             "Deniz Kaya (SELİN, İHTİYAR).pdf"
         );
-        let only_se = ActorCopy {
+        let mut only_se = ActorCopy {
             actor: "Deniz Kaya".into(),
             aliases: vec!["se".into()],
+            kind: CopyKind::Full,
         };
         let tex = copy_tex(PLAY, &doc, &st, &t, 120, &only_se);
         assert!(tex.contains("\\tiyatrocopy{se}{Deniz Kaya}\n\\tiyatrocopycover{"));
@@ -507,6 +596,20 @@ mod tests {
         // Not in the second scene: its heading alone.
         assert!(tex.contains("#sahne Meydan\n\\end{document}"));
         assert!(!tex.contains("Kar yağıyor"));
+        // A rehearsal copy: the others' words give way to room for notes.
+        only_se.actor = "Ali Er".into();
+        only_se.aliases = vec!["oz".into()];
+        only_se.kind = CopyKind::Rehearsal;
+        let tex = copy_tex(PLAY, &doc, &st, &t, 120, &only_se);
+        assert!(tex.contains("\\se \\tiyatrogap{2}\n"));
+        assert!(tex.contains("\\oz Kar yağıyor.\n"));
+        assert!(tex.contains("\\ih \\tiyatrogap{2}\n"));
+        assert!(tex.contains("\\textit{Prova kopyası}"));
+        assert_eq!(only_se.file_name(&doc, &side), "Ali Er (OZAN) - prova.pdf");
+        only_se.kind = CopyKind::Light;
+        let tex = copy_tex(PLAY, &doc, &st, &t, 120, &only_se);
+        assert!(tex.contains("\\se Merhaba…\\tiyatrogap{2}\n"));
+        assert!(tex.contains("\\ih \\tiyatrogap{2}\n"));
         // Nobody cast: a copy for each role, named after it.
         let none = copies(&doc, &Sidecar::default(), &t);
         assert_eq!(none.len(), 3);
