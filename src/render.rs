@@ -112,7 +112,6 @@ pub enum Style {
     Text,
     Name,
     NameStar,
-    NameMuted,
     Direction,
     Ref,
     Under,
@@ -871,14 +870,7 @@ impl Builder<'_> {
                 let Some(c) = self.doc.cast.get(alias) else {
                     return false;
                 };
-                let style = if c.star {
-                    Style::NameStar
-                } else if c.kind == cast::Kind::Hidden {
-                    // HERKES, SEYİRCİ: voices more than characters.
-                    Style::NameMuted
-                } else {
-                    Style::Name
-                };
+                let style = if c.star { Style::NameStar } else { Style::Name };
                 let name_w = self.out.name_width;
                 let narrow = self.width < 60;
                 let glyphs = self.inline_glyphs(text.clone(), Style::Text, true);

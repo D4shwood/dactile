@@ -136,7 +136,6 @@ pub fn on(s: S, p: &Palette) -> Style {
         S::Text | S::Raw => st,
         S::Name | S::Title => st.add_modifier(Modifier::BOLD),
         S::NameStar => st.fg(p.star).add_modifier(Modifier::BOLD),
-        S::NameMuted => st.fg(p.muted).add_modifier(Modifier::BOLD),
         S::Direction => st.fg(p.muted).add_modifier(Modifier::ITALIC),
         S::Ref => st.fg(p.name_ref),
         S::Under => st.add_modifier(Modifier::UNDERLINED),
