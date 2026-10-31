@@ -139,6 +139,12 @@ pub enum FormKind {
     CastingName(bool),
     /// The play's words a minute.
     Wpm,
+    /// A new member of a group (an index into `Cast::groups`).
+    NewMember(usize),
+    /// A group's name: a new group, or this one renamed.
+    GroupName(Option<usize>),
+    /// Moving a character (alias) into a group, or out of one.
+    MoveTo(String),
 }
 
 pub struct Field {
@@ -587,6 +593,9 @@ pub fn label_of(key: &str) -> &str {
         "Şununla birleştir" => "Merge into",
         "Dosya" => "File",
         "Oyuncu" => "Actor",
+        "Grup adı" => "Group name",
+        "Üyeler (kısaltmalar)" => "Members (aliases)",
+        "Grup" => "Group",
         other => other,
     }
 }

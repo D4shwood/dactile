@@ -1593,6 +1593,12 @@ impl Writer {
             KeyCode::Esc => {
                 self.popup = match form.kind {
                     FormKind::Actor(_) | FormKind::CastingName(_) | FormKind::Wpm => Popup::Roles,
+                    FormKind::NewMember(_) | FormKind::GroupName(_) | FormKind::MoveTo(_) => {
+                        Popup::Cast(CastPanel {
+                            sel: 0,
+                            by_lines: false,
+                        })
+                    }
                     _ => Popup::None,
                 };
                 return;
@@ -1637,7 +1643,10 @@ impl Writer {
             _ => {}
         }
         // The alias follows the name until it is edited by hand.
-        if matches!(form.kind, FormKind::Character | FormKind::Split(_)) {
+        if matches!(
+            form.kind,
+            FormKind::Character | FormKind::Split(_) | FormKind::NewMember(_)
+        ) {
             let name = form.get("Ad").to_string();
             let cast = &self.doc.cast;
             if let Some(a) = form.field_mut("Kısaltma")
@@ -1927,6 +1936,124 @@ impl Writer {
                     sel: 0,
                 });
             }
+            FormKind::NewMember(g) => {
+                let mut spec = match self.spec_from(&form, None) {
+                    Ok(s) => s,
+                    Err(e) => return Err(Box::new((form, e))),
+                };
+                spec.kind = dcast::Kind::Member;
+                spec.desc.clear();
+                let e = dcast::add(&self.buf.text, &self.doc.cast, &spec, Some(g));
+                let t = dactile::tex::apply(&self.buf.text, &[e]);
+                self.replace_text(t);
+                self.say(
+                    &lang::f(
+                        "{} gruba eklendi: \\{}",
+                        "{} added to the group: \\{}",
+                        &[&spec.script, &spec.alias],
+                    ),
+                    false,
+                );
+                self.popup = Popup::Cast(CastPanel {
+                    sel: self.cast_index(&spec.alias),
+                    by_lines: false,
+                });
+            }
+            FormKind::GroupName(g) => {
+                let name = dactile::tex::escape_text(form.get("Grup adı").trim());
+                if name.is_empty() {
+                    return Err(Box::new((
+                        form,
+                        lang::l("Grubun bir adı olsun.", "The group needs a name.").into(),
+                    )));
+                }
+                let mut t = self.buf.text.clone();
+                let g = match g {
+                    Some(g) => {
+                        if let Some(e) = dcast::rename_group(&self.doc.cast, g, &name) {
+                            t = dactile::tex::apply(&t, &[e]);
+                        }
+                        g
+                    }
+                    None => {
+                        // Who goes into it at once: aliases, by commas or spaces.
+                        let wanted: Vec<String> = form
+                            .get("Üyeler (kısaltmalar)")
+                            .split([',', ' '])
+                            .map(|a| a.trim().trim_start_matches('\\').to_string())
+                            .filter(|a| !a.is_empty())
+                            .collect();
+                        if let Some(a) = wanted.iter().find(|a| self.doc.cast.get(a).is_none()) {
+                            return Err(Box::new((
+                                form,
+                                lang::f("\\{} diye bir karakter yok.", "No character \\{}.", &[a]),
+                            )));
+                        }
+                        t = dactile::tex::apply(&t, &[dcast::add_group(&t, &self.doc.cast, &name)]);
+                        let g = dcast::Cast::of_play(&t).groups.len() - 1;
+                        for a in &wanted {
+                            let c = dcast::Cast::of_play(&t);
+                            if let Some(e) = dcast::move_to_group(&t, &c, a, Some(g)) {
+                                t = dactile::tex::apply(&t, &e);
+                            }
+                        }
+                        g
+                    }
+                };
+                self.replace_text(t);
+                self.popup = Popup::Cast(CastPanel {
+                    sel: self.group_index(g),
+                    by_lines: false,
+                });
+                self.say(
+                    lang::l(
+                        "Grup hazır: n ile yeni üye ekler, t ile bir karakteri içine taşırsın.",
+                        "The group is ready: n adds a new member, t moves a character into it.",
+                    ),
+                    false,
+                );
+            }
+            FormKind::MoveTo(alias) => {
+                let want = form.get("Grup").trim().to_string();
+                let none = want.is_empty() || want == lang::l("(grup yok)", "(no group)");
+                let groups = &self.doc.cast.groups;
+                let mut t = self.buf.text.clone();
+                let target = if none {
+                    None
+                } else if let Some(g) = groups.iter().position(|g| g.desc == want) {
+                    Some(g)
+                } else {
+                    // A name that isn't a group yet: a new one.
+                    let name = dactile::tex::escape_text(&want);
+                    t = dactile::tex::apply(&t, &[dcast::add_group(&t, &self.doc.cast, &name)]);
+                    Some(groups.len())
+                };
+                let c = dcast::Cast::of_play(&t);
+                if let Some(e) = dcast::move_to_group(&t, &c, &alias, target) {
+                    t = dactile::tex::apply(&t, &e);
+                }
+                let lost = target.is_some()
+                    && self
+                        .doc
+                        .cast
+                        .get(&alias)
+                        .and_then(|c| c.desc.as_deref())
+                        .is_some_and(|d| !d.is_empty());
+                self.replace_text(t);
+                if lost {
+                    self.say(
+                        lang::l(
+                            "Taşındı; grup üyelerinin açıklaması olmaz, açıklaması gitti (^Z geri alır).",
+                            "Moved; group members have no description, so it went (^Z undoes).",
+                        ),
+                        false,
+                    );
+                }
+                self.popup = Popup::Cast(CastPanel {
+                    sel: self.cast_index(&alias),
+                    by_lines: false,
+                });
+            }
             FormKind::EditCharacter(old) => {
                 let spec = match self.spec_from(&form, Some(&old)) {
                     Ok(s) => s,
@@ -2101,6 +2228,96 @@ impl Writer {
         })
     }
 
+    /// Where a group's heading is in the cast panel.
+    fn group_index(&self, g: usize) -> usize {
+        self.cast_entries(false)
+            .iter()
+            .position(|e| *e == Entry::Group(g))
+            .unwrap_or(0)
+    }
+
+    /// The whole text replaced in one undo step (changes in the preamble);
+    /// the cursor keeps its place counted from the end.
+    fn replace_text(&mut self, t: String) {
+        if t == self.buf.text || !self.editable() {
+            return;
+        }
+        let from_end = self.buf.text.len() - self.buf.cursor;
+        let all = 0..self.buf.text.len();
+        let at = t.len().saturating_sub(from_end);
+        self.buf.apply(&[dactile::tex::Edit::new(all, t)], at);
+        self.edited();
+        self.refresh_known();
+    }
+
+    fn member_form(&self, g: usize) -> Form {
+        let mut f = self.character_form("", None);
+        f.kind = FormKind::NewMember(g);
+        let name = &self.doc.cast.groups[g].desc;
+        f.title = lang::f("yeni üye — {}", "new member — {}", &[name]);
+        f.fields.retain(|x| {
+            !x.label.starts_with("Kişiler")
+                && !x.label.starts_with("Gizli")
+                && x.label != "Açıklama"
+        });
+        f
+    }
+
+    fn group_form(&self, g: Option<usize>) -> Form {
+        let now = g.map_or(String::new(), |g| {
+            dactile::tex::unescape_text(&self.doc.cast.groups[g].desc)
+        });
+        let mut fields = vec![Field::text("Grup adı", &now, Vec::new())];
+        if g.is_none() {
+            fields.push(Field::text("Üyeler (kısaltmalar)", "", Vec::new()));
+        }
+        Form {
+            kind: FormKind::GroupName(g),
+            title: if g.is_some() {
+                lang::l("grubun adı", "the group's name").into()
+            } else {
+                lang::l(
+                    "yeni grup (üyeler: an, mi gibi; boş da olur)",
+                    "a new group (members: an, mi; or none)",
+                )
+                .into()
+            },
+            fields,
+            focus: 0,
+            at: 0..0,
+            error: None,
+            confirmed: false,
+        }
+    }
+
+    fn move_form(&self, alias: &str) -> Form {
+        let c = self.doc.cast.get(alias);
+        let now = c
+            .and_then(|c| c.group)
+            .map_or(String::new(), |g| self.doc.cast.groups[g].desc.clone());
+        let mut options: Vec<String> = self
+            .doc
+            .cast
+            .groups
+            .iter()
+            .map(|g| g.desc.clone())
+            .collect();
+        options.push(lang::l("(grup yok)", "(no group)").into());
+        Form {
+            kind: FormKind::MoveTo(alias.to_string()),
+            title: lang::f(
+                "\\{} hangi gruba? (Tab gruplar arasında gezer; yeni bir ad yeni grup açar)",
+                "\\{} into which group? (Tab goes through them; a new name makes a new one)",
+                &[&alias],
+            ),
+            fields: vec![Field::text("Grup", &now, options)],
+            focus: 0,
+            at: 0..0,
+            error: None,
+            confirmed: false,
+        }
+    }
+
     /// Where a character is in the cast panel.
     fn cast_index(&self, alias: &str) -> usize {
         self.cast_entries(false)
@@ -2256,8 +2473,27 @@ impl Writer {
             Some(Entry::Character(i)) => Some(self.doc.cast.characters[i].alias.clone()),
             _ => None,
         };
+        // The group the selection is in: its heading or one of its members.
+        let group = match chosen {
+            Some(Entry::Group(g)) => Some(g),
+            Some(Entry::Character(i)) if !by_lines => self.doc.cast.characters[i].group,
+            _ => None,
+        };
+        let member = matches!(chosen, Some(Entry::Character(i)) if self.doc.cast.characters[i].group.is_some());
         match k.code {
             KeyCode::Esc => self.popup = Popup::None,
+            KeyCode::Up | KeyCode::Down if alt && !by_lines && member => {
+                let a = alias.clone().unwrap_or_default();
+                let up = k.code == KeyCode::Up;
+                if let Some(e) = dcast::move_member(&self.doc.cast, &a, up, &self.buf.text) {
+                    let t = dactile::tex::apply(&self.buf.text, &e);
+                    self.replace_text(t);
+                    let at = self.cast_index(&a);
+                    if let Popup::Cast(p) = &mut self.popup {
+                        p.sel = at;
+                    }
+                }
+            }
             KeyCode::Char('o') if ctrl => self.popup = Popup::None,
             KeyCode::Up | KeyCode::Down if alt && !by_lines => {
                 // Move the row (a character of the table, or a whole group).
@@ -2319,7 +2555,35 @@ impl Writer {
                     p.sel = 0;
                 }
             }
-            KeyCode::Char('n') => self.popup = Popup::Form(self.character_form("", None)),
+            KeyCode::Char('n') => {
+                self.popup = Popup::Form(match group {
+                    Some(g) => self.member_form(g),
+                    None => self.character_form("", None),
+                })
+            }
+            KeyCode::Char('g') => self.popup = Popup::Form(self.group_form(None)),
+            KeyCode::Char('t') => {
+                if let Some(a) = &alias {
+                    self.popup = Popup::Form(self.move_form(a));
+                }
+            }
+            KeyCode::Char('e') if matches!(chosen, Some(Entry::Group(_))) => {
+                self.popup = Popup::Form(self.group_form(group));
+            }
+            KeyCode::Char('d') if matches!(chosen, Some(Entry::Group(_))) => {
+                let g = group.unwrap_or(0);
+                if let Some(e) = dcast::dissolve_group(&self.buf.text, &self.doc.cast, g) {
+                    let t = dactile::tex::apply(&self.buf.text, &[e]);
+                    self.replace_text(t);
+                    self.say(
+                        lang::l(
+                            "Grup dağıldı; üyeleri kişiler tablosunda kaldı (^Z geri alır).",
+                            "The group is gone; its members stay in the cast table (^Z undoes).",
+                        ),
+                        false,
+                    );
+                }
+            }
             KeyCode::Char('m') => {
                 if let Some(a) = alias {
                     let others: Vec<String> = self

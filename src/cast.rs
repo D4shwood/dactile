@@ -389,6 +389,13 @@ pub fn add(text: &str, cast: &Cast, spec: &Spec, group: Option<usize>) -> Edit {
     if let (Kind::Member, Some(g)) = (spec.kind, group)
         && let Some(group) = cast.groups.get(g)
     {
+        if group.members.is_empty() {
+            // `{}` or `{ }`: the member on a line of its own, the brace after.
+            return Edit::new(
+                group.body.clone(),
+                format!("{nl}\t{}{nl}", declaration(spec)),
+            );
+        }
         let indent = group
             .members
             .first()
@@ -420,6 +427,105 @@ pub fn add(text: &str, cast: &Cast, spec: &Spec, group: Option<usize>) -> Edit {
             Edit::new(at..at, format!("{}{nl}{nl}", declaration(spec)))
         }
     }
+}
+
+/// A new, empty group after the last declaration; members are added to it
+/// with `add`.
+pub fn add_group(text: &str, cast: &Cast, desc: &str) -> Edit {
+    let nl = source::line_ending(text);
+    let decl = format!("\\karaktergrubu[{desc}]{{{nl}}}");
+    let last = cast
+        .characters
+        .iter()
+        .filter(|c| c.group.is_none())
+        .map(|c| c.span.end)
+        .chain(cast.groups.iter().map(|g| g.span.end))
+        .max();
+    match last {
+        Some(end) => {
+            let at = line_end(text, end);
+            Edit::new(at..at, format!("{nl}{decl}"))
+        }
+        None => {
+            let at = line_start(text, source::split(text).preamble.end);
+            Edit::new(at..at, format!("{decl}{nl}{nl}"))
+        }
+    }
+}
+
+/// A group's description (the cast table's heading for it).
+pub fn rename_group(cast: &Cast, g: usize, desc: &str) -> Option<Edit> {
+    let group = cast.groups.get(g)?;
+    Some(Edit::new(
+        group.span.start..group.body.start,
+        format!("\\karaktergrubu[{desc}]{{"),
+    ))
+}
+
+/// The group goes; its members stay, as rows of the cast table where it was,
+/// with the group's name for a description.
+pub fn dissolve_group(text: &str, cast: &Cast, g: usize) -> Option<Edit> {
+    let group = cast.groups.get(g)?;
+    if group.members.is_empty() {
+        return Some(Edit::new(whole_line_or(text, group.span.clone()), ""));
+    }
+    let nl = source::line_ending(text);
+    let decls: Vec<String> = group
+        .members
+        .iter()
+        .map(|&m| {
+            let mut spec = cast.characters[m].spec();
+            spec.kind = Kind::Cast;
+            spec.desc = group.desc.clone();
+            declaration(&spec)
+        })
+        .collect();
+    Some(Edit::new(group.span.clone(), decls.join(nl)))
+}
+
+/// Moves a character into a group (an index into `Cast::groups`) or out of
+/// any (`None`): its declaration goes, and comes back where `add` puts it.
+/// A member has no description: one going into a group loses it.
+pub fn move_to_group(
+    text: &str,
+    cast: &Cast,
+    alias: &str,
+    group: Option<usize>,
+) -> Option<Vec<Edit>> {
+    let c = cast.get(alias)?;
+    if c.group == group {
+        return None;
+    }
+    let mut spec = c.spec();
+    spec.kind = if group.is_some() {
+        Kind::Member
+    } else {
+        Kind::Cast
+    };
+    if group.is_some() {
+        spec.desc.clear();
+    }
+    // Never touching: one is a line in a group, the other after the last
+    // declaration or in another group.
+    let gone = remove(text, cast, alias)?;
+    let back = add(text, cast, &spec, group);
+    Some(vec![gone, back])
+}
+
+/// Swaps a group member with the one above (`up`) or below it in its group.
+pub fn move_member(cast: &Cast, alias: &str, up: bool, text: &str) -> Option<Vec<Edit>> {
+    let i = cast.index(alias)?;
+    let g = cast.characters[i].group?;
+    let members = &cast.groups[g].members;
+    let k = members.iter().position(|&m| m == i)?;
+    let other = if up { k.checked_sub(1)? } else { k + 1 };
+    let j = *members.get(other)?;
+    let a = cast.characters[i].span.clone();
+    let b = cast.characters[j].span.clone();
+    Some(vec![
+        Edit::new(a.clone(), &text[b.clone()]),
+        Edit::new(b, &text[a]),
+    ])
 }
 
 /// Rewrites a character's declaration, or nothing when it says the same.
@@ -828,6 +934,57 @@ mod tests {
         let out = apply(PLAY, &[remove(PLAY, &cast, "ih").unwrap()]);
         assert!(!out.contains("İHTİYAR}{ih}"));
         assert!(out.contains("{OZAN}{oz}\n\\karaktergrubu"));
+    }
+
+    #[test]
+    fn groups() {
+        let cast = Cast::of_play(PLAY);
+        // A new group, then a member in it.
+        let out = apply(PLAY, &[add_group(PLAY, &cast, "Değirmenciler")]);
+        assert!(out.contains("\\karaktergrubu[Değirmenciler]{\n}\n"));
+        let c = Cast::of_play(&out);
+        assert_eq!(c.groups.len(), 2);
+        let m = Spec {
+            alias: "ci".into(),
+            script: "ÇIRAK".into(),
+            kind: Kind::Member,
+            ..Spec::default()
+        };
+        let out2 = apply(&out, &[add(&out, &c, &m, Some(1))]);
+        assert!(out2.contains("\\karaktergrubu[Değirmenciler]{\n\t\\gkarakter{ÇIRAK}{ci}\n}"));
+        // On one line too.
+        let one = PLAY.replace(
+            "\\begin{document}",
+            "\\karaktergrubu[X]{}\n\\begin{document}",
+        );
+        let c1 = Cast::of_play(&one);
+        let out1 = apply(&one, &[add(&one, &c1, &m, Some(1))]);
+        assert!(out1.contains("\\karaktergrubu[X]{\n\t\\gkarakter{ÇIRAK}{ci}\n}"));
+        // Renamed.
+        let out3 = apply(PLAY, &[rename_group(&cast, 0, "Köyün halkı").unwrap()]);
+        assert!(out3.contains("\\karaktergrubu[Köyün halkı]{\n"));
+        assert_eq!(Cast::of_play(&out3).groups[0].members.len(), 2);
+        // Dissolved: its members are rows of the table.
+        let out4 = apply(PLAY, &[dissolve_group(PLAY, &cast, 0).unwrap()]);
+        let c4 = Cast::of_play(&out4);
+        assert!(c4.groups.is_empty());
+        assert_eq!(c4.get("co").unwrap().kind, Kind::Cast);
+        assert!(out4.contains("\\karakter[Köylüler]{ÇOBAN}{co}\n"));
+        assert_eq!(c4.characters.len(), cast.characters.len());
+        // OZAN into the group, losing his description; then out again.
+        let out5 = apply(PLAY, &move_to_group(PLAY, &cast, "oz", Some(0)).unwrap());
+        let c5 = Cast::of_play(&out5);
+        assert_eq!(c5.get("oz").unwrap().group, Some(0));
+        assert_eq!(c5.groups[0].members.len(), 3);
+        let out6 = apply(&out5, &move_to_group(&out5, &c5, "oz", None).unwrap());
+        let c6 = Cast::of_play(&out6);
+        assert_eq!(c6.get("oz").unwrap().kind, Kind::Cast);
+        assert_eq!(c6.groups[0].members.len(), 2);
+        assert_eq!(c6.characters.len(), cast.characters.len());
+        // ÇOBAN above KADIN.
+        let out7 = apply(PLAY, &move_member(&cast, "co", true, PLAY).unwrap());
+        let c7 = Cast::of_play(&out7);
+        assert_eq!(c7.characters[c7.groups[0].members[0]].alias, "co");
     }
 
     #[test]

@@ -107,7 +107,7 @@ screen the play's outline sits in the margin; a click goes there.
 | Key | |
 |---|---|
 | ^P | the command palette: everything by name — new scene, themes, page view, animations… |
-| ^O | the cast: edit, rename an alias everywhere, order, character cards; m merges one into another, b splits one, giving the scenes you pick to a new character |
+| ^O | the cast: edit, rename an alias everywhere, order, character cards; m merges one into another, b splits one, giving the scenes you pick to a new character; g a new group (with its members), t moves a character into a group or out of one, and on a group n adds a member, e renames it, d dissolves it |
 | ^G, ^G ^G | the scene strip beside the writing; twice quickly, the board (below) |
 | F9 | casting: who plays whom, the scene/role table, the numbers (below) |
 | Alt+E, Alt+B, Alt+J | the cursor's scene's summary; split the scene at the cursor's line; join it with the next |
