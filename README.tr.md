@@ -162,8 +162,8 @@ F9 kimin kimi oynadığını tam ekran açar; üç görünüm var (Tab):
 - **dağıtım**: roller, her birinin oyuncusu (⏎ ile yazılır), repliği,
   kelimesi, süresi ve sahneleri. Bir oyunun birden çok dağıtımı olabilir, A ve
   B kadrosu gibi: ←→ aralarında gezer, `n` yenisini açar (şimdikinin
-  kopyası), `r` adını değiştirir, `x` siler. `k` her oyuncuya bir kopya
-  çıkarır; `z` rolü ezberletir.
+  kopyası), `r` adını değiştirir, `x` siler. `k` her oyuncuya, oyuncusu
+  henüz yazılmamış her role de (`ROL.pdf`) bir kopya çıkarır; `z` rolü ezberletir.
 - **tablo**: sahneler satırda, roller sütunda; ● rol konuşuyor, ○ sahnede ama
   konuşmuyor. ⏎ sahneye gider, `x` CSV (`oyun-tablo.csv`), `p` yatay bir PDF
   (`oyun-tablo.pdf`) yazar.

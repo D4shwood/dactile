@@ -149,8 +149,11 @@
     \bool_if:NT \g__tiy_copy_bool
       {
         \vspace { 1.5cm }
-        { \centering \LARGE \bfseries \g__tiy_copy_actor_tl \par }
-        \vspace { 0.3cm }
+        \tl_if_empty:NF \g__tiy_copy_actor_tl
+          {
+            { \centering \LARGE \bfseries \g__tiy_copy_actor_tl \par }
+            \vspace { 0.3cm }
+          }
         {
           \centering \Large
           \seq_set_from_clist:NN \l_tmpa_seq \g__tiy_copy_clist

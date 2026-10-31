@@ -3953,20 +3953,18 @@ impl Writer {
         }
     }
 
-    /// A copy for each actor of the casting in use, all at once.
+    /// A copy for each actor of the casting in use, and for each role nobody
+    /// is cast in, all at once.
     fn actor_copies(&mut self) {
         use dactile::casting;
-        let all = casting::copies(&self.doc, &self.sidecar);
-        if all.is_empty() {
-            self.say(
-                lang::l("Önce rollere oyuncu yaz (⏎).", "Cast the roles first (⏎)."),
-                true,
-            );
-            return;
-        }
         let text = &self.buf.text;
         let stage = dactile::stage::read(text, &self.doc, &[]);
         let table = casting::table(text, &self.doc, &stage);
+        let all = casting::copies(&self.doc, &self.sidecar, &table);
+        if all.is_empty() {
+            self.say(lang::l("Sahnede kimse yok.", "Nobody is on stage."), true);
+            return;
+        }
         let aux = build::casts(&self.doc.outline);
         let dir = casting::copies_dir(&self.path);
         let jobs: Vec<(String, PathBuf)> = all

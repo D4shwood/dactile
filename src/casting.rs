@@ -260,7 +260,8 @@ pub fn table_tex(doc: &Doc, text: &str, side: &Sidecar, table: &[Vec<Presence>])
     o
 }
 
-/// One actor's copy: the roles they play in the casting in use.
+/// One actor's copy: the roles they play in the casting in use. A role
+/// nobody is cast in gets a copy of its own, its actor empty.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ActorCopy {
     pub actor: String,
@@ -269,8 +270,8 @@ pub struct ActorCopy {
 }
 
 impl ActorCopy {
-    /// "Deniz Kaya (SELİN, OZAN).pdf"; the casting's name first when there
-    /// are others.
+    /// "Deniz Kaya (SELİN, OZAN).pdf", "SELİN.pdf" when uncast; the
+    /// casting's name first when there are others.
     pub fn file_name(&self, doc: &Doc, side: &Sidecar) -> String {
         let roles: Vec<&str> = self
             .aliases
@@ -281,7 +282,11 @@ impl ActorCopy {
             Some(c) if side.castings.len() > 1 => format!("{} - ", c.name),
             _ => String::new(),
         };
-        let name = format!("{casting}{} ({})", self.actor, roles.join(", "));
+        let name = if self.actor.is_empty() {
+            format!("{casting}{}", roles.join(", "))
+        } else {
+            format!("{casting}{} ({})", self.actor, roles.join(", "))
+        };
         let safe: String = name
             .chars()
             .map(|c| {
@@ -296,11 +301,19 @@ impl ActorCopy {
     }
 }
 
-/// Everyone cast in the casting in use, an actor with two roles once.
-pub fn copies(doc: &Doc, side: &Sidecar) -> Vec<ActorCopy> {
+/// Everyone cast in the casting in use, an actor with two roles once; then
+/// each role on stage that nobody is cast in, alone.
+pub fn copies(doc: &Doc, side: &Sidecar, table: &[Vec<Presence>]) -> Vec<ActorCopy> {
     let mut out: Vec<ActorCopy> = Vec::new();
-    for c in &doc.cast.characters {
+    let mut uncast = Vec::new();
+    for (i, c) in doc.cast.characters.iter().enumerate() {
         let Some(actor) = side.actor(&c.alias) else {
+            if table.iter().any(|row| row[i] != Presence::Absent) {
+                uncast.push(ActorCopy {
+                    actor: String::new(),
+                    aliases: vec![c.alias.clone()],
+                });
+            }
             continue;
         };
         match out.iter_mut().find(|x| x.actor == actor) {
@@ -311,6 +324,7 @@ pub fn copies(doc: &Doc, side: &Sidecar) -> Vec<ActorCopy> {
             }),
         }
     }
+    out.extend(uncast);
     out
 }
 
@@ -475,7 +489,7 @@ mod tests {
             ]
             .into(),
         });
-        let all = copies(&doc, &side);
+        let all = copies(&doc, &side, &t);
         assert_eq!(all.len(), 2);
         assert_eq!(all[0].aliases, ["se", "ih"]);
         assert_eq!(
@@ -493,6 +507,12 @@ mod tests {
         // Not in the second scene: its heading alone.
         assert!(tex.contains("#sahne Meydan\n\\end{document}"));
         assert!(!tex.contains("Kar yağıyor"));
+        // Nobody cast: a copy for each role, named after it.
+        let none = copies(&doc, &Sidecar::default(), &t);
+        assert_eq!(none.len(), 3);
+        assert_eq!(none[1].file_name(&doc, &Sidecar::default()), "OZAN.pdf");
+        let tex = copy_tex(PLAY, &doc, &st, &t, 120, &none[1]);
+        assert!(tex.contains("\\tiyatrocopy{oz}{}\n"));
     }
 
     #[test]

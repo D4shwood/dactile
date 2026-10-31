@@ -162,7 +162,8 @@ F9 opens who plays whom, full screen, in three views (Tab):
 - **casting**: the roles, each with its actor (⏎ to write one in), its lines,
   words, time and scenes. A play can have several castings, an A and a B
   lineup: ←→ between them, `n` a new one (a copy of this one), `r` renames,
-  `x` deletes. `k` builds a copy for each actor; `z` memorizes the role.
+  `x` deletes. `k` builds a copy for each actor, and for each role nobody
+  is cast in yet (`ROLE.pdf`); `z` memorizes the role.
 - **table**: the scenes down, the roles across, ● where a role speaks and ○
   where it is on stage without a line; ⏎ goes to the scene, `x` writes it as
   CSV (`oyun-tablo.csv`), `p` as a landscape PDF (`oyun-tablo.pdf`).
