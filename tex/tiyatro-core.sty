@@ -165,10 +165,21 @@
       }
   }
 
+% In an actor's copy their names are bold: the column must hold them so.
+\cs_new_protected:Npn \__tiy_widen_bold:n #1
+  {
+    \hbox_set:Nn \l_tmpa_box
+      { \bfseries \__tiy_namefont:n {#1} \tl_use:c { g__tiy_script_#1_tl } \space }
+    \dim_gset:Nn \g__tiy_widest_dim
+      { \dim_max:nn { \g__tiy_widest_dim } { \box_wd:N \l_tmpa_box } }
+  }
+
 \AtBeginDocument
   {
     \dim_compare:nNnT { \g__tiy_cap_dim } = { 0pt }
       { \dim_gset:Nn \g__tiy_cap_dim { 0.22 \textwidth } }
+    \bool_if:NT \g__tiy_copy_bool
+      { \clist_map_function:NN \g__tiy_copy_clist \__tiy_widen_bold:n }
     \setlength \maxcharlength { \dim_min:nn { \g__tiy_widest_dim } { \g__tiy_cap_dim } }
   }
 
