@@ -75,7 +75,7 @@
 \dim_new:N \g__tiy_cap_dim
 
 % The name column of the dialogue: the widest script name, at most
-% \setmaxnamewidth (default: 22% of the text width). Set at \begin{document}.
+% \setmaxnamewidth (default: 30% of the text width). Set at \begin{document}.
 \newlength \maxcharlength
 \NewDocumentCommand \setmaxnamewidth { m } { \dim_gset:Nn \g__tiy_cap_dim {#1} }
 
@@ -141,10 +141,8 @@
       { ! \str_if_eq_p:nn {#1} { plain } }
       { \seq_gput_right:Nn \g__tiy_cover_seq {#6} }
     % Every character can speak, group members too, so each one widens the
-    % name column (up to \setmaxnamewidth).
-    \hbox_set:Nn \l_tmpa_box { \__tiy_namefont:n {#6} #5 \space }
-    \dim_gset:Nn \g__tiy_widest_dim
-      { \dim_max:nn { \g__tiy_widest_dim } { \box_wd:N \l_tmpa_box } }
+    % name column (up to \setmaxnamewidth), measured once the fonts are set.
+    \seq_gput_right:Nn \g__tiy_names_seq {#6}
     \cs_gset_protected:cpn {#6} { \__tiy_who:n {#6} }
     \cs_gset_protected:cpn {#6do} { \__tiy_do:n {#6} }
     \cs_gset_protected:cpn {#6font} { \__tiy_namefont:n {#6} }
@@ -153,6 +151,10 @@
 
 \cs_new_protected:Npn \__tiy_namefont:n #1
   { \str_if_eq:eeTF { \tl_use:c { g__tiy_star_#1_tl } } { 1 } { \starfont } { \namefont } }
+
+% Over a line the name is in capitals, Turkish casing: "Arabacı" -> "ARABACI".
+\cs_new:Npn \__tiy_speaker:n #1
+  { \text_uppercase:nn { tr } { \tl_use:c { g__tiy_script_#1_tl } } }
 
 % "SELİN" -> "Selin", with Turkish casing (İ/i, I/ı); \setinlinename wins.
 \cs_new:Npn \__tiy_inline:n #1
@@ -165,22 +167,26 @@
       }
   }
 
-% In an actor's copy their names are bold: the column must hold them so.
-\cs_new_protected:Npn \__tiy_widen_bold:n #1
+\seq_new:N \g__tiy_names_seq
+\cs_new_protected:Npn \__tiy_widen:n #1
   {
-    \hbox_set:Nn \l_tmpa_box
-      { \bfseries \__tiy_namefont:n {#1} \tl_use:c { g__tiy_script_#1_tl } \space }
+    \hbox_set:Nn \l_tmpa_box { \__tiy_namefont:n {#1} \__tiy_speaker:n {#1} }
     \dim_gset:Nn \g__tiy_widest_dim
       { \dim_max:nn { \g__tiy_widest_dim } { \box_wd:N \l_tmpa_box } }
   }
+% In an actor's copy their names are bold: the column must hold them so.
+\cs_new_protected:Npn \__tiy_widen_bold:n #1 { { \bfseries \__tiy_widen:n {#1} } }
 
-\AtBeginDocument
+% After every other \AtBeginDocument: the fonts and their size are set.
+\AddToHook { begindocument / end }
   {
     \dim_compare:nNnT { \g__tiy_cap_dim } = { 0pt }
-      { \dim_gset:Nn \g__tiy_cap_dim { 0.22 \textwidth } }
+      { \dim_gset:Nn \g__tiy_cap_dim { 0.3 \textwidth } }
+    \seq_map_function:NN \g__tiy_names_seq \__tiy_widen:n
     \bool_if:NT \g__tiy_copy_bool
       { \clist_map_function:NN \g__tiy_copy_clist \__tiy_widen_bold:n }
-    \setlength \maxcharlength { \dim_min:nn { \g__tiy_widest_dim } { \g__tiy_cap_dim } }
+    \setlength \maxcharlength
+      { \dim_min:nn { \g__tiy_widest_dim + 1.5em } { \g__tiy_cap_dim } }
   }
 
 % ------------------------------------------------------------------ lines
@@ -220,8 +226,14 @@
     \leavevmode
     \__tiy_copy_line_style:n {#1}
     \__tiy_number:
-    \parbox [ t ] { \maxcharlength }
-      { \raggedright \__tiy_namefont:n {#1} \tl_use:c { g__tiy_script_#1_tl } }
+    % A space's room before the line, even for a name the cap wraps.
+    \parbox [ t ] { \dim_eval:n { \maxcharlength - 1.5em } }
+      {
+        \skip_zero:N \leftskip
+        \dim_zero:N \parindent
+        \raggedright \__tiy_namefont:n {#1} \__tiy_speaker:n {#1}
+      }
+    \hspace { 1.5em }
     \tiy@obey
   }
 

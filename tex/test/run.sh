@@ -85,10 +85,13 @@ grep -q 'SELİN, OZAN' copy.txt || { cat copy.txt; echo "FAIL: copy kept the see
 ! grep -q 'Rerun to get them right' copy.log || { echo "FAIL: copy asks for a rerun"; exit 1; }
 echo "ok: an actor's copy"
 
-# The name column holds their names in bold, even when theirs is the widest.
+# Names over lines in capitals; the name column holds them in bold, even when
+# theirs is the widest.
 printf '\\documentclass{tiyatro}\n\\karakter{Arabacı}{ar}\n\\karakter{Jonas}{jo}\n\\title{Deneme}\n\\tiyatrocopy{ar}{}\n\\begin{document}\n#perde Bir\n#sahne Yol\n\\ar Merhaba Jonas!\n\\jo Merhaba.\n\\end{document}\n' > wide.tex
 xelatex -interaction=nonstopmode -halt-on-error wide.tex > /dev/null 2>&1 || { grep -A6 '^! ' wide.log; echo "FAIL: wide"; exit 1; }
-pdftotext wide.pdf - | grep -q 'Arabacı Merhaba Jonas' || { pdftotext wide.pdf -; echo "FAIL: a bold name runs into its line"; exit 1; }
+pdftotext wide.pdf wide.txt
+grep -q 'ARABACI' wide.txt || { cat wide.txt; echo "FAIL: names over lines in capitals"; exit 1; }
+! grep -q 'ARABACIMerhaba' wide.txt || { cat wide.txt; echo "FAIL: a bold name runs into its line"; exit 1; }
 echo "ok: bold names fit"
 
 # \tiyatronoend: no curtain at the end.
