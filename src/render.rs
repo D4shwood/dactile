@@ -873,7 +873,8 @@ impl Builder<'_> {
                 };
                 let style = if c.star {
                     Style::NameStar
-                } else if matches!(c.kind, cast::Kind::Member | cast::Kind::Hidden) {
+                } else if c.kind == cast::Kind::Hidden {
+                    // HERKES, SEYİRCİ: voices more than characters.
                     Style::NameMuted
                 } else {
                     Style::Name
