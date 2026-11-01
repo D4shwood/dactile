@@ -4,6 +4,7 @@
 use anyhow::{Context, Result};
 use chrono::Local;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
@@ -18,19 +19,32 @@ pub fn read(path: &Path) -> Result<String> {
 }
 
 /// Writes through a temporary file next to the play and renames it over,
-/// so a crash never leaves half a file. Keeps the file's permissions.
+/// so a crash never leaves half a file, and waits for the disk before the
+/// rename, so a power cut doesn't leave an empty one. Keeps the file's
+/// permissions; a link is written through, not replaced.
 pub fn write_atomic(path: &Path, text: &str) -> Result<()> {
+    let real = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let path = real.as_path();
     let dir = path
         .parent()
         .filter(|d| !d.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
     let name = path.file_name().context("no file name")?.to_string_lossy();
     let tmp = dir.join(format!(".{name}.dactile-tmp"));
-    fs::write(&tmp, text).with_context(|| format!("writing {}", tmp.display()))?;
+    let written = (|| {
+        let mut f = fs::File::create(&tmp)?;
+        f.write_all(text.as_bytes())?;
+        f.sync_all()
+    })();
+    written.with_context(|| format!("writing {}", tmp.display()))?;
     if let Ok(meta) = fs::metadata(path) {
         let _ = fs::set_permissions(&tmp, meta.permissions());
     }
     fs::rename(&tmp, path).with_context(|| format!("saving {}", path.display()))?;
+    // The rename itself, on disk.
+    if let Ok(d) = fs::File::open(dir) {
+        let _ = d.sync_all();
+    }
     Ok(())
 }
 
@@ -193,6 +207,24 @@ mod tests {
         let _ = fs::remove_dir_all(&d);
         fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn atomic_write_through_a_link() {
+        let d = tmp("link");
+        let real = d.join("oyun.tex");
+        let link = d.join("kisayol.tex");
+        fs::write(&real, "eski").unwrap();
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        write_atomic(&link, "yeni").unwrap();
+        assert!(
+            fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(fs::read_to_string(&real).unwrap(), "yeni");
+        let _ = fs::remove_dir_all(&d);
     }
 
     #[test]

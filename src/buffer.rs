@@ -3,6 +3,7 @@
 //! the text afterwards, never the other way round.
 
 use crate::tex::{self, Edit};
+use std::collections::VecDeque;
 use std::ops::Range;
 use std::time::{Duration, Instant};
 
@@ -10,10 +11,54 @@ use std::time::{Duration, Instant};
 const COALESCE: Duration = Duration::from_millis(1500);
 const UNDO_LIMIT: usize = 500;
 
+/// One undo step, kept as the part of the text it changed: at byte `at`,
+/// `old` became `new`. `cursor` is where the cursor was before it.
 #[derive(Debug, Clone)]
 struct Step {
-    text: String,
+    at: usize,
+    old: String,
+    new: String,
     cursor: usize,
+}
+
+impl Step {
+    /// What changed from `before` to `after`: the bytes between their common
+    /// start and common end, cut on character boundaries.
+    fn between(before: &str, after: &str, cursor: usize) -> Step {
+        let (a, b) = (before.as_bytes(), after.as_bytes());
+        let mut start = a.iter().zip(b).take_while(|(x, y)| x == y).count();
+        while !before.is_char_boundary(start) || !after.is_char_boundary(start) {
+            start -= 1;
+        }
+        let room = a.len().min(b.len()) - start;
+        let mut end = a
+            .iter()
+            .rev()
+            .zip(b.iter().rev())
+            .take(room)
+            .take_while(|(x, y)| x == y)
+            .count();
+        while !before.is_char_boundary(a.len() - end) || !after.is_char_boundary(b.len() - end) {
+            end -= 1;
+        }
+        Step {
+            at: start,
+            old: before[start..a.len() - end].to_string(),
+            new: after[start..b.len() - end].to_string(),
+            cursor,
+        }
+    }
+
+    /// Applies the step backwards to `text`; the step that redoes it.
+    fn revert(self, text: &mut String, cursor: usize) -> Step {
+        text.replace_range(self.at..self.at + self.new.len(), &self.old);
+        Step {
+            at: self.at,
+            old: self.new,
+            new: self.old,
+            cursor,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,8 +80,11 @@ pub struct Buffer {
     /// Goes up with every change to the text, so what is worked out from
     /// the text can be kept until it changes.
     pub rev: u64,
-    undo: Vec<Step>,
+    undo: VecDeque<Step>,
     redo: Vec<Step>,
+    /// The text and cursor before the step being made, until it is done:
+    /// only then is it cut down to what changed.
+    open: Option<(String, usize)>,
     last: Last,
     /// Where the last typed character ended, and whether it was a space.
     typed_end: Option<(usize, bool)>,
@@ -51,8 +99,9 @@ impl Buffer {
             dirty: false,
             changed_at: None,
             rev: 0,
-            undo: Vec::new(),
+            undo: VecDeque::new(),
             redo: Vec::new(),
+            open: None,
             last: Last::None,
             typed_end: None,
         }
@@ -72,16 +121,25 @@ impl Buffer {
             && kind == self.last
             && self.changed_at.is_some_and(|t| t.elapsed() < COALESCE);
         if !joins {
-            self.undo.push(Step {
-                text: self.text.clone(),
-                cursor: self.cursor,
-            });
-            if self.undo.len() > UNDO_LIMIT {
-                self.undo.remove(0);
-            }
+            self.seal();
+            self.open = Some((self.text.clone(), self.cursor));
         }
         self.redo.clear();
         self.last = kind;
+    }
+
+    /// Ends the step being made, keeping only what it changed.
+    fn seal(&mut self) {
+        let Some((before, cursor)) = self.open.take() else {
+            return;
+        };
+        if before != self.text {
+            self.undo
+                .push_back(Step::between(&before, &self.text, cursor));
+            if self.undo.len() > UNDO_LIMIT {
+                self.undo.pop_front();
+            }
+        }
     }
 
     fn changed(&mut self) {
@@ -140,14 +198,13 @@ impl Buffer {
     }
 
     pub fn undo(&mut self) -> bool {
-        let Some(step) = self.undo.pop() else {
+        self.seal();
+        let Some(step) = self.undo.pop_back() else {
             return false;
         };
-        self.redo.push(Step {
-            text: std::mem::replace(&mut self.text, step.text),
-            cursor: self.cursor,
-        });
-        self.cursor = step.cursor.min(self.text.len());
+        let to = step.cursor;
+        self.redo.push(step.revert(&mut self.text, self.cursor));
+        self.cursor = to.min(self.text.len());
         self.anchor = None;
         self.last = Last::None;
         self.changed();
@@ -158,11 +215,10 @@ impl Buffer {
         let Some(step) = self.redo.pop() else {
             return false;
         };
-        self.undo.push(Step {
-            text: std::mem::replace(&mut self.text, step.text),
-            cursor: self.cursor,
-        });
-        self.cursor = step.cursor.min(self.text.len());
+        let to = step.cursor;
+        self.undo
+            .push_back(step.revert(&mut self.text, self.cursor));
+        self.cursor = to.min(self.text.len());
         self.anchor = None;
         self.last = Last::None;
         self.changed();
@@ -181,6 +237,7 @@ impl Buffer {
         self.dirty = false;
         self.undo.clear();
         self.redo.clear();
+        self.open = None;
     }
 
     pub fn prev_char(&self, at: usize) -> usize {
@@ -252,6 +309,52 @@ mod tests {
         b.insert("z");
         b.undo();
         assert_eq!(b.text, "xy");
+    }
+
+    #[test]
+    fn steps_keep_only_the_change() {
+        let s = Step::between("kar yağıyor", "kar yağmıyor", 0);
+        assert_eq!((s.at, s.old.as_str(), s.new.as_str()), (8, "", "m"));
+        // A changed letter inside a two-byte character is cut whole.
+        let s = Step::between("çöl", "çal", 0);
+        assert_eq!((s.at, s.old.as_str(), s.new.as_str()), (2, "ö", "a"));
+        let s = Step::between("aaa", "aa", 0);
+        assert_eq!(s.old.len() - s.new.len(), 1);
+    }
+
+    #[test]
+    fn many_edits_undo_and_redo_exactly() {
+        let mut b = Buffer::new("İlk satır.\nİkinci.".into());
+        let mut seen = vec![b.text.clone()];
+        let edits: [(usize, usize, &str); 6] = [
+            (0, 0, "ŞŞ "),
+            (3, 5, "ç"),
+            (5, 5, "ğüş"),
+            (0, 3, ""),
+            (2, 2, "\\se "),
+            (1, 6, "ö"),
+        ];
+        for (from, to, s) in edits {
+            let snap = |mut i: usize| {
+                i = i.min(b.text.len());
+                while !b.text.is_char_boundary(i) {
+                    i -= 1;
+                }
+                i
+            };
+            let r = snap(from)..snap(to);
+            b.apply(&[Edit::new(r, s)], 0);
+            seen.push(b.text.clone());
+        }
+        for want in seen.iter().rev().skip(1) {
+            assert!(b.undo());
+            assert_eq!(&b.text, want);
+        }
+        assert!(!b.undo());
+        for want in seen.iter().skip(1) {
+            assert!(b.redo());
+            assert_eq!(&b.text, want);
+        }
     }
 
     #[test]
