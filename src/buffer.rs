@@ -32,6 +32,9 @@ pub struct Buffer {
     /// Changed since the last save.
     pub dirty: bool,
     pub changed_at: Option<Instant>,
+    /// Goes up with every change to the text, so what is worked out from
+    /// the text can be kept until it changes.
+    pub rev: u64,
     undo: Vec<Step>,
     redo: Vec<Step>,
     last: Last,
@@ -47,6 +50,7 @@ impl Buffer {
             anchor: None,
             dirty: false,
             changed_at: None,
+            rev: 0,
             undo: Vec::new(),
             redo: Vec::new(),
             last: Last::None,
@@ -81,6 +85,7 @@ impl Buffer {
     }
 
     fn changed(&mut self) {
+        self.rev += 1;
         self.dirty = true;
         self.changed_at = Some(Instant::now());
     }
@@ -171,6 +176,7 @@ impl Buffer {
             self.cursor -= 1;
         }
         self.text = text;
+        self.rev += 1;
         self.anchor = None;
         self.dirty = false;
         self.undo.clear();

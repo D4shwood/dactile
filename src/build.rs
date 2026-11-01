@@ -176,6 +176,10 @@ fn xelatex(dir: &Path, name: &Path, path: &str, log_path: &Path) -> Result<Strin
         .arg(name)
         .current_dir(dir)
         .env("TEXINPUTS", path)
+        // The class looks for fonts that may not be installed (Aptos,
+        // Calibri); without this each miss runs METAFONT for nothing, and a
+        // short play builds in twice the time.
+        .env("MKTEXTFM", "0")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())

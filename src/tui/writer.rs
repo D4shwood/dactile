@@ -148,6 +148,10 @@ pub struct Writer {
     spell_cache: HashMap<String, bool>,
     /// Misspelt words on screen, by byte range.
     misspelt: Vec<std::ops::Range<usize>>,
+    /// F9's figures and a role's cues, worked out once per version of the
+    /// text (`buf.rev`) instead of on every frame.
+    roles_data: Option<(u64, u32, roles::Data)>,
+    cues: Option<(u64, String, Vec<dactile::memorize::Cue>)>,
     /// The strip beside the writing (^G), when there is room for it.
     strip: bool,
     /// The last ^G, to tell a double one.
@@ -296,6 +300,8 @@ impl Writer {
             known: HashSet::new(),
             spell_cache: HashMap::new(),
             misspelt: Vec::new(),
+            roles_data: None,
+            cues: None,
             strip: false,
             strip_key: None,
             board_cards: false,
@@ -3858,18 +3864,6 @@ impl Writer {
         self.spell_cache.clear();
     }
 
-    fn word_ok(&mut self, w: &str) -> bool {
-        let Some(sp) = &self.speller else { return true };
-        if let Some(&ok) = self.spell_cache.get(w) {
-            return ok;
-        }
-        let lower = dcast::lower_tr(w);
-        let stem = lower.split(['\'', '’']).next().unwrap_or("").to_string();
-        let ok = self.known.contains(&lower) || self.known.contains(&stem) || sp.check(w);
-        self.spell_cache.insert(w.to_string(), ok);
-        ok
-    }
-
     /// The misspelt words of the blocks on screen.
     fn mark_misspelt(&mut self) {
         self.misspelt.clear();
@@ -3886,10 +3880,11 @@ impl Writer {
             .filter_map(|r| r.block)
             .collect();
         blocks.dedup();
-        let text = self.buf.text.clone();
+        let Some(sp) = &self.speller else { return };
+        let text = &self.buf.text;
         for b in blocks {
-            for r in spell::words(&text, &self.doc, b) {
-                if !self.word_ok(&text[r.clone()]) {
+            for r in spell::words(text, &self.doc, b) {
+                if !word_ok(sp, &self.known, &mut self.spell_cache, &text[r.clone()]) {
                     self.misspelt.push(r);
                 }
             }
@@ -4435,17 +4430,29 @@ impl Writer {
                 panels::draw_cast(f, area, &self.doc, &self.buf.text, &self.sidecar, p)
             }
             Popup::Memorize(m) => {
-                let cues = dactile::memorize::cues(&self.buf.text, &self.doc, &m.role);
-                memorize::draw(f, area, &cues, m, self.sidecar.actor(&m.role));
+                let rev = self.buf.rev;
+                if !matches!(&self.cues, Some((r, role, _)) if *r == rev && *role == m.role) {
+                    let cues = dactile::memorize::cues(&self.buf.text, &self.doc, &m.role);
+                    self.cues = Some((rev, m.role.clone(), cues));
+                }
+                let cues = self.cues.as_ref().map_or(&[][..], |c| &c.2);
+                memorize::draw(f, area, cues, m, self.sidecar.actor(&m.role));
             }
             Popup::Roles => {
-                let data = roles::Data::of(&self.buf.text, &self.doc, self.wpm());
+                let (rev, wpm) = (self.buf.rev, self.wpm());
+                if !matches!(&self.roles_data, Some((r, w, _)) if *r == rev && *w == wpm) {
+                    let data = roles::Data::of(&self.buf.text, &self.doc, wpm);
+                    self.roles_data = Some((rev, wpm, data));
+                }
+                let Some((_, _, data)) = &self.roles_data else {
+                    unreachable!()
+                };
                 roles::draw(
                     f,
                     area,
                     &self.doc,
                     &self.sidecar,
-                    &data,
+                    data,
                     self.wpm(),
                     &self.roles,
                 );
@@ -5126,4 +5133,21 @@ fn palette_items(q: &str) -> Vec<PItem> {
         .collect();
     out.sort_by_key(|(s, _)| std::cmp::Reverse(*s));
     out.into_iter().map(|(_, i)| i).collect()
+}
+
+/// Whether a word is spelt right: a name in the play, or in the dictionary.
+fn word_ok(
+    sp: &Speller,
+    known: &HashSet<String>,
+    cache: &mut HashMap<String, bool>,
+    w: &str,
+) -> bool {
+    if let Some(&ok) = cache.get(w) {
+        return ok;
+    }
+    let lower = dcast::lower_tr(w);
+    let stem = lower.split(['\'', '’']).next().unwrap_or("");
+    let ok = known.contains(&lower) || known.contains(stem) || sp.check(w);
+    cache.insert(w.to_string(), ok);
+    ok
 }
