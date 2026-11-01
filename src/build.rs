@@ -45,6 +45,30 @@ pub fn outline_of(text: &str) -> Outline {
     Outline::of(text, &blocks, &cast)
 }
 
+/// The play as it goes to XeLaTeX: a `\\` at each line end inside a
+/// speech (`lex::line_breaks`), so it prints broken where the writer broke
+/// it, without the source showing them. None when there are none to add.
+pub fn with_breaks(text: &str) -> Option<String> {
+    let cast = Cast::of_play(text);
+    let blocks = lex::blocks(text, source::split(text).body, &cast);
+    let at: Vec<usize> = blocks
+        .iter()
+        .flat_map(|b| lex::line_breaks(text, b))
+        .collect();
+    if at.is_empty() {
+        return None;
+    }
+    let mut out = String::with_capacity(text.len() + at.len() * 2);
+    let mut from = 0;
+    for a in at {
+        out.push_str(&text[from..a]);
+        out.push_str("\\\\");
+        from = a;
+    }
+    out.push_str(&text[from..]);
+    Some(out)
+}
+
 pub fn aux_path(play: &Path) -> PathBuf {
     play.with_extension("aux")
 }
@@ -138,10 +162,50 @@ pub fn build(play: &Path) -> Result<Built, Failed> {
     // A table of contents is one run behind, like the casts without Dactile.
     let toc = text.contains("\\tableofcontents");
     let path = format!(".:{}:", classes.display());
+    // With line breaks to add: a hidden copy beside the play, built under
+    // the play's name. Same lines, so XeLaTeX's line numbers are the play's.
+    let printed = with_breaks(&text);
+    let copy = play.with_file_name(format!(".{}.dactile-print.tex", name.to_string_lossy()));
+    let (input, job) = match &printed {
+        Some(t) => {
+            file::write_atomic(&copy, t).map_err(|e| failed(format!("{e:#}")))?;
+            let job = play.file_stem().map(|s| s.to_os_string());
+            (copy.file_name().unwrap_or(name).to_os_string(), job)
+        }
+        None => (name.to_os_string(), None),
+    };
+    let result = runs_of(
+        play,
+        dir,
+        &input,
+        job.as_deref(),
+        &path,
+        &log_path,
+        toc,
+        start,
+    );
+    if printed.is_some() {
+        let _ = fs::remove_file(&copy);
+    }
+    result
+}
+
+/// The runs of `build`, until the log says no more.
+#[allow(clippy::too_many_arguments)]
+fn runs_of(
+    play: &Path,
+    dir: &Path,
+    input: &std::ffi::OsStr,
+    job: Option<&std::ffi::OsStr>,
+    path: &str,
+    log_path: &Path,
+    toc: bool,
+    start: Instant,
+) -> Result<Built, Failed> {
     let mut runs = 0;
     loop {
         runs += 1;
-        let log = xelatex(dir, name.as_ref(), &path, &log_path)?;
+        let log = xelatex(dir, input.as_ref(), job, path, log_path)?;
         let again = log.contains("Rerun to get") || (toc && runs == 1);
         if !again || runs >= MAX_RUNS {
             let pdf = pdf_path(play);
@@ -166,8 +230,20 @@ pub fn build(play: &Path) -> Result<Built, Failed> {
 
 /// One XeLaTeX run of `name` in `dir`, with TEXINPUTS `path`: its log, or
 /// what stopped it.
-fn xelatex(dir: &Path, name: &Path, path: &str, log_path: &Path) -> Result<String, Failed> {
-    let mut child = Command::new("xelatex")
+fn xelatex(
+    dir: &Path,
+    name: &Path,
+    job: Option<&std::ffi::OsStr>,
+    path: &str,
+    log_path: &Path,
+) -> Result<String, Failed> {
+    let mut command = Command::new("xelatex");
+    if let Some(job) = job {
+        let mut arg = std::ffi::OsString::from("-jobname=");
+        arg.push(job);
+        command.arg(arg);
+    }
+    let mut child = command
         .args([
             "-interaction=nonstopmode",
             "-halt-on-error",
@@ -265,7 +341,7 @@ pub fn build_aside(play: &Path, tex: &str, aux: &str, out: &Path) -> Result<Buil
         let mut runs = 0;
         loop {
             runs += 1;
-            let log = xelatex(&work, name, &path, &log_path)?;
+            let log = xelatex(&work, name, None, &path, &log_path)?;
             if !(log.contains("Rerun") && runs < MAX_RUNS) {
                 if let Some(d) = out.parent() {
                     fs::create_dir_all(d).map_err(|e| failed(format!("{}: {e}", d.display())))?;

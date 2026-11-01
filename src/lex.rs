@@ -150,17 +150,19 @@ pub fn blocks(text: &str, range: Range<usize>, cast: &Cast) -> Vec<Block> {
     while i < lines.len() {
         let start = lines[i].start;
         // A block runs on while a brace is open; a line of dialogue or a
-        // direction also runs on when a comment swallows its line end.
-        let speaks = matches!(
-            classify(text, lines[i].clone(), cast),
-            Kind::Line { .. } | Kind::Do { .. }
-        );
+        // direction also runs on when a comment swallows its line end, and
+        // a line of dialogue over the plain lines after it: TeX reads them
+        // as one paragraph, the speaker's (see `line_breaks`).
+        let first = classify(text, lines[i].clone(), cast);
+        let speaks = matches!(first, Kind::Line { .. } | Kind::Do { .. });
+        let line = matches!(first, Kind::Line { .. });
         let mut j = i;
         loop {
             let span = start..lines[j].end;
             let open = depth(&text[span]) > 0;
             let joined = speaks && ends_in_comment(&text[lines[j].clone()]);
-            if (open || joined) && j + 1 < lines.len() {
+            let goes_on = line && lines.get(j + 1).is_some_and(|l| plain(&text[l.clone()]));
+            if (open || joined || goes_on) && j + 1 < lines.len() {
                 j += 1;
             } else {
                 break;
@@ -175,6 +177,56 @@ pub fn blocks(text: &str, range: Range<usize>, cast: &Cast) -> Vec<Block> {
         i = j + 1;
     }
     out
+}
+
+/// A line that goes on a speech: something on it, and not a command, a
+/// heading or a comment of its own.
+fn plain(line: &str) -> bool {
+    let t = line.trim_start();
+    !t.is_empty() && !t.starts_with(['\\', '#', '%'])
+}
+
+/// Where a line of dialogue over several source lines breaks in print:
+/// each of its line ends, as a writer sees them, at the end of the line's
+/// text (before any spaces and the line ending), where Dactile puts a `\\`
+/// when it builds. Not after a comment (it joins the lines), inside braces,
+/// where a `\\` is already, nor after the speaker alone (`\ma` on a line of
+/// its own), nor at the block's last line.
+pub fn line_breaks(text: &str, block: &Block) -> Vec<usize> {
+    let Kind::Line { text: said, .. } = &block.kind else {
+        return Vec::new();
+    };
+    let span = block.span.clone();
+    let lines = tex::lines(&text[span.clone()]);
+    let mut out = Vec::new();
+    for l in lines.iter().take(lines.len().saturating_sub(1)) {
+        let (from, to) = (span.start + l.start, span.start + l.end);
+        let line = &text[from..to];
+        if ends_in_comment(line) || depth(&text[span.start..to]) != 0 {
+            continue;
+        }
+        let code = line.trim_end();
+        let end = from + code.len();
+        if end <= said.start || ends_in_break(code) {
+            continue;
+        }
+        out.push(end);
+    }
+    out
+}
+
+/// `…\\`, `…\\*` or `…\\[1ex]` at the end of a line.
+fn ends_in_break(code: &str) -> bool {
+    let code = match code.strip_suffix(']') {
+        Some(c) => match c.rfind('[') {
+            Some(i) => &c[..i],
+            None => code,
+        },
+        None => code,
+    };
+    let code = code.strip_suffix('*').unwrap_or(code);
+    code.strip_suffix("\\\\")
+        .is_some_and(|before| !tex::is_escaped(code, before.len()))
 }
 
 fn ends_in_comment(line: &str) -> bool {
@@ -243,7 +295,15 @@ fn classify(text: &str, span: Range<usize>, cast: &Cast) -> Kind {
     // Where the text of a line or direction starts: after the spaces TeX
     // skips, and after an optional opening brace.
     let text_from = |at: usize| {
-        let at = skip_inline_space(text, at, span.end);
+        let mut at = skip_inline_space(text, at, span.end);
+        // The speaker alone on the line: the text starts on the next one.
+        let rest = &text[at..span.end];
+        if let Some(r) = rest
+            .strip_prefix("\r\n")
+            .or_else(|| rest.strip_prefix('\n'))
+        {
+            at = skip_inline_space(text, span.end - r.len(), span.end);
+        }
         at..span.end
     };
     if cast.get(name).is_some() {

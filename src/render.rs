@@ -999,7 +999,15 @@ impl Builder<'_> {
                 let style = if c.star { Style::NameStar } else { Style::Name };
                 let name_w = self.out.name_width;
                 let narrow = self.width < 60;
-                let glyphs = self.inline_glyphs(text.clone(), Style::Text, true);
+                let mut glyphs = self.inline_glyphs(text.clone(), Style::Text, true);
+                // A line end inside the speech breaks the line, as it will
+                // in print.
+                let breaks = lex::line_breaks(self.text, &self.doc.blocks[b]);
+                for g in &mut glyphs {
+                    if g.byte.is_some_and(|at| breaks.contains(&at)) {
+                        g.ch = '\n';
+                    }
+                }
                 if narrow {
                     // Name on its own row, text below it.
                     let name = chip(&format!("{}:", c.script), style, lead);
@@ -1796,6 +1804,46 @@ mod tests {
         assert_eq!(row_text(&l, r), "KADIN  Bir.");
         assert_eq!(row_text(&l, r + 1), "       İki.");
         assert_eq!(row_text(&l, r + 2), "       Üç.");
+    }
+
+    #[test]
+    fn line_ends_in_a_speech_break_it() {
+        // The speaker alone, then lines; one already broken by hand, one
+        // joined by a comment; the next speaker after.
+        let t = "\\karakter[x]{KADIN}{ka}\n\\karakter[x]{ADAM}{ad}\n\\begin{document}\n\\ka \nBir, \nİki.\\\\\nÜç%\nDört.\n\\ad Beş\naltı.\n\\end{document}\n";
+        let doc = Doc::new(t);
+        let l = layout(
+            t,
+            &doc,
+            Options {
+                width: 80,
+                ..Options::default()
+            },
+        );
+        let r = find_row(&l, "Bir,");
+        assert_eq!(row_text(&l, r), "KADIN  Bir,");
+        assert_eq!(row_text(&l, r + 1), "       İki.");
+        // Joined by the comment: one row.
+        assert!(
+            row_text(&l, r + 2).starts_with("       Üç") && row_text(&l, r + 2).ends_with("Dört.")
+        );
+        let r = find_row(&l, "Beş");
+        assert_eq!(row_text(&l, r), "ADAM   Beş");
+        assert_eq!(row_text(&l, r + 1), "       altı.");
+        // Two speeches, not five blocks.
+        let lines = doc
+            .blocks
+            .iter()
+            .filter(|b| matches!(b.kind, Kind::Line { .. }))
+            .count();
+        assert_eq!(lines, 2);
+        // In print: a \\ where the writer broke it and nowhere else.
+        assert_eq!(
+            crate::build::with_breaks(t).unwrap(),
+            t.replace("Bir, \n", "Bir,\\\\ \n")
+                .replace("Beş\n", "Beş\\\\\n")
+        );
+        assert_eq!(crate::build::with_breaks("\\ka Bir.\n"), None);
     }
 
     #[test]
