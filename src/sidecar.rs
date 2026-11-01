@@ -54,6 +54,9 @@ pub struct Sidecar {
     pub summaries: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub castings: Vec<Casting>,
+    /// What this Dactile doesn't know (a newer one wrote it): kept as it was.
+    #[serde(flatten)]
+    pub other: BTreeMap<String, toml::Value>,
 }
 
 fn is_zero(n: &usize) -> bool {
@@ -66,6 +69,24 @@ pub fn path_for(play: &Path) -> PathBuf {
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_default();
     play.with_file_name(format!("{stem}.dactile.toml"))
+}
+
+/// Notes that don't read, moved out of the way so the next save doesn't
+/// go over them: `oyun.dactile.toml` → `oyun.dactile.toml.bozuk` (`-2`…).
+pub fn put_aside(play: &Path) -> Result<PathBuf> {
+    let path = path_for(play);
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let mut to = path.with_file_name(format!("{name}.bozuk"));
+    let mut n = 2;
+    while to.exists() {
+        to = path.with_file_name(format!("{name}.bozuk-{n}"));
+        n += 1;
+    }
+    std::fs::rename(&path, &to).with_context(|| format!("moving {}", path.display()))?;
+    Ok(to)
 }
 
 impl Sidecar {
@@ -171,6 +192,39 @@ mod tests {
         // Empty: the file goes.
         Sidecar::default().save(&play).unwrap();
         assert!(!path_for(&play).exists());
+        std::fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn unknown_kept_broken_put_aside() {
+        let d = std::env::temp_dir().join(format!("dactile-sidecar2-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        let play = d.join("oyun.tex");
+        // A newer Dactile's fields survive an older one's save.
+        std::fs::write(
+            path_for(&play),
+            "words = [\"a\"]\nlater = 3\n[future]\nx = \"y\"\n\n[cards.se]\nage = \"34\"\n",
+        )
+        .unwrap();
+        let mut s = Sidecar::load(&play).unwrap();
+        assert_eq!(s.cards["se"].age, "34");
+        s.add_word("b");
+        s.save(&play).unwrap();
+        let back = Sidecar::load(&play).unwrap();
+        assert_eq!(back.words, ["a", "b"]);
+        assert_eq!(back.other["later"].as_integer(), Some(3));
+        assert_eq!(back.other["future"]["x"].as_str(), Some("y"));
+        assert_eq!(back.cards["se"].age, "34");
+        // Broken: moved aside, twice under two names.
+        std::fs::write(path_for(&play), "wpm = \"hızlı\"\n").unwrap();
+        assert!(Sidecar::load(&play).is_err());
+        let a = put_aside(&play).unwrap();
+        assert!(a.ends_with("oyun.dactile.toml.bozuk") && !path_for(&play).exists());
+        std::fs::write(path_for(&play), "x =").unwrap();
+        let b = put_aside(&play).unwrap();
+        assert!(b.ends_with("oyun.dactile.toml.bozuk-2"));
+        assert_eq!(std::fs::read_to_string(a).unwrap(), "wpm = \"hızlı\"\n");
         std::fs::remove_dir_all(d).unwrap();
     }
 }

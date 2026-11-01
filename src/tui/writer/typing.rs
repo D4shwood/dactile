@@ -5,6 +5,7 @@ use super::*;
 impl Writer {
     pub fn key(&mut self, k: KeyEvent) {
         self.message = None;
+        let armed = self.armed.take();
         if !matches!(k.code, KeyCode::Char(_)) {
             self.eat_space = false;
         }
@@ -23,7 +24,26 @@ impl Writer {
             self.goal_col = None;
         }
         match k.code {
-            KeyCode::Char('q') if ctrl => self.quit = true,
+            KeyCode::Char('q') if ctrl => {
+                // A change elsewhere since the last look counts too.
+                self.check_disk();
+                if self.conflict && self.buf.dirty && !self.read_only && armed != Some(Armed::Quit)
+                {
+                    self.armed = Some(Armed::Quit);
+                    self.say(
+                        lang::l(
+                            "Dosya başka yerde değişti. ^Q yine çıkar ve senin halini yazar; öbürü geçmişte kalır.",
+                            "The file changed elsewhere. ^Q again quits and writes yours; the other stays in the history.",
+                        ),
+                        true,
+                    );
+                } else {
+                    self.quit = true;
+                }
+            }
+            KeyCode::Char('s') if ctrl && self.read_only => {
+                self.take_lock(armed == Some(Armed::TakeLock))
+            }
             KeyCode::Char('s') if ctrl => self.save(true),
             KeyCode::Char('z') if ctrl => {
                 if self.buf.undo() {

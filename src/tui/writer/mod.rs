@@ -114,6 +114,9 @@ pub struct Writer {
     checked: Instant,
     /// The file changed on disk while we had unsaved changes: autosave waits.
     conflict: bool,
+    /// A key that asks to be pressed again (^Q over a conflict, ^S to take
+    /// the lock): the next key, if not the same, forgets it.
+    armed: Option<Armed>,
     message: Option<(String, bool)>,
     clipboard: Option<arboard::Clipboard>,
     /// Fallback when there's no system clipboard.
@@ -209,6 +212,15 @@ pub struct View {
 /// What a build beside the play made: where, and how many PDFs.
 type Aside = Result<(PathBuf, usize), Failed>;
 
+/// What a second press of the same key does.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Armed {
+    /// ^Q while the file changed elsewhere: quit, writing ours over it.
+    Quit,
+    /// ^S while another Dactile holds the play: take the lock.
+    TakeLock,
+}
+
 enum Popup {
     None,
     /// After a backslash: what can follow it.
@@ -255,6 +267,28 @@ impl Writer {
                 )),
             ),
         };
+        // Notes that don't read are put aside, not saved over.
+        let (sidecar, message) = match Sidecar::load(path) {
+            Ok(s) => (s, message),
+            Err(e) => {
+                let kept = dactile::sidecar::put_aside(path);
+                let detail = match kept {
+                    Ok(p) => dactile::config::tilde(&p),
+                    Err(e) => format!("{e:#}"),
+                };
+                (
+                    Sidecar::default(),
+                    Some((
+                        lang::f(
+                            "Notlar okunamadı ({}); kenara kondu: {}",
+                            "The notes didn't read ({}); put aside: {}",
+                            &[&format!("{:#}", e.root_cause()), &detail],
+                        ),
+                        true,
+                    )),
+                )
+            }
+        };
         let history = file::history_dir(path);
         // The play as it was before this session, whatever happens next.
         let _ = file::snapshot(&history, &text, true);
@@ -290,6 +324,7 @@ impl Writer {
             disk_time: file::modified(path),
             checked: Instant::now(),
             conflict: false,
+            armed: None,
             message,
             clipboard: arboard::Clipboard::new().ok(),
             copied: String::new(),
@@ -307,7 +342,7 @@ impl Writer {
             menu_manual: cfg.menu == "manual",
             default_wpm: cfg.wpm,
             text_top: 1,
-            sidecar: Sidecar::load(path).unwrap_or_default(),
+            sidecar,
             speller: None,
             speller_rx: None,
             building: None,
@@ -519,8 +554,8 @@ impl Writer {
         if self.read_only {
             self.say(
                 lang::l(
-                    "Salt okunur: oyun başka bir Dactile'da açık.",
-                    "Read-only: the play is open in another Dactile.",
+                    "Salt okunur: oyun başka bir Dactile'da açık (^S iki kez: kilidi al).",
+                    "Read-only: the play is open in another Dactile (^S twice takes the lock).",
                 ),
                 true,
             );
@@ -537,6 +572,11 @@ impl Writer {
             return false;
         }
         true
+    }
+
+    /// A warning on the status line, from outside the writer.
+    pub fn warn(&mut self, s: &str) {
+        self.say(s, true);
     }
 
     fn say(&mut self, s: &str, warn: bool) {

@@ -39,7 +39,7 @@ pub struct Home {
     lasts: Vec<Vec<bool>>,
     sel: usize,
     form: Option<Form>,
-    message: Option<(String, bool)>,
+    pub(super) message: Option<(String, bool)>,
     /// The first run: the settings form can't be skipped.
     first_run: bool,
     /// A play asked for on the command line, opened once setup is done.
@@ -500,6 +500,17 @@ impl Home {
                         lang::l(
                             "Başlık ve dosya adı boş olamaz.",
                             "Title and file name can't be empty.",
+                        )
+                        .into(),
+                    );
+                }
+                if name.contains('/') {
+                    return fail(
+                        self,
+                        form,
+                        lang::l(
+                            "Dosya adında / olamaz: yeni oyun öbürünün yanına yazılır.",
+                            "No / in the file name: the new play goes next to the other.",
                         )
                         .into(),
                     );

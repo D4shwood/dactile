@@ -6,6 +6,7 @@ use chrono::Local;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, SystemTime};
 
 /// Keep this many versions of each play.
@@ -30,17 +31,31 @@ pub fn write_atomic(path: &Path, text: &str) -> Result<()> {
         .filter(|d| !d.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
     let name = path.file_name().context("no file name")?.to_string_lossy();
-    let tmp = dir.join(format!(".{name}.dactile-tmp"));
+    // A name of its own for each write, made new: two writes of one file at
+    // once (a build and a save) never share it, and a link left in its place
+    // is never followed.
+    static WRITES: AtomicUsize = AtomicUsize::new(0);
+    let n = WRITES.fetch_add(1, Ordering::Relaxed);
+    let tmp = dir.join(format!(".{name}.{}-{n}.dactile-tmp", std::process::id()));
     let written = (|| {
-        let mut f = fs::File::create(&tmp)?;
+        let mut f = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)?;
         f.write_all(text.as_bytes())?;
         f.sync_all()
     })();
-    written.with_context(|| format!("writing {}", tmp.display()))?;
+    if let Err(e) = written {
+        let _ = fs::remove_file(&tmp);
+        return Err(e).with_context(|| format!("writing {}", tmp.display()));
+    }
     if let Ok(meta) = fs::metadata(path) {
         let _ = fs::set_permissions(&tmp, meta.permissions());
     }
-    fs::rename(&tmp, path).with_context(|| format!("saving {}", path.display()))?;
+    if let Err(e) = fs::rename(&tmp, path) {
+        let _ = fs::remove_file(&tmp);
+        return Err(e).with_context(|| format!("saving {}", path.display()));
+    }
     // The rename itself, on disk.
     if let Ok(d) = fs::File::open(dir) {
         let _ = d.sync_all();
@@ -57,6 +72,8 @@ pub fn modified(path: &Path) -> Option<SystemTime> {
 /// `.oyun.tex.dactile-lock` next to the play while it is open.
 pub struct Lock {
     path: PathBuf,
+    /// What we wrote in it: while it still says this, it is ours.
+    line: String,
 }
 
 #[derive(Debug, PartialEq)]
@@ -100,7 +117,9 @@ fn alive(pid: u32, lock_host: &str) -> bool {
         return true;
     }
     if cfg!(target_os = "linux") {
-        Path::new(&format!("/proc/{pid}")).exists()
+        // The number alone may have gone to another program since a crash.
+        fs::read_to_string(format!("/proc/{pid}/comm"))
+            .is_ok_and(|name| name.trim().starts_with("dactile"))
     } else {
         true
     }
@@ -112,29 +131,75 @@ pub fn holder(play: &Path) -> Option<String> {
     let mut parts = held.split_whitespace();
     let pid: u32 = parts.next()?.parse().ok()?;
     let lock_host = parts.next().unwrap_or("");
-    (pid != std::process::id() && alive(pid, lock_host)).then(|| held.trim().to_string())
+    let since = parts.next().unwrap_or("");
+    (pid != std::process::id() && alive(pid, lock_host))
+        .then(|| format!("{pid} {lock_host} {since}").trim().to_string())
+}
+
+/// "pid host since n": the last, a count of this run's locks, tells two of
+/// them apart.
+fn lock_line() -> String {
+    static LOCKS: AtomicUsize = AtomicUsize::new(0);
+    format!(
+        "{} {} {} {}\n",
+        std::process::id(),
+        host(),
+        Local::now().format("%Y-%m-%dT%H:%M"),
+        LOCKS.fetch_add(1, Ordering::Relaxed)
+    )
 }
 
 /// Takes the lock, unless a living Dactile holds it. A stale lock (its
 /// process gone) is taken over.
 pub fn lock(play: &Path) -> Result<LockState> {
     let path = lock_path(play);
-    if let Some(held) = holder(play) {
-        return Ok(LockState::Taken(held));
+    // Made new, so of two Dactiles opening the play at once only one gets it.
+    for _ in 0..2 {
+        let made = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path);
+        match made {
+            Ok(mut f) => {
+                let line = lock_line();
+                f.write_all(line.as_bytes())
+                    .with_context(|| format!("writing {}", path.display()))?;
+                return Ok(LockState::Ours(Lock { path, line }));
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                if let Some(held) = holder(play) {
+                    return Ok(LockState::Taken(held));
+                }
+                // Stale, or ours from before: away with it, and once more.
+                let _ = fs::remove_file(&path);
+            }
+            Err(e) => return Err(e).with_context(|| format!("writing {}", path.display())),
+        }
     }
-    let line = format!(
-        "{} {} {}\n",
-        std::process::id(),
-        host(),
-        Local::now().format("%Y-%m-%dT%H:%M")
-    );
-    fs::write(&path, line).with_context(|| format!("writing {}", path.display()))?;
-    Ok(LockState::Ours(Lock { path }))
+    Ok(LockState::Taken(
+        fs::read_to_string(&path)
+            .unwrap_or_default()
+            .trim()
+            .to_string(),
+    ))
+}
+
+/// Takes the lock whoever holds it: the writer asked for it twice.
+pub fn take_over(play: &Path) -> Result<Lock> {
+    let path = lock_path(play);
+    let _ = fs::remove_file(&path);
+    match lock(play)? {
+        LockState::Ours(l) => Ok(l),
+        LockState::Taken(who) => anyhow::bail!("{who}"),
+    }
 }
 
 impl Drop for Lock {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
+        // Only while it is still ours: another Dactile may have taken it over.
+        if fs::read_to_string(&self.path).is_ok_and(|held| held == self.line) {
+            let _ = fs::remove_file(&self.path);
+        }
     }
 }
 
@@ -190,8 +255,17 @@ pub fn snapshot(dir: &Path, text: &str, force: bool) -> Result<bool> {
         }
     }
     fs::create_dir_all(dir)?;
-    let name = format!("{}.tex", Local::now().format("%Y%m%d-%H%M%S"));
-    fs::write(dir.join(name), text)?;
+    // To the millisecond: two at once (theirs and ours, on a conflict) keep
+    // both, and the names still sort by time.
+    let mut name;
+    loop {
+        name = dir.join(format!("{}.tex", Local::now().format("%Y%m%d-%H%M%S%.3f")));
+        if !name.exists() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    write_atomic(&name, text)?;
     for old in kept.iter().rev().skip(HISTORY_KEEP - 1) {
         let _ = fs::remove_file(old);
     }
@@ -233,7 +307,7 @@ mod tests {
         let p = d.join("oyun.tex");
         write_atomic(&p, "a\r\nb").unwrap();
         assert_eq!(fs::read(&p).unwrap(), b"a\r\nb");
-        assert!(!d.join(".oyun.tex.dactile-tmp").exists());
+        assert_eq!(fs::read_dir(&d).unwrap().count(), 1);
         fs::remove_dir_all(d).unwrap();
     }
 
@@ -246,13 +320,36 @@ mod tests {
             panic!()
         };
         assert!(lock_path(&p).exists());
-        // Another living process's lock is respected: pid 1 always runs.
-        fs::write(lock_path(&p), format!("1 {} now", host())).unwrap();
+        // Another living Dactile's lock is respected: a program of that name.
+        let other = d.join("dactile-other");
+        fs::copy("/bin/sleep", &other).unwrap();
+        let mut child = std::process::Command::new(&other)
+            .arg("30")
+            .spawn()
+            .unwrap();
+        std::thread::sleep(Duration::from_millis(100));
+        let living = format!("{} {} now", child.id(), host());
+        fs::write(lock_path(&p), &living).unwrap();
         assert!(matches!(lock(&p).unwrap(), LockState::Taken(_)));
+        // Any other program with the number is not one.
+        fs::write(lock_path(&p), format!("1 {} now", host())).unwrap();
+        assert!(matches!(lock(&p).unwrap(), LockState::Ours(_)));
         // A dead process's lock is taken over.
         fs::write(lock_path(&p), format!("4000000000 {} now", host())).unwrap();
-        assert!(matches!(lock(&p).unwrap(), LockState::Ours(_)));
+        let LockState::Ours(l2) = lock(&p).unwrap() else {
+            panic!()
+        };
+        // Taken over by hand from a living one, and the old holder's going
+        // leaves it alone.
+        fs::write(lock_path(&p), &living).unwrap();
+        let l3 = take_over(&p).unwrap();
+        let _ = child.kill();
+        let _ = child.wait();
         drop(l);
+        drop(l2);
+        assert!(lock_path(&p).exists());
+        drop(l3);
+        assert!(!lock_path(&p).exists());
         fs::remove_dir_all(d).unwrap();
     }
 
@@ -265,7 +362,10 @@ mod tests {
         assert!(!snapshot(&d, "iki", false).unwrap());
         std::thread::sleep(Duration::from_millis(1100));
         assert!(snapshot(&d, "iki", true).unwrap());
-        assert_eq!(versions(&d).len(), 2);
+        // The same second: a second name, not over the first.
+        assert!(snapshot(&d, "üç", true).unwrap());
+        assert!(snapshot(&d, "dört", true).unwrap());
+        assert_eq!(versions(&d).len(), 4);
         fs::remove_dir_all(d).unwrap();
     }
 }

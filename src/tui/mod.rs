@@ -13,6 +13,7 @@ mod writer;
 
 use anyhow::Result;
 use dactile::config::Config;
+use dactile::lang;
 use home::Home;
 use ratatui::crossterm::event::{
     self, DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture,
@@ -80,7 +81,7 @@ pub fn run(start: Start) -> Result<()> {
                             home::Action::Quit => return Ok(()),
                             home::Action::Open(p) => match open(&p, &mut cfg) {
                                 Ok(w) => screen = Screen::Writer(Box::new(w)),
-                                Err(e) => eprintln!("{e:#}"),
+                                Err(e) => h.message = Some((format!("{e:#}"), true)),
                             },
                         }
                     }
@@ -94,7 +95,17 @@ pub fn run(start: Start) -> Result<()> {
                     }
                     w.tick();
                     if w.quit {
-                        close(w, &mut cfg)?;
+                        // Not saved: the writer stays, with what it has.
+                        if let Err(e) = w.close() {
+                            w.quit = false;
+                            w.warn(&lang::f(
+                                "Kaydedilemedi, çıkılmadı: {}",
+                                "Couldn't save, so not quitting: {}",
+                                &[&format!("{e:#}")],
+                            ));
+                            continue;
+                        }
+                        let _ = remember(w, &mut cfg);
                         if direct {
                             return Ok(());
                         }
@@ -108,7 +119,8 @@ pub fn run(start: Start) -> Result<()> {
     if let Screen::Writer(w) = &mut screen
         && !w.quit
     {
-        let _ = close(w, &mut cfg);
+        let _ = w.close();
+        let _ = remember(w, &mut cfg);
     }
     let _ = execute!(stdout(), DisableBracketedPaste, DisableMouseCapture);
     ratatui::restore();
@@ -122,9 +134,8 @@ fn open(path: &Path, cfg: &mut Config) -> Result<Writer> {
     Ok(w)
 }
 
-/// Saves the play and remembers the view toggles.
-fn close(w: &mut Writer, cfg: &mut Config) -> Result<()> {
-    w.close()?;
+/// Remembers the view toggles.
+fn remember(w: &Writer, cfg: &mut Config) -> Result<()> {
     let v = w.view();
     cfg.typewriter = v.typewriter;
     cfg.focus = v.focus;

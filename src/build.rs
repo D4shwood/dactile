@@ -172,6 +172,9 @@ fn xelatex(dir: &Path, name: &Path, path: &str, log_path: &Path) -> Result<Strin
             "-interaction=nonstopmode",
             "-halt-on-error",
             "-file-line-error",
+            // A play from someone else runs no programs, not even the few
+            // TeX Live allows by default; the class needs none.
+            "-no-shell-escape",
         ])
         .arg(name)
         .current_dir(dir)
@@ -238,9 +241,8 @@ fn xelatex(dir: &Path, name: &Path, path: &str, log_path: &Path) -> Result<Strin
 pub fn build_aside(play: &Path, tex: &str, aux: &str, out: &Path) -> Result<Built, Failed> {
     let start = Instant::now();
     let classes = class_dir().map_err(|e| failed(format!("{e:#}")))?;
-    let work = dirs::cache_dir()
-        .unwrap_or_else(std::env::temp_dir)
-        .join("dactile")
+    let work = cache()
+        .map_err(|e| failed(format!("{e:#}")))?
         .join(format!("work-{}", std::process::id()));
     let _ = fs::remove_dir_all(&work);
     let made = (|| -> anyhow::Result<PathBuf> {
@@ -324,12 +326,17 @@ fn pages_in(log: &str) -> Option<usize> {
     rest[open + 1..].split_whitespace().next()?.parse().ok()
 }
 
+/// `~/.cache/dactile`. Never a shared folder like `/tmp`, where someone
+/// else could put a class of their own first.
+fn cache() -> anyhow::Result<PathBuf> {
+    dirs::cache_dir()
+        .map(|d| d.join("dactile"))
+        .ok_or_else(|| anyhow::anyhow!("no cache folder (HOME is not set)"))
+}
+
 /// The class files of this Dactile, written once into the cache.
 fn class_dir() -> anyhow::Result<PathBuf> {
-    let dir = dirs::cache_dir()
-        .unwrap_or_else(std::env::temp_dir)
-        .join("dactile")
-        .join(format!("tex-{}", class::version()));
+    let dir = cache()?.join(format!("tex-{}", class::version()));
     for (name, body) in class::FILES {
         let p = dir.join(name);
         if fs::read_to_string(&p).ok().as_deref() != Some(body) {

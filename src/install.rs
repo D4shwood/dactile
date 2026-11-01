@@ -56,7 +56,7 @@ pub fn install() -> Result<Vec<String>> {
             "[Desktop Entry]\nType=Application\nName=Dactile\nGenericName=Stage play writer\n\
              Comment=Write plays for the tiyatro XeLaTeX class\nExec={}\nTerminal=true\n\
              Icon=accessories-text-editor\nCategories=Office;WordProcessor;\n",
-            target.display()
+            exec_arg(&target.to_string_lossy())
         ),
     )?;
     let _ = Command::new("update-desktop-database")
@@ -81,6 +81,26 @@ pub fn install() -> Result<Vec<String>> {
     Ok(done)
 }
 
+/// A path as a desktop entry's `Exec=` takes it: quoted, so a space in it
+/// is not two arguments, with what the quotes and the field codes mean
+/// escaped.
+fn exec_arg(path: &str) -> String {
+    let mut out = String::from("\"");
+    for c in path.chars() {
+        match c {
+            '"' | '`' | '$' | '\\' => {
+                // Once for the quotes, once for the file's string escapes.
+                out.push_str("\\\\");
+                out.push(c);
+            }
+            '%' => out.push_str("%%"),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
 pub fn uninstall() -> Result<Vec<String>> {
     let mut done = Vec::new();
     for p in [bin(), desktop()] {
@@ -95,4 +115,16 @@ pub fn uninstall() -> Result<Vec<String>> {
         done.push(format!("removed {}", dir.display()));
     }
     Ok(done)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn exec_quoted() {
+        assert_eq!(
+            super::exec_arg("/home/a b/.local/bin/dactile"),
+            "\"/home/a b/.local/bin/dactile\""
+        );
+        assert_eq!(super::exec_arg("/x/100%/d$"), "\"/x/100%%/d\\\\$\"");
+    }
 }

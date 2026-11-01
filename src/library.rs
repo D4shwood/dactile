@@ -281,6 +281,9 @@ pub fn rename(from: &Path, to: &Path, drafts: &[PathBuf]) -> anyhow::Result<()> 
     if to.exists() {
         anyhow::bail!("{} exists", to.display());
     }
+    if let Some(who) = crate::file::holder(from) {
+        anyhow::bail!("open in another Dactile ({who})");
+    }
     let old_history = crate::file::history_dir(from);
     let side = companions(from);
     std::fs::rename(from, to)?;
@@ -325,6 +328,17 @@ pub fn rename(from: &Path, to: &Path, drafts: &[PathBuf]) -> anyhow::Result<()> 
 
 /// The play and the files that go with it, to the desktop's trash.
 pub fn throw_away(play: &Path, bin: &Path) -> anyhow::Result<Vec<crate::trash::Moved>> {
+    // Asked again here: it may have been opened since the first Delete.
+    if let Some(who) = crate::file::holder(play) {
+        anyhow::bail!(
+            "{}",
+            crate::lang::f(
+                "Başka bir Dactile'da açık ({}).",
+                "Open in another Dactile ({}).",
+                &[&who],
+            )
+        );
+    }
     let lock = crate::file::lock_path(play);
     if lock.is_file() {
         let _ = std::fs::remove_file(lock);

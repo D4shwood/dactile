@@ -115,7 +115,15 @@ impl Writer {
         if !self.buf.dirty && !by_hand {
             return;
         }
+        // Changed elsewhere since the last look: looked at now, not written
+        // over unseen (autosave runs between two looks too).
+        let now = file::modified(&self.path);
+        if !self.conflict && now.is_some() && now != self.disk_time {
+            self.check_disk();
+            return;
+        }
         self.fix_quietly();
+        let theirs = self.keep_theirs();
         match file::write_atomic(&self.path, &self.buf.text) {
             Ok(()) => {
                 self.buf.dirty = false;
@@ -123,9 +131,19 @@ impl Writer {
                 self.disk_time = file::modified(&self.path);
                 let _ = file::snapshot(&self.history, &self.buf.text, false);
                 // An .aux there already gets the casts: a run by hand is
-                // right in one pass too.
-                let _ = build::seed(&self.path, &build::casts(&self.doc.outline), false);
-                if by_hand {
+                // right in one pass too. Not while XeLaTeX writes it.
+                if self.building.is_none() {
+                    let _ = build::seed(&self.path, &build::casts(&self.doc.outline), false);
+                }
+                if theirs {
+                    self.say(
+                        lang::l(
+                            "Kaydedildi; dışarıdaki hali geçmişte kaldı.",
+                            "Saved; the version from elsewhere is in the history.",
+                        ),
+                        false,
+                    );
+                } else if by_hand {
                     self.say(lang::l("Kaydedildi.", "Saved."), false);
                 }
             }
@@ -133,6 +151,57 @@ impl Writer {
                 &lang::f(
                     "Kaydedilemedi: {}",
                     "Couldn't save: {}",
+                    &[&format!("{e:#}")],
+                ),
+                true,
+            ),
+        }
+    }
+
+    /// Before ours goes over a file changed elsewhere: theirs, kept in the
+    /// history. Whether there was one.
+    fn keep_theirs(&self) -> bool {
+        self.conflict
+            && file::read(&self.path).is_ok_and(|t| file::snapshot(&self.history, &t, true).is_ok())
+    }
+
+    /// ^S in a play another Dactile holds: once says what it means, twice
+    /// takes the lock, with the play as it is on disk.
+    pub(super) fn take_lock(&mut self, confirmed: bool) {
+        if !confirmed {
+            let who = file::holder(&self.path).unwrap_or_default();
+            self.armed = Some(Armed::TakeLock);
+            self.say(
+                &lang::f(
+                    "Oyun başka bir Dactile'da açık ({}). ^S yine kilidi alır; ikisi birden yazarsa biri kaybolur.",
+                    "The play is open in another Dactile ({}). ^S again takes the lock; if both write, one is lost.",
+                    &[&who],
+                ),
+                true,
+            );
+            return;
+        }
+        match file::take_over(&self.path) {
+            Ok(lock) => {
+                self._lock = Some(lock);
+                self.read_only = false;
+                if let Ok(text) = file::read(&self.path)
+                    && text != self.buf.text
+                {
+                    self.buf.reload(text);
+                    self.relayout();
+                    self.snap_back();
+                }
+                self.disk_time = file::modified(&self.path);
+                self.say(
+                    lang::l("Kilit artık sende.", "The lock is yours now."),
+                    false,
+                );
+            }
+            Err(e) => self.say(
+                &lang::f(
+                    "Kilit alınamadı: {}",
+                    "Couldn't take the lock: {}",
                     &[&format!("{e:#}")],
                 ),
                 true,
@@ -302,7 +371,12 @@ impl Writer {
     /// On quit: save what's left and keep a version.
     pub fn close(&mut self) -> Result<()> {
         if self.buf.dirty && !self.read_only {
+            if file::modified(&self.path) != self.disk_time {
+                self.conflict = true;
+            }
+            self.keep_theirs();
             file::write_atomic(&self.path, &self.buf.text)?;
+            self.buf.dirty = false;
         }
         let _ = file::snapshot(&self.history, &self.buf.text, true);
         Ok(())
