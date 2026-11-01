@@ -1,4 +1,4 @@
-The third beta of Dactile 0.2, a terminal app for writing stage plays in the
+The fourth beta of Dactile 0.2, a terminal app for writing stage plays in the
 syntax of the tiyatro XeLaTeX class. Linux x86_64 only for now.
 
 ```sh
@@ -7,66 +7,40 @@ cd dactile-*-x86_64-linux
 ./dactile install
 ```
 
-Run `dactile install` again after updating: the class is new too (1.4.0).
+No new features: this one is a review of the code, for speed and safety.
+The class is unchanged (1.4.0).
 
-## New since 0.2.0-beta.2
+## New since 0.2.0-beta.3
 
-**Casting (F9)**
-- Full screen, three views on Tab: the casting, the scene/role table and the
-  numbers.
-- An actor per role, ⏎ to write one in. A play can have several castings,
-  an A and a B lineup: ←→ between them, `n` a new one, `r` renames, `x`
-  deletes. Actors' names stay in the sidecar; the play's PDF never shows
-  them.
-- The table: scenes down, roles across, ● where a role speaks, ○ where it is
-  on stage without a line. `x` writes it as CSV, `p` as a landscape PDF.
-- The numbers: lines, words, time and share by role, scene and act lengths;
-  `w` sets the pace in words a minute.
+**Faster**
+- PDF builds take about half the time: XeLaTeX no longer searches with
+  METAFONT for fonts the class tries but which are not installed.
+- Typing in a long play lays out again only the blocks that changed, about
+  twice as fast as before.
+- The casting (F9) and the memorizing cues are worked out once per edit
+  instead of on every frame, and marking misspelt words no longer copies
+  the play each frame.
 
-**Actor copies**
-- `k` on F9 builds a copy for each actor, and for each role nobody is cast in
-  yet (`ROLE.pdf`). Three kinds: 1 full, 2 rehearsal, 3 rehearsal light.
-- The role's lines in bold, the rest faint, its entrances and exits marked,
-  the scenes without it down to their headings, and a cover with its scenes,
-  pages and how much it says.
-- A rehearsal copy keeps who speaks when but leaves the others' words out,
-  with room for notes where they were; the light one keeps the first one to
-  three words of each, the same on every build.
+**Safer**
+- A save waits until the play is on the disk, the folder too, so a power
+  cut right after it cannot leave the file empty.
+- A play opened through a symbolic link is saved through the link, not
+  instead of it.
+- Undo keeps only what each step changed instead of a copy of the whole
+  play: on a long play its memory goes from tens of megabytes to a few
+  kilobytes.
 
-**Memorizing and the role view**
-- `z` on F9, or "Memorize" on ^P: the cues before each of the role's lines,
-  the line hidden; Space shows its first letters, Space again all of it.
-- Shift+F8 lights the cursor's role and fades the rest.
-
-**Groups in the cast panel (^O)**
-- `g` a new group, `t` moves a character into a group or out of it, `n` on a
-  group a new member, `e` renames it, `d` dissolves it into single
-  characters, Alt+↑↓ reorders its members. No more writing
-  `\karaktergrubu` by hand.
-- In the writer every speaker's name is bold alike, group members and hidden
-  characters too.
-
-**The class (1.4.0)**
-- Speakers' names print in capitals, in a name column as wide as the widest
-  of them.
-- `#önsahne Place` (also `#prologue`, `\onsahne[Place]`): an unnumbered
-  "Ön Sahne" before an act's first scene; the next `#sahne` is still
-  Scene 1.
-- For actor copies: `\tiyatrocopy`, `\tiyatromark`, `\tiyatrocopycover`,
-  `\tiyatrogap`, `\tiyatronoend`.
+**Inside**
+- The writer, one file of 5,100 lines, is now a dozen files, one per part.
 
 It is a beta: keep a copy of anything precious, and report what breaks.
 
 ---
 
-Dactile 0.2'nin üçüncü betası. Başlıca yenilik oyuncular. F9 tam ekranda
-dağıtımı, sahne/rol tablosunu ve sayıları açıyor. Bir oyunda birden çok
-dağıtım olabiliyor. Tablo CSV ya da yatay PDF olarak alınabiliyor. `k` her
-oyuncu için, oyuncusu henüz olmayan roller için de bir kopya çıkarıyor:
-tam, prova (ötekilerin sözleri yerine not boşluğu) ya da hafif prova (ilk
-birkaç kelime). `z` ile rol ezberleniyor, Shift+F8 imlecin rolünü öne
-çıkarıyor. ^O kişiler panelinde gruplar artık elle yazılmadan kuruluyor,
-taşınıyor ve dağıtılıyor. Sınıfta konuşan adları büyük harfle basılıyor.
-`#önsahne` ile numarasız bir ön sahne yazılabiliyor. Güncelledikten sonra
-`dactile install`'u yeniden çalıştır: sınıf da yeni (1.4.0). Ayrıntılar
-README.tr.md dosyasında.
+Dactile 0.2'nin dördüncü betası. Yeni özellik yok, kodun hız ve güvenlik
+için gözden geçirilmiş hâli. PDF derlemesi yaklaşık iki kat hızlı. Uzun bir
+oyunda yazarken yalnız değişen bloklar yeniden diziliyor. F9 ile ezber
+ekranının verisi her düzenlemede bir kez hesaplanıyor. Kaydetme, dosya
+diske yazılana kadar bekliyor. Bağlantı (symlink) üzerinden açılan oyunlar
+bağlantı bozulmadan kaydediliyor. Geri alma artık her adımda yalnız
+değişen parçayı tutuyor. Sınıf değişmedi (1.4.0).

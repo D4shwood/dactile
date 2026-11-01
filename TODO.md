@@ -86,7 +86,9 @@ Each milestone ends with a demo and a beta, published once approved.
    - Memorizing: the cues, the role's line hidden; Space shows first
      letters, then all of it.
    - Doubling (one actor in two roles never on at once) left for later.
-5. **M12 import** → 0.2.0-beta.4
+   - A review after it, published as 0.2.0-beta.4: faster PDF builds, safer
+     saves, a lighter undo, the writer split into parts, incremental layout.
+5. **M12 import** → 0.2.0-beta.5
    - From `.docx` (italics as directions, bold as names), plain text and
      Markdown, `.odt`, and PDFs with text (the preview matters most there).
    - All through text, then the shaping a paste already gets: `NAME: …`,
