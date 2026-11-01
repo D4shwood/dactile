@@ -71,7 +71,7 @@ Each milestone ends with a demo and a beta, published once approved.
      starts empty, the opening directions and whoever speaks fill it.
    - Nothing on screen while writing: no chips, no underlines. It feeds M11
      (doubling, entrances in actor copies) and a check run on demand (1.x).
-4. ~~**M11 actors**~~ Done, to be published as 0.2.0-beta.3
+4. ~~**M11 actors**~~ Done, published as 0.2.0-beta.3
    - F9, full screen: castings in the sidecar (several per play, an A and a
      B lineup), an actor per role; the play's own PDF never shows them.
    - Actor copies, all at once (`oyun-kopyalar/`): the role's lines on a grey
