@@ -151,8 +151,9 @@ pub fn blocks(text: &str, range: Range<usize>, cast: &Cast) -> Vec<Block> {
         let start = lines[i].start;
         // A block runs on while a brace is open; a line of dialogue or a
         // direction also runs on when a comment swallows its line end, and
-        // a line of dialogue over the plain lines after it: TeX reads them
-        // as one paragraph, the speaker's (see `line_breaks`).
+        // a line of dialogue over the plain lines after it, and over comment
+        // lines between them, which TeX skips: the class makes them one
+        // speech, the speaker's (see `line_breaks`).
         let first = classify(text, lines[i].clone(), cast);
         let speaks = matches!(first, Kind::Line { .. } | Kind::Do { .. });
         let line = matches!(first, Kind::Line { .. });
@@ -161,7 +162,12 @@ pub fn blocks(text: &str, range: Range<usize>, cast: &Cast) -> Vec<Block> {
             let span = start..lines[j].end;
             let open = depth(&text[span]) > 0;
             let joined = speaks && ends_in_comment(&text[lines[j].clone()]);
-            let goes_on = line && lines.get(j + 1).is_some_and(|l| plain(&text[l.clone()]));
+            let goes_on = line
+                && lines[j + 1..]
+                    .iter()
+                    .map(|l| &text[l.clone()])
+                    .find(|l| !l.trim_start().starts_with('%'))
+                    .is_some_and(plain);
             if (open || joined || goes_on) && j + 1 < lines.len() {
                 j += 1;
             } else {
@@ -188,10 +194,10 @@ fn plain(line: &str) -> bool {
 
 /// Where a line of dialogue over several source lines breaks in print:
 /// each of its line ends, as a writer sees them, at the end of the line's
-/// text (before any spaces and the line ending), where Dactile puts a `\\`
-/// when it builds. Not after a comment (it joins the lines), inside braces,
-/// where a `\\` is already, nor after the speaker alone (`\ma` on a line of
-/// its own), nor at the block's last line.
+/// text (before any spaces and the line ending), as the class breaks them.
+/// Not after a comment (it joins the lines), inside braces, where a `\\` is
+/// already, nor after the speaker alone (`\ma` on a line of its own), nor at
+/// the block's last line.
 pub fn line_breaks(text: &str, block: &Block) -> Vec<usize> {
     let Kind::Line { text: said, .. } = &block.kind else {
         return Vec::new();
@@ -690,6 +696,23 @@ mod tests {
         let cast = Cast::of_play(t);
         let b = blocks(t, source::split(t).body, &cast);
         (cast, b)
+    }
+
+    #[test]
+    fn a_speech_runs_on_as_the_class_reads_it() {
+        // Over a comment line, as TeX skips it; not over one before a blank
+        // line, nor over a blank line after the speaker alone.
+        let t = "\\karakter{SELİN}{se}\n\\begin{document}\n\\se Bir,\n% yorum\nİki.\n% sonda\n\n\\se\n\nÜç.\n\\end{document}\n";
+        let (_, b) = body_blocks(t);
+        let speeches: Vec<&Block> = b
+            .iter()
+            .filter(|b| matches!(b.kind, Kind::Line { .. }))
+            .collect();
+        assert_eq!(speeches.len(), 2);
+        assert_eq!(&t[speeches[0].span.clone()], "\\se Bir,\n% yorum\nİki.");
+        assert_eq!(&t[speeches[1].span.clone()], "\\se");
+        let at = t.find("Bir,").unwrap() + 4;
+        assert_eq!(line_breaks(t, speeches[0]), [at]);
     }
 
     #[test]

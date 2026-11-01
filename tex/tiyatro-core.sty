@@ -13,14 +13,16 @@
 %
 % Each alias gives three commands:
 %
-%   \alias Text up to the end of the line.        a line of dialogue
+%   \alias Text, over as many lines as it takes.  a line of dialogue
 %   \alias inside a line                          the character's name ("Selin")
 %   \aliasdo\otherdo Text up to the end of line.  a direction: (Selin, Ozan Text)
 %   \aliasfont                                    the font of the character's name
 %
-% A line of dialogue or a direction ends where the source line ends, so a "%" at
-% the end of such a line joins the next line to it. Inside a line, _word_ is
-% underlined and \ic{text} is an inline direction.
+% A line of dialogue runs on over the source lines after it, each one a line of
+% its own in print, until a blank line or a line that starts with a command or
+% a #. A "%" at the end of a source line joins the next one to it. A direction
+% ends where its source line ends. Inside a line, _word_ is underlined and
+% \ic{text} is an inline direction.
 %
 %   \action{...}  \stagedir{...}  \middir{...}  \beat
 %   \girer{alias,alias}  \cikar{alias}       (SELİN ile OZAN girerler.)
@@ -62,6 +64,11 @@
 \bool_new:N \l__tiy_line_bool        % inside a line of dialogue or a direction
 \bool_new:N \l__tiy_do_bool          % collecting a chain of \xdo commands
 \tl_new:N \l__tiy_close_tl           % what ends the current line: "" or ")"
+\bool_new:N \l__tiy_speech_bool      % the line is dialogue, which runs on
+\int_new:N \l__tiy_level_int         % the group level of its words
+\bool_new:N \l__tiy_broken_bool      % the writer broke it with \\ themselves
+\bool_new:N \l__tiy_fresh_bool       % its name alone on a source line, no words yet
+\cs_new_eq:NN \l__tiy_next_token \scan_stop: % the token after an end of line
 \seq_new:N \l__tiy_do_seq            % names collected by the chain
 \tl_new:N \g__tiy_do_tl              % every \xdo command, to recognise a chain
 \seq_new:N \g__tiy_cast_seq          % cast table rows: {c}{alias} or {g}{group}
@@ -202,7 +209,78 @@
 \endgroup
 \ExplSyntaxOn
 
-\cs_new_protected:Npn \tiy@eol { \l__tiy_close_tl \par \group_end: \__tiy_copy_end: }
+% The end of a source line. Inside braces, as in a long \ic{...}, it is the
+% space it always was; at the end of a line of dialogue the next source line
+% says whether the line runs on; anything else ends there.
+\cs_new_protected:Npn \tiy@eol
+  {
+    \bool_if:NTF \l__tiy_speech_bool
+      {
+        \int_compare:nNnTF { \tex_currentgrouplevel:D } > { \l__tiy_level_int }
+          { \c_space_tl }
+          { \tex_futurelet:D \l__tiy_next_token \__tiy_eol_next: }
+      }
+      { \__tiy_eol_end: }
+  }
+\cs_new_protected:Npn \__tiy_eol_end:
+  { \l__tiy_close_tl \par \group_end: \__tiy_copy_end: }
+
+% A blank line ends it, its end of line taken; a command or a # heading ends
+% it and is read after. Words run on, on a line of their own: \newline, not
+% \\, which would take a "*" or "[" starting the next line as its own. A \\
+% the writer ended the line with is break enough.
+\cs_new_protected:Npn \__tiy_eol_next:
+  {
+    \token_if_eq_meaning:NNTF \l__tiy_next_token \tiy@eol
+      { \__tiy_eol_blank:N }
+      {
+        \token_if_eq_meaning:NNTF \l__tiy_next_token \tiy@hash
+          { \__tiy_eol_end: }
+          {
+            \token_if_cs:NTF \l__tiy_next_token
+              { \__tiy_eol_command:N }
+              { \__tiy_eol_on: }
+          }
+      }
+  }
+\cs_new_protected:Npn \__tiy_eol_blank:N #1 { \__tiy_eol_end: }
+% "~" and "_" mean commands too, but they are words: only a real command ends.
+\cs_new_protected:Npn \__tiy_eol_command:N #1
+  { \token_if_active:NTF #1 { \__tiy_eol_on: } { \__tiy_eol_end: } #1 }
+\cs_new_protected:Npn \__tiy_eol_on:
+  {
+    \bool_if:NF \l__tiy_fresh_bool
+      {
+        \bool_lazy_and:nnF
+          { \l__tiy_broken_bool }
+          { \int_compare_p:nNn { \tex_lastpenalty:D } = { -10000 } }
+          { \newline }
+      }
+    \bool_set_false:N \l__tiy_fresh_bool
+    \bool_set_false:N \l__tiy_broken_bool
+  }
+
+% The name alone on its source line: the words start on the next one.
+\cs_new_protected:Npn \__tiy_speech_start:
+  {
+    \bool_set_true:N \l__tiy_speech_bool
+    \int_set:Nn \l__tiy_level_int { \tex_currentgrouplevel:D }
+    \cs_set_eq:NN \__tiy_cr: \\
+    \cs_set_protected:Npn \\ { \bool_set_true:N \l__tiy_broken_bool \__tiy_cr: }
+    \tiy@obey
+    \tex_futurelet:D \l__tiy_next_token \__tiy_speech_alone:
+  }
+\cs_new_protected:Npn \__tiy_speech_alone:
+  {
+    \token_if_eq_meaning:NNT \l__tiy_next_token \tiy@eol
+      { \__tiy_speech_alone:N }
+  }
+% Then the next source line decides as at any line end, with nothing to break.
+\cs_new_protected:Npn \__tiy_speech_alone:N #1
+  {
+    \bool_set_true:N \l__tiy_fresh_bool
+    \tex_futurelet:D \l__tiy_next_token \__tiy_eol_next:
+  }
 
 % The alias outside a line starts dialogue; inside one it is a name.
 \cs_new_protected:Npn \__tiy_who:n #1
@@ -234,7 +312,7 @@
         \raggedright \__tiy_namefont:n {#1} \__tiy_speaker:n {#1}
       }
     \hspace { 1.5em }
-    \tiy@obey
+    \__tiy_speech_start:
   }
 
 % \aliasdo collects names while the next token is another \xdo, then the rest
@@ -250,6 +328,7 @@
         \group_begin:
         \bool_set_true:N \l__tiy_do_bool
         \bool_set_true:N \l__tiy_line_bool
+        \bool_set_false:N \l__tiy_speech_bool
         \seq_clear:N \l__tiy_do_seq
         \tiy@obey
       }

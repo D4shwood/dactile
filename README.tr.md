@@ -199,7 +199,10 @@ Sınıf [tex/](tex/) klasöründe; Dactile onu kendi içinde taşır.
   - gruplar (`\karaktergrubu`)
   - kişiler tablosuna girmeyenler (`\gizlikarakter`)
   - replik içinde geçen ad (`\setinlinename`)
-- **Replik** kaynak satırın sonuna kadar sürer; ad kendi sütununda durur.
+- **Replik** altındaki satırlara da sürer; her kaynak satır baskıda kendi
+  satırında durur. Boş bir satır ya da komutla veya `#` ile başlayan bir
+  satır repliği bitirir. Ad kendi sütununda durur; satır sonundaki `%`
+  sonraki satırı ona ekler.
 - **Yönergeler:** `\aliasdo` zincirleri, `\action`, `\stagedir`, `\middir`, `\ic`, `\beat`;
   giriş-çıkışlar, `\girer{se,oz}` → (SELİN ile OZAN girerler.), `\cikar{se}`.
 - **Perdeler ve sahneler** otomatik numaralanır. Sahne başlığında o sahnede kimlerin olduğu yazar; bunun için iki derleme gerekir.

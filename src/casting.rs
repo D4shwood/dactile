@@ -452,20 +452,6 @@ pub fn copy_tex(
             }
         }
     }
-    // Line ends inside a speech break the line, as in the play's PDF;
-    // not in what was cut or shortened.
-    let mut breaks = Vec::new();
-    for b in doc.body.clone() {
-        for at in crate::lex::line_breaks(text, &doc.blocks[b]) {
-            let touched = edits
-                .iter()
-                .any(|e| e.range.start <= at && at < e.range.end.max(e.range.start + 1));
-            if !touched && !cut.iter().any(|r| r.contains(&at)) {
-                breaks.push(crate::tex::Edit::new(at..at, "\\\\"));
-            }
-        }
-    }
-    edits.extend(breaks);
     // Their entrances and exits in directions (in a line of their own,
     // the line is on the band already).
     for m in &stage.moves {

@@ -198,8 +198,10 @@ read-only. Earlier versions go to `~/.local/share/dactile/history`.
 - characters with aliases: `\karakter`, groups (`\karaktergrubu`), characters
   left out of the cast table (`\gizlikarakter`), and the name used inside a
   line (`\setinlinename`)
-- a line of dialogue runs to the end of the source line, with the name in a
-  column of its own
+- a line of dialogue runs on over the source lines under it, each one a line
+  of its own in print, up to a blank line or a line that starts with a
+  command or a `#`; the name is in a column of its own, and a `%` at the end
+  of a line joins the next one to it
 - directions: `\aliasdo` chains, `\action`, `\stagedir`, `\middir`, `\ic`, `\beat`;
   entrances and exits, `\girer{se,oz}` → (SELİN ile OZAN girerler.), `\cikar{se}`
 - acts and scenes with automatic numbers. Each scene heading lists who appears

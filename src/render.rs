@@ -1837,13 +1837,16 @@ mod tests {
             .filter(|b| matches!(b.kind, Kind::Line { .. }))
             .count();
         assert_eq!(lines, 2);
-        // In print: a \\ where the writer broke it and nowhere else.
+        // Where the class breaks it in print too, and nowhere else.
+        let at: Vec<usize> = doc
+            .blocks
+            .iter()
+            .flat_map(|b| crate::lex::line_breaks(t, b))
+            .collect();
         assert_eq!(
-            crate::build::with_breaks(t).unwrap(),
-            t.replace("Bir, \n", "Bir,\\\\ \n")
-                .replace("Beş\n", "Beş\\\\\n")
+            at,
+            [t.find("Bir,").unwrap() + 4, t.find("Beş").unwrap() + 4]
         );
-        assert_eq!(crate::build::with_breaks("\\ka Bir.\n"), None);
     }
 
     #[test]
