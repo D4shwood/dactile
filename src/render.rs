@@ -276,8 +276,35 @@ fn cw(c: char) -> u16 {
     c.width().unwrap_or(0).max(1) as u16
 }
 
+/// Lines and directions laid out before, by their source: while typing,
+/// only the block being written is laid out again.
+#[derive(Default)]
+pub struct Cache {
+    /// What every piece depends on besides its own source: the widths, the
+    /// language and the preamble (the characters).
+    context: String,
+    pieces: std::collections::HashMap<String, Piece>,
+}
+
+/// A block's rows and stops, its bytes counted from the block's start and
+/// its rows from its first.
+struct Piece {
+    rows: Vec<Row>,
+    stops: Vec<Stop>,
+}
+
 /// Lays the whole play out for a screen `opts.width` columns wide.
 pub fn layout(text: &str, doc: &Doc, opts: Options<'_>) -> Layout {
+    build(text, doc, opts, None)
+}
+
+/// The same as `layout`, taking the blocks that haven't changed from
+/// `cache` and keeping this layout's in it for the next.
+pub fn layout_cached(text: &str, doc: &Doc, opts: Options<'_>, cache: &mut Cache) -> Layout {
+    build(text, doc, opts, Some(cache))
+}
+
+fn build(text: &str, doc: &Doc, opts: Options<'_>, mut cache: Option<&mut Cache>) -> Layout {
     let mut b = Builder {
         text,
         doc,
@@ -286,6 +313,21 @@ pub fn layout(text: &str, doc: &Doc, opts: Options<'_>) -> Layout {
         summaries: opts.summaries,
     };
     b.out.name_width = name_column(doc, b.width);
+    let mut old = std::collections::HashMap::new();
+    let mut new = std::collections::HashMap::new();
+    if let Some(c) = cache.as_deref_mut() {
+        let context = format!(
+            "{} {} {}\n{}",
+            b.width,
+            b.out.name_width,
+            lang::is_tr(),
+            &text[doc.parts.preamble.clone()]
+        );
+        if c.context == context {
+            old = std::mem::take(&mut c.pieces);
+        }
+        c.context = context;
+    }
     // The PDF's act endings, and in page view its page breaks; never in the
     // all-source view.
     let pdf = !opts.raw_all;
@@ -405,7 +447,34 @@ pub fn layout(text: &str, doc: &Doc, opts: Options<'_>) -> Layout {
             b.out.block_rows.push(start..b.out.rows.len());
             continue;
         }
-        if raw || !b.rendered(i) {
+        let source = &text[doc.blocks[i].span.clone()];
+        let cacheable = cache.is_some()
+            && !raw
+            && matches!(
+                doc.blocks[i].kind,
+                Kind::Line { .. }
+                    | Kind::Do { .. }
+                    | Kind::Action { .. }
+                    | Kind::Stage { .. }
+                    | Kind::Move { .. }
+                    | Kind::Blank
+                    | Kind::Beat
+            );
+        if cacheable
+            && let Some((key, p)) = old
+                .remove_entry(source)
+                .or_else(|| new.remove_entry(source))
+        {
+            b.reuse(&p, i);
+            new.insert(key, p);
+        } else if cacheable {
+            let stops = b.out.stops.len();
+            if b.rendered(i) {
+                new.insert(source.to_string(), b.piece(i, start, stops));
+            } else {
+                b.raw(i, Style::Faint);
+            }
+        } else if raw || !b.rendered(i) {
             // Plain prose reads as text; other LaTeX stays in the background.
             let prose = matches!(doc.blocks[i].kind, Kind::Other)
                 && !text[doc.blocks[i].span.clone()]
@@ -429,6 +498,9 @@ pub fn layout(text: &str, doc: &Doc, opts: Options<'_>) -> Layout {
         if pdf && i + 1 == doc.body.end && !doc.body.is_empty() {
             b.curtain(true);
         }
+    }
+    if let Some(c) = cache {
+        c.pieces = new;
     }
     if let Some(h) = opts.page_rows.filter(|_| pages) {
         let cover = text[doc.parts.body.clone()].contains("\\maketitle");
@@ -501,6 +573,60 @@ struct Builder<'a> {
 }
 
 impl Builder<'_> {
+    /// The rows and stops block `b` just got, from row `row` and stop `stop`
+    /// on, made relative for the cache.
+    fn piece(&self, b: usize, row: usize, stop: usize) -> Piece {
+        let at = self.doc.blocks[b].span.start;
+        let rows = self.out.rows[row..]
+            .iter()
+            .map(|r| Row {
+                cells: r
+                    .cells
+                    .iter()
+                    .map(|c| Cell {
+                        byte: c.byte.map(|x| x.wrapping_sub(at)),
+                        ..c.clone()
+                    })
+                    .collect(),
+                ..r.clone()
+            })
+            .collect();
+        let stops = self.out.stops[stop..]
+            .iter()
+            .map(|s| Stop {
+                byte: s.byte.wrapping_sub(at),
+                row: s.row - row,
+                col: s.col,
+            })
+            .collect();
+        Piece { rows, stops }
+    }
+
+    /// Block `b`'s rows and stops from the cache, put in place.
+    fn reuse(&mut self, p: &Piece, b: usize) {
+        let at = self.doc.blocks[b].span.start;
+        let row = self.out.rows.len();
+        self.out.rows.extend(p.rows.iter().map(|r| {
+            Row {
+                block: r.block.map(|_| b),
+                cells: r
+                    .cells
+                    .iter()
+                    .map(|c| Cell {
+                        byte: c.byte.map(|x| x.wrapping_add(at)),
+                        ..c.clone()
+                    })
+                    .collect(),
+                ..r.clone()
+            }
+        }));
+        self.out.stops.extend(p.stops.iter().map(|s| Stop {
+            byte: s.byte.wrapping_add(at),
+            row: s.row + row,
+            col: s.col,
+        }));
+    }
+
     fn ensure_row(&mut self, row: usize, block: usize) {
         while self.out.rows.len() <= row {
             self.out.rows.push(Row {
@@ -1336,6 +1462,65 @@ mod tests {
     use super::*;
 
     const PLAY: &str = include_str!("../examples/ornek-oyun.tex");
+
+    /// The cached layout is the full one, edit after edit.
+    #[test]
+    fn cached_layout_is_the_same() {
+        let same = |t: &str, opts: Options<'_>, cache: &mut Cache| {
+            let doc = Doc::new(t);
+            let full = layout(t, &doc, opts);
+            let fast = layout_cached(t, &doc, opts, cache);
+            assert_eq!(full.rows, fast.rows);
+            assert_eq!(full.stops, fast.stops);
+            assert_eq!(full.block_rows, fast.block_rows);
+            assert_eq!(full.pages, fast.pages);
+        };
+        let mut cache = Cache::default();
+        let mut t = PLAY.to_string();
+        let wide = Options {
+            width: 72,
+            ..Default::default()
+        };
+        same(&t, wide, &mut cache);
+        // Typing into a line, a word at a time.
+        let at = t.find("Amca, yine").unwrap();
+        for w in ["Ah ", "şu ", "değirmen! "] {
+            t.insert_str(at, w);
+            same(&t, wide, &mut cache);
+        }
+        // A block gone, another in twice.
+        let line = t.find("\\oz Durdu").unwrap();
+        let end = line + t[line..].find('\n').unwrap() + 1;
+        let copy = t[line..end].to_string();
+        t.replace_range(line..end, "");
+        same(&t, wide, &mut cache);
+        t.insert_str(line, &format!("{copy}{copy}"));
+        same(&t, wide, &mut cache);
+        // A character renamed in the preamble: every line of theirs changes.
+        t = t.replacen("{SELİN}", "{SELMA}", 1);
+        same(&t, wide, &mut cache);
+        // Narrower, then in pages, then one block as source.
+        same(&t, Options { width: 40, ..wide }, &mut cache);
+        same(
+            &t,
+            Options {
+                page_rows: Some(20),
+                ..wide
+            },
+            &mut cache,
+        );
+        let doc = Doc::new(&t);
+        let b = doc.block_at(t.find("Kim o?").unwrap());
+        same(
+            &t,
+            Options {
+                raw_block: b,
+                ..wide
+            },
+            &mut cache,
+        );
+        same(&t, wide, &mut cache);
+    }
 
     fn row_text(l: &Layout, r: usize) -> String {
         let mut s = String::new();

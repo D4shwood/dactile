@@ -167,6 +167,8 @@ pub struct Writer {
     /// F9's figures and a role's cues, worked out once per version of the
     /// text (`buf.rev`) instead of on every frame.
     roles_data: Option<(u64, u32, roles::Data)>,
+    /// The blocks laid out last time, for the next layout to take over.
+    lay_cache: render::Cache,
     cues: Option<(u64, String, Vec<dactile::memorize::Cue>)>,
     /// The strip beside the writing (^G), when there is room for it.
     strip: bool,
@@ -317,6 +319,7 @@ impl Writer {
             spell_cache: HashMap::new(),
             misspelt: Vec::new(),
             roles_data: None,
+            lay_cache: render::Cache::default(),
             cues: None,
             strip: false,
             strip_key: None,
@@ -421,7 +424,9 @@ impl Writer {
     /// Rebuilds the model and the layout from the text.
     fn relayout(&mut self) {
         self.doc = Doc::new(&self.buf.text);
-        self.lay = render::layout(&self.buf.text, &self.doc, self.opts());
+        let mut cache = std::mem::take(&mut self.lay_cache);
+        self.lay = render::layout_cached(&self.buf.text, &self.doc, self.opts(), &mut cache);
+        self.lay_cache = cache;
         let known = check::known(&self.buf.text, &self.doc);
         self.problems = check::problems(&self.buf.text, &self.doc, &known);
     }
