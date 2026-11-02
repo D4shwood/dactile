@@ -61,6 +61,7 @@ From source: `cargo install --path .`, then `dactile install`.
 dactile                   # the home screen: your plays, a new one, settings
 dactile oyun.tex          # straight into a play
 dactile new "Kar Masalı"  # a new play in your plays folder
+dactile import oyun.docx  # a play made of a document (see Importing)
 ```
 
 The first run asks for the language (Turkish or English), the folder your
@@ -191,6 +192,31 @@ checker (the PDF never sees it), and
 `.oyun.tex.dactile-lock` while the play is open, so a second Dactile opens it
 read-only. Earlier versions go to `~/.local/share/dactile/history`.
 
+### Importing
+
+`i` on the home screen opens the desktop's file chooser (where there is
+none, over SSH say, it asks for a path) for a play written elsewhere: a Word
+`.docx`, a LibreOffice `.odt`, a PDF with text in it, Markdown or plain
+text. Nothing else needs installing; a PDF reads better where `pdftotext` is
+there, and Dactile uses it then.
+
+Dactile finds the title and author, a cast list (`KİŞİLER`, `CHARACTERS`)
+with what it says of each, act and scene headings (`BİRİNCİ PERDE`,
+`2. Sahne: Ahır`, `ACT ONE`), a preface and notes, and lines of dialogue
+written `NAME: …`, `NAME — …`, `NAME. …` or with the name on a line of its
+own above them. A paragraph in parentheses, or all in italics, is a
+direction, and inside a line `(laughing)` or words in italics are an inline
+one. In a PDF the running heads, page numbers and margin line numbers go,
+and lines the page broke are joined; short ones stay as in a poem.
+
+Before the play is written a preview lists the names found, with how many
+lines each has and the first of them: `e` changes a name, `a` its alias, `m`
+merges two that are the same person (and splits them again), `x` marks one
+that is not a character at all (`NOT: …`), whose lines stay as text, and `t`
+the title and author. ⏎ writes the play to your plays folder and opens it.
+`dactile import FILE` does the same from the command line, taking the names
+as they come. A scanned PDF, pictures of pages, needs OCR first.
+
 ## The tiyatro class
 
 [tex/](tex/) holds the class, which Dactile carries inside itself:
@@ -247,7 +273,8 @@ its code is used here.
 
 ## Roadmap
 
-Importing from Word and more: see [TODO.md](TODO.md).
+A 1.0 with a bug round and an AUR package, then doubling and a continuity
+check: see [TODO.md](TODO.md).
 
 ## License
 

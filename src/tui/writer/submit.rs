@@ -116,6 +116,9 @@ impl Writer {
             FormKind::Find
             | FormKind::NewPlay
             | FormKind::OpenPath
+            | FormKind::ImportPath
+            | FormKind::ImportPerson(_)
+            | FormKind::ImportInfo
             | FormKind::Settings
             | FormKind::Copy(_)
             | FormKind::Fork(_)

@@ -3,6 +3,7 @@
 mod anim;
 mod board;
 mod home;
+mod importing;
 mod keys;
 mod memorize;
 mod panels;
@@ -73,17 +74,19 @@ pub fn run(start: Start) -> Result<()> {
             };
             match &mut screen {
                 Screen::Home(h) => {
-                    if let Some(Event::Key(k)) = ev
-                        && k.kind != KeyEventKind::Release
-                    {
-                        match h.key(k, &mut cfg) {
-                            home::Action::Stay => {}
-                            home::Action::Quit => return Ok(()),
-                            home::Action::Open(p) => match open(&p, &mut cfg) {
-                                Ok(w) => screen = Screen::Writer(Box::new(w)),
-                                Err(e) => h.message = Some((format!("{e:#}"), true)),
-                            },
+                    let action = match ev {
+                        Some(Event::Key(k)) if k.kind != KeyEventKind::Release => {
+                            h.key(k, &mut cfg)
                         }
+                        _ => h.tick(),
+                    };
+                    match action {
+                        home::Action::Stay => {}
+                        home::Action::Quit => return Ok(()),
+                        home::Action::Open(p) => match open(&p, &mut cfg) {
+                            Ok(w) => screen = Screen::Writer(Box::new(w)),
+                            Err(e) => h.message = Some((format!("{e:#}"), true)),
+                        },
                     }
                 }
                 Screen::Writer(w) => {

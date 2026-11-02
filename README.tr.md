@@ -62,6 +62,7 @@ Kaynaktan: `cargo install --path .`, ardından `dactile install`.
 dactile                   # ana ekran: oyunların, yeni oyun, ayarlar
 dactile oyun.tex          # doğrudan bir oyuna
 dactile new "Kar Masalı"  # oyunlar klasöründe yeni bir oyun
+dactile import oyun.docx  # bir belgeden oyun (bkz. İçe aktarma)
 ```
 
 İlk açılışta dil (Türkçe ya da İngilizce), oyunların duracağı klasör, adın ve
@@ -190,6 +191,31 @@ girmez). Oyun açıkken
 bir de `.oyun.tex.dactile-lock` durur; ikinci bir Dactile oyunu salt okunur
 açar. Eski sürümler `~/.local/share/dactile/history` içine gider.
 
+### İçe aktarma
+
+Ana ekranda `i`, başka yerde yazılmış bir oyun için masaüstünün dosya
+seçicisini açar (olmayan yerde, SSH'te mesela, yol sorar): Word `.docx`,
+LibreOffice `.odt`, içinde metin olan bir PDF, Markdown ya da düz metin.
+Başka bir şey kurmak gerekmez; `pdftotext` kuruluysa PDF daha temiz okunur
+ve Dactile onu kullanır.
+
+Dactile başlığı ve yazarı, açıklamalarıyla bir kişiler listesini (`KİŞİLER`,
+`CHARACTERS`), perde ve sahne başlıklarını (`BİRİNCİ PERDE`, `2. Sahne: Ahır`,
+`ACT ONE`), önsözü ve notları, `AD: …`, `AD — …`, `AD. …` diye ya da ad kendi
+satırında, üstlerinde yazılmış replikleri bulur. Parantez içindeki ya da
+baştan sona italik bir paragraf yönergedir; bir replik içinde `(gülerek)` ya
+da italik kelimeler satır içi yönerge olur. PDF'te sayfa başlıkları, sayfa ve
+kenar satır numaraları atılır, sayfa genişliğinden kırılmış satırlar
+birleştirilir; kısa satırlar şiirdeki gibi kalır.
+
+Oyun yazılmadan önce bir önizleme bulunan adları, kaçar replikleri ve ilk
+replikleriyle listeler: `e` adı, `a` kısaltmayı değiştirir, `m` aynı kişi
+olan iki adı birleştirir (ve yeniden ayırır), `x` hiç karakter olmayanı
+(`NOT: …`) işaretler, onun satırları metin olarak kalır; `t` başlık ve yazar.
+⏎ oyunu oyunlar klasörüne yazar ve açar. `dactile import DOSYA` aynısını
+komut satırından, adları geldiği gibi alarak yapar. Taranmış bir PDF, sayfa
+resimleri, önce OCR'dan geçmeli.
+
 ## tiyatro sınıfı
 
 Sınıf [tex/](tex/) klasöründe; Dactile onu kendi içinde taşır.
@@ -248,7 +274,8 @@ geliyor; onun kodu burada kullanılmıyor.
 
 ## Yol haritası
 
-Word'den içe aktarma ve dahası: bkz. [TODO.md](TODO.md).
+Bir hata turu ve AUR paketiyle 1.0, sonra rol ikilemesi ve süreklilik
+denetimi: bkz. [TODO.md](TODO.md).
 
 ## Lisans
 

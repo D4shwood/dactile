@@ -117,6 +117,12 @@ pub enum FormKind {
     NewPlay,
     OpenPath,
     Settings,
+    /// A document to import, by its path (where no file chooser is).
+    ImportPath,
+    /// A name and alias in the import's preview (an index into its people).
+    ImportPerson(usize),
+    /// The title and author in the import's preview.
+    ImportInfo,
     /// A copy of this play under a new title.
     Copy(std::path::PathBuf),
     /// A new draft of this play, next to it.

@@ -95,6 +95,12 @@ Each milestone ends with a demo and a beta, published once approved.
      `(…)`, `#…`.
    - A preview of the names found: fix who is who, merge, confirm.
    - "Import" on the home screen.
+   - Done: `i` on the home screen (the desktop's file chooser through its
+     portal, a path where there is none) and `dactile import`; read in Rust
+     (`pdftotext` for PDFs where it is installed); a cast list, act and
+     scene headings, the preface and notes, four ways of writing a line.
+   - Also: the class breaks a speech's lines itself (1.5.0), so the line
+     ends of an imported speech print as they read.
 6. **M13 1.0** → 1.0.0
    - A bug round; tests for lost work (lock, autosave, trash, renames); speed
      on long plays.
@@ -104,6 +110,10 @@ Each milestone ends with a demo and a beta, published once approved.
    - An AUR package (`dactile-bin`) from the release workflow.
 
 ## 1.x
+
+- Scanned PDFs: a separate tool for OCR (Tesseract with Turkish), whose
+  text then goes through the import; many plays only go round so
+
 
 - Doubling: one actor in two roles never on stage at once, with time to
   change between an exit and the next entrance (from `src/stage.rs`)

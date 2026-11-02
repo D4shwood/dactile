@@ -64,6 +64,8 @@ pub struct Home {
     page_for: Option<PathBuf>,
     /// `?`: every key in a window.
     keys_open: bool,
+    /// `i`: a document being imported.
+    importing: Option<super::importing::Importing>,
 }
 
 struct Page {
@@ -109,6 +111,7 @@ impl Home {
             page_born: std::time::Instant::now(),
             page_for: None,
             keys_open: false,
+            importing: None,
         };
         h.refresh(cfg);
         // On the play worked on last.
@@ -129,6 +132,10 @@ impl Home {
 
     pub fn key(&mut self, k: KeyEvent, cfg: &mut Config) -> Action {
         self.message = None;
+        if let Some(imp) = &mut self.importing {
+            let step = imp.key(k, cfg);
+            return self.import_step(step);
+        }
         let armed = self.arming.take();
         if self.inline.is_some() {
             self.inline_key(k, cfg);
@@ -204,6 +211,13 @@ impl Home {
                     error: None,
                     confirmed: false,
                 });
+            }
+            KeyCode::Char('i') => {
+                if super::importing::can_choose() {
+                    self.importing = Some(super::importing::pick());
+                } else {
+                    self.form = Some(super::importing::path_form());
+                }
             }
             KeyCode::Char('s') => self.form = Some(settings_form(cfg, false)),
             KeyCode::F(2) if !k.modifiers.contains(KeyModifiers::SHIFT) => {
@@ -351,11 +365,44 @@ impl Home {
 
     /// Whether the screen is still typing itself out (the name's cursor
     /// blinks at the slow pace).
+    /// What the import waits on, when it comes.
+    pub fn tick(&mut self) -> Action {
+        match &mut self.importing {
+            Some(imp) => {
+                let step = imp.tick(import_lang());
+                self.import_step(step)
+            }
+            None => Action::Stay,
+        }
+    }
+
+    fn import_step(&mut self, step: super::importing::Step) -> Action {
+        use super::importing::Step;
+        match step {
+            Step::Stay => Action::Stay,
+            Step::Done(msg) => {
+                self.importing = None;
+                self.message = msg;
+                Action::Stay
+            }
+            Step::AskPath => {
+                self.importing = None;
+                self.form = Some(super::importing::path_form());
+                Action::Stay
+            }
+            Step::Open(p) => {
+                self.importing = None;
+                Action::Open(p)
+            }
+        }
+    }
+
     pub fn animating(&self, cfg: &Config) -> bool {
-        cfg.animations
-            && (self.born.elapsed() < TYPE_FOR
-                || self.form_born.elapsed() < std::time::Duration::from_millis(160)
-                || self.page_born.elapsed() < PAGE_OPENS)
+        self.importing.as_ref().is_some_and(|i| i.busy())
+            || cfg.animations
+                && (self.born.elapsed() < TYPE_FOR
+                    || self.form_born.elapsed() < std::time::Duration::from_millis(160)
+                    || self.page_born.elapsed() < PAGE_OPENS)
     }
 
     /// How much of `s` has been typed so far, `delay` after the screen came.
@@ -572,6 +619,18 @@ impl Home {
                     Ok(()) => Action::Stay,
                     Err(e) => fail(self, form, e),
                 }
+            }
+            FormKind::ImportPath => {
+                let path = resolve_path(form.get("Dosya"), cfg);
+                if !path.is_file() {
+                    return fail(
+                        self,
+                        form,
+                        lang::f("{} bulunamadı.", "{} not found.", &[&config::tilde(&path)]),
+                    );
+                }
+                self.importing = Some(super::importing::read(path, import_lang()));
+                Action::Stay
             }
             FormKind::OpenPath => {
                 let path = resolve_path(form.get("Dosya"), cfg);
@@ -995,6 +1054,7 @@ impl Home {
             &[
                 ("⏎", lang::l("aç", "open")),
                 ("n", lang::l("yeni oyun", "new play")),
+                ("i", lang::l("içe aktar", "import")),
                 ("f", lang::l("yeni taslak", "new draft")),
                 ("p", "PDF"),
                 ("?", lang::l("bütün tuşlar", "all keys")),
@@ -1019,6 +1079,9 @@ impl Home {
         );
         if self.keys_open {
             draw_keys(f, area);
+        }
+        if let Some(imp) = &self.importing {
+            imp.draw(f, area);
         }
         if let Some(form) = &self.form {
             // The form unrolls over what was there.
@@ -1485,9 +1548,14 @@ impl Home {
 /// its numbers under it.
 /// `?`: every key of the home screen.
 fn draw_keys(f: &mut Frame, area: Rect) {
-    let keys: [(&str, &str, &str); 12] = [
+    let keys: [(&str, &str, &str); 13] = [
         ("⏎", "oyunu aç", "open the play"),
         ("n", "yeni oyun", "a new play"),
+        (
+            "i",
+            "Word, LibreOffice, PDF ya da metin belgesini içe aktar",
+            "import a Word, LibreOffice, PDF or text document",
+        ),
         (
             "o",
             "başka yerden bir .tex aç",
@@ -1605,6 +1673,10 @@ fn inline_name(path: &Path, title: &str, draft: Option<&str>) -> String {
 }
 
 /// A path typed in a form: `~/…`, absolute, or inside the plays folder.
+fn import_lang() -> Lang {
+    if lang::is_tr() { Lang::Tr } else { Lang::En }
+}
+
 fn resolve_path(s: &str, cfg: &Config) -> PathBuf {
     let s = s.trim();
     if s.starts_with('~') || s.starts_with('/') {

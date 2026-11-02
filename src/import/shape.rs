@@ -751,7 +751,7 @@ impl Draft {
                 let p = &self.people[i];
                 p.merged_into.is_none()
                     && !p.not_character
-                    && (p.lines > 0 || p.desc.is_some() || p.full.is_some())
+                    && (self.lines_of(i) > 0 || p.desc.is_some() || p.full.is_some())
             })
             .collect()
     }
@@ -801,15 +801,27 @@ impl Draft {
                 p.merged_into = Some(into);
             }
         }
-        let (full, desc, lines) = {
+        let (full, desc) = {
             let f = &self.people[from];
-            (f.full.clone(), f.desc.clone(), f.lines)
+            (f.full.clone(), f.desc.clone())
         };
         let t = &mut self.people[into];
         t.full = t.full.take().or(full);
         t.desc = t.desc.take().or(desc);
-        t.lines += lines;
         self.people[from].merged_into = Some(into);
+    }
+
+    /// A merge undone: `i` speaks their own lines again.
+    pub fn unmerge(&mut self, i: usize) {
+        self.people[i].merged_into = None;
+    }
+
+    /// The lines a person speaks, with those of the people merged into them.
+    pub fn lines_of(&self, i: usize) -> usize {
+        (0..self.people.len())
+            .filter(|&j| self.owner(j) == i)
+            .map(|j| self.people[j].lines)
+            .sum()
     }
 
     pub fn counts(&self) -> Counts {
