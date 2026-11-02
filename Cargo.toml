@@ -27,12 +27,16 @@ unicode-width = "0.2.2"
 arboard = { version = "3.7", default-features = false, features = ["wayland-data-control"], optional = true }
 clap = { version = "4.6", features = ["derive"], optional = true }
 ratatui = { version = "0.30.2", optional = true }
+zip = { version = "9.2.1", default-features = false, features = ["deflate"] }
+quick-xml = "0.42.0"
+pdf-extract = "0.12.1"
+rfd = { version = "0.17.2", default-features = false, features = ["xdg-portal"], optional = true }
 
 [features]
 default = ["app"]
 # Everything beyond the play model: the terminal interface. The core alone
 # (reading and writing plays) builds with `default-features = false`.
-app = ["dep:arboard", "dep:clap", "dep:ratatui"]
+app = ["dep:arboard", "dep:clap", "dep:ratatui", "dep:rfd"]
 
 # The Turkish dictionary is large: keep its loader fast in debug builds too.
 [profile.dev.package.spellbook]

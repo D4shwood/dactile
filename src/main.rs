@@ -37,6 +37,14 @@ enum Cmd {
     },
     /// Lists what would stop XeLaTeX in a play (changes nothing).
     Check { play: PathBuf },
+    /// Makes a play of a .docx, .odt, PDF, Markdown or text file, in the
+    /// plays folder (or at --out), taking the names it finds as they are.
+    Import {
+        file: PathBuf,
+        /// Where to write the play.
+        #[arg(long, short)]
+        out: Option<PathBuf>,
+    },
     /// Builds a play's PDF next to it, in one XeLaTeX run.
     Pdf {
         play: PathBuf,
@@ -79,6 +87,7 @@ fn main() -> Result<()> {
             }
             Ok(())
         }
+        Some(Cmd::Import { file, out }) => import(&file, out),
         Some(Cmd::Install) => {
             for line in install::install()? {
                 println!("{line}");
@@ -96,11 +105,7 @@ fn main() -> Result<()> {
             let path = cfg.plays_dir().join(dactile::library::file_name(&title));
             anyhow::ensure!(!path.exists(), "{} already exists", path.display());
             std::fs::create_dir_all(cfg.plays_dir())?;
-            let lang = match cfg.lang.as_str() {
-                "en" => dactile::lang::Lang::En,
-                "tr" => dactile::lang::Lang::Tr,
-                _ => dactile::lang::system(),
-            };
+            let lang = cfg_lang(&cfg);
             dactile::file::write_atomic(
                 &path,
                 &dactile::library::template(&title, &cfg.author, lang),
@@ -111,6 +116,48 @@ fn main() -> Result<()> {
             Some(p) => tui::run(tui::Start::Play(p)),
             None => tui::run(tui::Start::Home),
         },
+    }
+}
+
+fn import(file: &std::path::Path, out: Option<PathBuf>) -> Result<()> {
+    let cfg = dactile::config::Config::load()?;
+    let src = dactile::import::read(file)?;
+    let draft = dactile::import::shape::shape(&src, cfg_lang(&cfg));
+    let path = match out {
+        Some(p) => {
+            anyhow::ensure!(!p.exists(), "{} already exists", p.display());
+            p
+        }
+        None => {
+            let stem = file.file_stem().and_then(|s| s.to_str()).unwrap_or("oyun");
+            let title = if draft.title.is_empty() {
+                stem
+            } else {
+                &draft.title
+            };
+            std::fs::create_dir_all(cfg.plays_dir())?;
+            dactile::library::free_path(&cfg.plays_dir(), &dactile::library::file_name(title))
+        }
+    };
+    dactile::file::write_atomic(&path, &draft.tex())?;
+    let c = draft.counts();
+    println!("{}", path.display());
+    println!(
+        "{} replik, {} yönerge, {} perde, {} sahne, {} düz paragraf",
+        c.lines, c.directions, c.acts, c.scenes, c.plain
+    );
+    for i in draft.cast() {
+        let p = &draft.people[i];
+        println!("  \\{:<8} {:<24} {} replik", p.alias, p.name, p.lines);
+    }
+    Ok(())
+}
+
+fn cfg_lang(cfg: &dactile::config::Config) -> dactile::lang::Lang {
+    match cfg.lang.as_str() {
+        "en" => dactile::lang::Lang::En,
+        "tr" => dactile::lang::Lang::Tr,
+        _ => dactile::lang::system(),
     }
 }
 

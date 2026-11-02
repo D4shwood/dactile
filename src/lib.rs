@@ -11,6 +11,7 @@ pub mod check;
 pub mod complete;
 pub mod config;
 pub mod file;
+pub mod import;
 pub mod info;
 pub mod lang;
 pub mod lex;
