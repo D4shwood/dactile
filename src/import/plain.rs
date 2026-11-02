@@ -59,12 +59,30 @@ fn markdown_paras(lines: &[String]) -> Vec<Para> {
                 heading: true,
                 ..Para::default()
             });
+        } else if let Some(item) = list_item(t) {
+            // A list item is a paragraph of its own, without its marker.
+            flush(&mut chunk, &mut out);
+            chunk.push(item.to_string());
         } else {
             chunk.push(l.clone());
         }
     }
     flush(&mut chunk, &mut out);
     out
+}
+
+/// `- x`, `* x`, `+ x`, `1. x`: the item's text.
+fn list_item(t: &str) -> Option<&str> {
+    if let Some(rest) = t.strip_prefix(['-', '*', '+'])
+        && rest.starts_with(' ')
+        && !t.starts_with("**")
+    {
+        return Some(rest.trim_start());
+    }
+    let digits = t.chars().take_while(char::is_ascii_digit).count();
+    let rest = &t[digits..];
+    (digits > 0 && (rest.starts_with(". ") || rest.starts_with(") ")))
+        .then(|| rest[2..].trim_start())
 }
 
 /// `*x*` and `_x_` in italics, `**x**` and `__x__` in bold; `\*` is a star.
@@ -225,5 +243,11 @@ mod tests {
         assert!(src.paras[1].runs[1].italic);
         assert!(src.paras[2].runs[0].bold);
         assert_eq!(src.paras[2].text(), "OZAN: Geliyorum*.");
+        let src = read(
+            "## KİŞİLER\n\n- MERT — balıkçı\n- ASLI, kahveci\n1. HOCA",
+            true,
+        );
+        let t: Vec<String> = src.paras.iter().map(|p| p.text()).collect();
+        assert_eq!(t, ["KİŞİLER", "MERT — balıkçı", "ASLI, kahveci", "HOCA"]);
     }
 }
