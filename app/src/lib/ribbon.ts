@@ -97,9 +97,10 @@ export const TABS: Tab[] = [
     tip: ["R", "W"],
     groups: [
       g("Görünümler", "Views", [
-        b("Sayfa", "Pages", "▯", "F7", k("page")),
+        b("Sayfa", "Page", "▯", "F7", k("page")),
         b("Kaynak", "Source", "⟨⟩", "F2", k("source")),
         b("PDF", "PDF", "⎙", "F12", k("pdf-panel")),
+        b("Notlar", "Notes", "✎", "Ctrl+N", k("notes")),
       ]),
       g("Yakınlık", "Zoom", [
         b("Büyüt", "Zoom in", "+", "Ctrl++", k("zoom-in")),
@@ -145,12 +146,12 @@ export const TABS: Tab[] = [
     tip: ["N", "O"],
     groups: [
       g("Notlar", "Notes", [
-        b("Panel", "Panel", "✎", "Ctrl+N", soon),
-        b("Buraya not", "Note here", "✚", "Alt+N", soon),
+        b("Panel", "Panel", "✎", "Ctrl+N", k("notes")),
+        b("Buraya not", "Note here", "✚", "Alt+N", k("note-here")),
       ]),
       g("Al", "Take", [
-        b("Panodan", "Clipboard", "⎗", "", soon),
-        b("Dosyadan", "From a file", "⇲", "", soon),
+        b("Panodan", "Clipboard", "⎗", "", k("notes-paste")),
+        b("Dosyadan", "From a file", "⇲", "", k("notes-file")),
       ]),
       g("Çıktı", "Output", [b("Notlu PDF", "PDF with notes", "⎙", "", soon)]),
     ],

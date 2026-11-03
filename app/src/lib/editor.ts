@@ -219,6 +219,40 @@ function coverOrTailMoved(a: EditorState, b: EditorState) {
   return before !== now;
 }
 
+// ------------------------------------------------------------------ notes
+
+/// The notes' places in the text, underlined; the picked one stronger.
+export const setNotes = StateEffect.define<{ from: number; to: number; i: number; done: boolean }[]>();
+export const pickNote = StateEffect.define<number | null>();
+
+const noteMarks = StateField.define<{ deco: DecorationSet; picked: number | null; list: { from: number; to: number; i: number; done: boolean }[] }>({
+  create: () => ({ deco: Decoration.none, picked: null, list: [] }),
+  update(v, tr) {
+    let list = v.list;
+    let picked = v.picked;
+    let changed = false;
+    for (const e of tr.effects) {
+      if (e.is(setNotes)) (list = e.value), (changed = true);
+      if (e.is(pickNote)) (picked = e.value), (changed = true);
+    }
+    if (!changed) return tr.docChanged ? { ...v, deco: v.deco.map(tr.changes) } : v;
+    const len = tr.state.doc.length;
+    const deco = Decoration.set(
+      list
+        .filter((n) => n.from < n.to && n.to <= len)
+        .map((n) =>
+          Decoration.mark({
+            class: "cm-note" + (n.done ? " cm-note-done" : "") + (n.i === picked ? " cm-note-picked" : ""),
+            attributes: { "data-note": String(n.i) },
+          }).range(n.from, n.to),
+        ),
+      true,
+    );
+    return { deco, picked, list };
+  },
+  provide: (f) => EditorView.decorations.from(f, (v) => v.deco),
+});
+
 // ------------------------------------------------------------------ typing
 
 function rendered(state: EditorState, pos: number) {
@@ -398,6 +432,7 @@ export function extensions(hooks: Hooks): Extension {
   return [
     page,
     decorations,
+    noteMarks,
     history(),
     search({ top: true }),
     highlightSelectionMatches(),

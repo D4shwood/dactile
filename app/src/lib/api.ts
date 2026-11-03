@@ -109,6 +109,21 @@ export interface Change {
   at: number;
 }
 
+export interface NoteCard {
+  i: number;
+  state: "open" | "done" | "hidden";
+  archived: boolean;
+  author: string;
+  text: string;
+  group: string;
+  line: number | null;
+  replies: [string, string][];
+  from: number | null;
+  to: number | null;
+  gone: boolean;
+  fixable: boolean;
+}
+
 export type BuildResult =
   | { kind: "built"; pdf: string; pages: number | null; seconds: number }
   | { kind: "failed"; line: number | null; message: string };
@@ -129,6 +144,16 @@ export const api = {
   relocate: (text: string, card: number, to: number) =>
     invoke<Change | null>("relocate", { text, card, to }),
   build: () => invoke<BuildResult>("build"),
+  notes: (text: string) => invoke<NoteCard[]>("notes_list", { text }),
+  noteAdd: (text: string, at: number, author: string, body: string) =>
+    invoke<NoteCard[]>("note_add", { text, at, author, body }),
+  noteSet: (text: string, i: number, state: string) => invoke<NoteCard[]>("note_set", { text, i, state }),
+  noteReply: (text: string, i: number, author: string, reply: string) =>
+    invoke<NoteCard[]>("note_reply", { text, i, author, reply }),
+  notesPaste: (reply: string, author: string) => invoke<number>("notes_paste", { reply, author }),
+  pickText: () => invoke<string | null>("pick_text"),
+  noteFix: (text: string, i: number) => invoke<Change[]>("note_fix", { text, i }),
+  noteAuthors: () => invoke<string[]>("note_authors"),
   startup: () => invoke<string | null>("startup"),
   pick: () => invoke<string | null>("pick"),
   pdf: (path: string) => invoke<ArrayBuffer>("pdf", { path }),

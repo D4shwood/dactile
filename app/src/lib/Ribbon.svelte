@@ -60,13 +60,27 @@
     searchBox?.focus();
   }
 
-  function onkey(e: KeyboardEvent) {
-    if (e.key === "Alt" && !e.repeat) {
+  /// Alt pressed and nothing else yet: on its release the letters show.
+  let altAlone = false;
+
+  function onkeyup(e: KeyboardEvent) {
+    if (e.key === "Alt" && altAlone) {
       // Alt alone, as in Word: the letters show; again, they go.
       tipMode = tipMode ? "" : "tabs";
       e.preventDefault();
+    }
+    altAlone = false;
+  }
+
+  function onkey(e: KeyboardEvent) {
+    if (e.key === "Alt") {
+      altAlone = !e.repeat;
+      e.preventDefault();
       return;
     }
+    // Alt with a key (Alt+N): a shortcut, not the letters.
+    altAlone = false;
+    if (e.altKey) return;
     if (!tipMode) return;
     if (e.key === "Escape") {
       tipMode = tipMode === "btns" ? "tabs" : "";
@@ -98,7 +112,7 @@
   }
 </script>
 
-<svelte:window onkeydown={onkey} />
+<svelte:window onkeydown={onkey} {onkeyup} />
 
 <header class="ribbon" class:folded>
   <div class="bar">

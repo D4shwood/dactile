@@ -4,12 +4,13 @@
   import { EditorView } from "@codemirror/view";
   import { redo, selectAll, undo } from "@codemirror/commands";
   import { openSearchPanel } from "@codemirror/search";
-  import { api, type BuildResult, type Card, type Opened, type Preview, type Settings } from "./api";
-  import { currentView, extensions, insertSnippet, openCover, setSource, setView } from "./editor";
+  import { api, type BuildResult, type Card, type NoteCard, type Opened, type Preview, type Settings } from "./api";
+  import { currentView, extensions, insertSnippet, openCover, pickNote, setNotes, setSource, setView } from "./editor";
   import { BACKSTAGE, type Act } from "./ribbon";
   import Ribbon from "./Ribbon.svelte";
   import Pdf from "./Pdf.svelte";
   import Board from "./Board.svelte";
+  import Notes from "./Notes.svelte";
 
   let {
     opened,
@@ -31,7 +32,16 @@
   let theme = $state(first.theme || "paper");
   let source = $state(false);
   let typewriter = $state(false);
-  let showPdf = $state(false);
+  /// What stands beside the page.
+  let side = $state<"" | "pdf" | "notes">("");
+  /// The page as a sheet on a desk (F7), or the text across the window.
+  let sheet = $state(true);
+  let noteCards = $state<NoteCard[]>([]);
+  let picked = $state<number | null>(null);
+  let authors = $state<string[]>([]);
+  let draft = $state<string | null>(null);
+  let pasting = $state<string | null>(null);
+  let me = $state(first.author);
   let building = $state(false);
   let built = $state<BuildResult | null>(null);
   let board = $state(false);
@@ -68,6 +78,7 @@
         // Typed on meanwhile: the next one is on its way.
         if (view.state.doc === doc) view.dispatch({ effects: setView.of(v) });
         if (board && view.state.doc === doc) cards = await api.board(doc.toString());
+        if (side === "notes" && view.state.doc === doc) await refreshNotes();
         locate();
       },
       now ? 0 : 140,
@@ -123,7 +134,8 @@
   async function build() {
     if (building) return;
     if (!(await save()) && !opened.read_only) return;
-    showPdf = true;
+    side = "pdf";
+    showNotes();
     keepCursor();
     building = true;
     try {
@@ -154,6 +166,125 @@
     board = false;
     view.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: "start", yMargin: 60 }) });
     view.focus();
+  }
+
+  // ------------------------------------------------------------ notes
+
+  async function refreshNotes() {
+    noteCards = await api.notes(view.state.doc.toString());
+    showNotes();
+  }
+
+  /// The notes' places underlined while the panel is open.
+  function showNotes() {
+    const on = side === "notes";
+    const marks = on
+      ? noteCards
+          .filter((c) => c.from !== null && c.to !== null && !c.archived && c.state !== "hidden")
+          .map((c) => ({ from: c.from!, to: c.to!, i: c.i, done: c.state === "done" }))
+      : [];
+    view.dispatch({ effects: [setNotes.of(marks), pickNote.of(on ? picked : null)] });
+  }
+
+  async function openNotes(on = side !== "notes") {
+    side = on ? "notes" : "";
+    keepCursor();
+    if (on) {
+      authors = await api.noteAuthors();
+      await refreshNotes();
+    } else showNotes();
+  }
+
+  /// A note on the selection, or on the word at the cursor.
+  async function noteHere() {
+    const st = view.state;
+    const sel = st.selection.main;
+    let quote = "";
+    if (!sel.empty) {
+      const t = st.sliceDoc(sel.from, sel.to).trim();
+      if (!t.includes("\n") && t.length <= 120) quote = t;
+    } else {
+      const line = st.doc.lineAt(sel.head);
+      const at = sel.head - line.from;
+      const word = /[\p{L}\p{N}'’]/u;
+      let a = at;
+      let b = at;
+      while (a > 0 && word.test(line.text[a - 1])) a--;
+      while (b < line.text.length && word.test(line.text[b])) b++;
+      if (b > a && line.text[a - 1] !== "\\") quote = line.text.slice(a, b);
+    }
+    draft = quote ? `“${quote}” ` : "";
+    if (side !== "notes") await openNotes(true);
+  }
+
+  function pickCard(i: number) {
+    picked = i;
+    const c = noteCards.find((n) => n.i === i);
+    view.dispatch({ effects: pickNote.of(i) });
+    if (c?.from != null) {
+      view.dispatch({
+        selection: { anchor: c.from, head: c.to ?? c.from },
+        effects: EditorView.scrollIntoView(c.from, { y: "center" }),
+      });
+    }
+  }
+
+  async function noteSet(i: number, state: string) {
+    noteCards = await api.noteSet(view.state.doc.toString(), i, state).catch((e) => (say(String(e), true), noteCards));
+    if (state === "delete") picked = null;
+    showNotes();
+  }
+
+  async function noteAdd(author: string, body: string) {
+    try {
+      noteCards = await api.noteAdd(view.state.doc.toString(), view.state.selection.main.head, author, body);
+      draft = null;
+      picked = noteCards[noteCards.length - 1]?.i ?? null;
+      authors = await api.noteAuthors();
+      showNotes();
+    } catch (e) {
+      say(String(e), true);
+    }
+  }
+
+  async function noteReply(i: number, author: string, text: string) {
+    noteCards = await api.noteReply(view.state.doc.toString(), i, author, text).catch((e) => (say(String(e), true), noteCards));
+  }
+
+  async function noteFix(i: number) {
+    try {
+      const changes = await api.noteFix(view.state.doc.toString(), i);
+      // One step: one Ctrl+Z puts the words back.
+      view.dispatch({ changes: changes.map((c) => ({ from: c.from, to: c.to, insert: c.insert })), userEvent: "input" });
+      say(l("Düzeltildi; not yapıldı sayıldı. Ctrl+Z geri alır.", "Fixed; the note is done. Ctrl+Z undoes it."));
+      await refreshNotes();
+    } catch (e) {
+      say(String(e), true);
+    }
+  }
+
+  async function notesPaste(text: string, author: string) {
+    try {
+      const n = await api.notesPaste(text, author);
+      pasting = null;
+      say(n ? l(`${n} not eklendi.`, `${n} notes added.`) : l("Numaralı madde bulunamadı (“139: …”).", "No numbered items found (“139: …”)."), !n);
+      authors = await api.noteAuthors();
+      await refreshNotes();
+    } catch (e) {
+      say(String(e), true);
+    }
+  }
+
+  async function pasteNotes() {
+    if (side !== "notes") await openNotes(true);
+    pasting = await navigator.clipboard.readText().catch(() => "");
+  }
+
+  async function notesFromFile() {
+    const t = await api.pickText();
+    if (t === null) return;
+    if (side !== "notes") await openNotes(true);
+    pasting = t;
   }
 
   // ------------------------------------------------------------ the board
@@ -229,16 +360,31 @@
         ribbon?.focusSearch();
         break;
       case "page":
-        source = false;
-        view.dispatch({ effects: setSource.of(false) });
+        sheet = !sheet;
+        say(sheet ? l("Sayfa: masanın üstünde bir kâğıt.", "Page: a sheet on a desk.") : l("Sayfa kapalı: metin pencere boyunca.", "Page off: the text across the window."));
+        requestAnimationFrame(() => view.requestMeasure());
         break;
       case "source":
         source = !source;
         view.dispatch({ effects: setSource.of(source) });
         break;
       case "pdf-panel":
-        showPdf = !showPdf;
+        side = side === "pdf" ? "" : "pdf";
+        // The notes' underlines go with their panel.
+        showNotes();
         keepCursor();
+        break;
+      case "notes":
+        openNotes();
+        break;
+      case "note-here":
+        noteHere();
+        break;
+      case "notes-paste":
+        pasteNotes();
+        break;
+      case "notes-file":
+        notesFromFile();
         break;
       case "zoom-in":
         setZoom(zoom + 10);
@@ -283,7 +429,7 @@
         leave();
         break;
     }
-    if (id !== "commands" && id !== "find") view.focus();
+    if (!["commands", "find", "note-here", "notes-paste", "notes-file"].includes(id)) view.focus();
   }
 
   function run(a: Act) {
@@ -338,11 +484,14 @@
       if (e.key === "g") id = "board";
       if (e.key === "p") id = "commands";
       if (e.key === "w") id = "close";
+      if (e.key === "n") id = "notes";
     }
+    if (e.altKey && !mod && (e.key === "n" || e.key === "N")) id = "note-here";
     if (e.key === "Escape") {
       if (help) return void (help = "");
       if (backstage) return void (backstage = false);
       if (board) return void (board = false);
+      if (draft !== null || pasting !== null) return void ((draft = null), (pasting = null));
     }
     if (id) {
       e.preventDefault();
@@ -424,19 +573,45 @@
     file={() => openBackstage("info")}
   />
 
-  <main class="body" class:split={showPdf}>
+  <main class="body" class:split={side !== ""}>
     <div class="left">
-      <div class="desk" class:gone={board} {onwheel}>
+      <div class="desk" class:gone={board} class:plain={!sheet} {onwheel}>
         <div class="page" class:source class:typewriter style={`--z: ${zoom / 100}`}>
-          <div bind:this={host}></div>
+          <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+          <div
+            bind:this={host}
+            onclick={(e) => {
+              const n = (e.target as HTMLElement).closest("[data-note]") as HTMLElement | null;
+              if (n && side === "notes") picked = Number(n.dataset.note);
+              if (n && side === "notes") view.dispatch({ effects: pickNote.of(picked) });
+            }}
+          ></div>
         </div>
       </div>
       {#if board}
         <Board {tr} {cards} {move} open={at} close={() => (board = false)} />
       {/if}
     </div>
-    {#if showPdf}
-      <Pdf {tr} result={built} {building} close={() => (showPdf = false)} {goto} />
+    {#if side === "pdf"}
+      <Pdf {tr} result={built} {building} close={() => (side = "")} {goto} />
+    {:else if side === "notes"}
+      <Notes
+        {tr}
+        cards={noteCards}
+        {picked}
+        {authors}
+        bind:draft
+        bind:pasting
+        bind:me
+        pick={pickCard}
+        set={noteSet}
+        add={noteAdd}
+        reply={noteReply}
+        fix={noteFix}
+        paste={notesPaste}
+        fromFile={notesFromFile}
+        close={() => openNotes(false)}
+      />
     {/if}
   </main>
 
@@ -521,6 +696,9 @@
               <tr><td>Enter</td><td>{l("replik sonunda: karşı tarafın repliği", "at a line's end: the other speaker's line")}</td></tr>
               <tr><td>Tab</td><td>{l("konuşmacıdan hemen sonra: sıradaki kişi", "right after the speaker: the next one")}</td></tr>
               <tr><td>\</td><td>{l("bloğu kaynak olarak aç, makro yaz", "open the block as source, write a macro")}</td></tr>
+              <tr><td>Ctrl+N</td><td>{l("notlar paneli", "the notes panel")}</td></tr>
+              <tr><td>Alt+N</td><td>{l("seçili yere ya da kelimeye not", "a note on the selection or the word")}</td></tr>
+              <tr><td>F7</td><td>{l("kâğıt sayfa ya da pencere boyu metin", "a paper sheet, or the text across the window")}</td></tr>
               <tr><td>F2</td><td>{l("bütün kaynak", "all of the source")}</td></tr>
               <tr><td>F6</td><td>{l("tema", "theme")}</td></tr>
               <tr><td>Ctrl+F1</td><td>{l("şeridi katla", "fold the ribbon")}</td></tr>
@@ -547,6 +725,12 @@
     min-height: 0;
     display: grid;
     grid-template-columns: 1fr;
+    /* One row the height of the window: each side scrolls on its own. */
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .body > :global(aside) {
+    min-height: 0;
+    overflow: hidden;
   }
   .body.split {
     grid-template-columns: minmax(0, 1fr) minmax(320px, 40%);
@@ -565,6 +749,16 @@
   }
   .desk.gone {
     visibility: hidden;
+  }
+  .desk.plain {
+    background: var(--page);
+    padding-top: 0;
+  }
+  .desk.plain .page {
+    box-shadow: none;
+    width: auto;
+    max-width: calc(52em * var(--z));
+    min-height: 0;
   }
   .left > :global(.board) {
     position: absolute;
@@ -759,6 +953,18 @@
   .page :global(.cm-raw) {
     background: color-mix(in srgb, var(--selection) 35%, transparent);
     border-radius: 3px;
+  }
+  .page :global(.cm-note) {
+    text-decoration: underline wavy color-mix(in srgb, var(--claret) 70%, transparent);
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
+  .page :global(.cm-note-done) {
+    text-decoration-style: dotted;
+    text-decoration-color: var(--faint);
+  }
+  .page :global(.cm-note-picked) {
+    background: color-mix(in srgb, var(--claret) 18%, transparent);
   }
   .page :global(.cm-chip) {
     cursor: pointer;

@@ -143,7 +143,10 @@ The main app from here on (`app/`: Tauri 2, Svelte 5, CodeMirror 6, on
   next, TeX escapes as typed, zoom of the page alone), the ribbon (key tips
   on Alt, the search box, Dosya's page), the PDF beside the page with a jump
   to a build error's line, the board (scenes and acts dragged, one undo).
-- **B.** The greyed buttons: cast and characters, notes panel, spelling,
+- Notes beside the page (Ctrl+N; Alt+N on the selection; a pasted reply
+  or a file as notes; “wrong” → right applied in one undo); F7 the sheet
+  or the text across the window. The app's mark: a serif D, as Poet's P.
+- **B.** The greyed buttons: cast and characters, spelling,
   search, summaries, split and join, casting, memorize.
 - **C.** Import, drafts and copies, the trash; a play's settings.
 - **D.** An AppImage and an AUR package; the `dactile` command goes to the
