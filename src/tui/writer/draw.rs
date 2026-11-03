@@ -450,11 +450,16 @@ impl Writer {
                         .add_modifier(Modifier::UNDERLINED)
                         .underline_color(p.warn);
                 } else if let Some(b) = c.byte
-                    && self.problems.iter().any(|r| r.span.contains(&b))
+                    && let Some(pr) = self.problems.iter().find(|r| r.span.contains(&b))
                 {
+                    // A brace astray spoils its block: plainly marked.
+                    let brace = matches!(
+                        pr.what,
+                        check::What::Unclosed | check::What::ExtraClose
+                    );
                     style = style
                         .add_modifier(Modifier::UNDERLINED)
-                        .underline_color(p.faint);
+                        .underline_color(if brace { p.warn } else { p.faint });
                 }
                 // A note's place: underlined in its author's colour; the
                 // note chosen in the panel lit.

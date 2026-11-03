@@ -160,7 +160,23 @@ pub fn blocks(text: &str, range: Range<usize>, cast: &Cast) -> Vec<Block> {
         let mut j = i;
         loop {
             let span = start..lines[j].end;
-            let open = depth(&text[span]) > 0;
+            // An open brace runs on, but not into a blank line or a line
+            // that starts a speech, a direction or a heading: a brace left
+            // open by mistake spoils that one block, not all after it.
+            let open = depth(&text[span]) > 0
+                && lines.get(j + 1).is_some_and(|next| {
+                    let t = &text[next.clone()];
+                    !t.trim().is_empty()
+                        && !matches!(
+                            classify(text, next.clone(), cast),
+                            Kind::Line { .. }
+                                | Kind::Do { .. }
+                                | Kind::Move { .. }
+                                | Kind::Act { .. }
+                                | Kind::Scene { .. }
+                                | Kind::Section { .. }
+                        )
+                });
             let joined = speaks && ends_in_comment(&text[lines[j].clone()]);
             let goes_on = line
                 && lines[j + 1..]
@@ -713,6 +729,29 @@ mod tests {
         assert_eq!(&t[speeches[1].span.clone()], "\\se");
         let at = t.find("Bir,").unwrap() + 4;
         assert_eq!(line_breaks(t, speeches[0]), [at]);
+    }
+
+    #[test]
+    fn a_brace_left_open_spoils_one_block() {
+        // Over a plain line it runs on, as TeX reads it; not into the next
+        // speech, a direction or a heading.
+        let t = "\\karakter{SELİN}{se}\n\\karakter{OZAN}{oz}\n\\begin{document}\n#sahne Bir\n\\se Gel! \\ic{kapıyı çalar.\\} Hadi.\n\\oz Kim o?\n\\action{Rüzgâr\nesiyor.}\n\\sedo girer.\n#sahne İki\n\\oz Sabah.\n\\end{document}\n";
+        let (_, b) = body_blocks(t);
+        let kinds: Vec<&str> = b
+            .iter()
+            .filter(|b| !matches!(b.kind, Kind::Blank))
+            .map(|b| match b.kind {
+                Kind::Line { .. } => "line",
+                Kind::Action { .. } => "action",
+                Kind::Do { .. } => "do",
+                Kind::Scene { .. } => "scene",
+                _ => "other",
+            })
+            .collect();
+        assert_eq!(
+            kinds,
+            ["scene", "line", "line", "action", "do", "scene", "line"]
+        );
     }
 
     #[test]
