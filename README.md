@@ -69,6 +69,16 @@ plays live in, your name, and how the suggestion menu opens.
 
 ![Home](docs/home.png)
 
+The home screen is laid out like a word processor's start screen. A column
+on the left goes to Giriş (home), Yeni (new), Aç (open), Ayarlar (settings)
+and Tuşlar (keys); Tab moves between it, the tiles and the list, and the
+mouse works too. Over your plays a row of tiles starts a new one: an empty
+play, a one-act or a three-act skeleton, opening or importing a file, or a
+copy of the example play. Yeni (`n`) shows every template: those four, a
+monologue, a short sketch, and your own. In the writer, File › Save as a
+template keeps a play's cover, cast, acts and scenes, without its lines, in
+`~/.config/dactile/templates`; `d` under Yeni sends one of yours to the trash.
+
 On the home screen `d` copies the chosen play under a new title, and `f`
 starts a new draft of it next to it (`kar-masali-0.2.tex`, the draft number
 one up, the character cards along). Drafts stack up above the play they came
@@ -107,6 +117,7 @@ screen the play's outline sits in the margin; a click goes there.
 
 | Key | |
 |---|---|
+| F10 | the menus along the top: File, Edit, View, Play, Notes, Help; ←→ between them, ⏎ runs an entry, a letter opens a menu; a click works too |
 | ^P | the command palette: everything by name — new scene, themes, page view, animations… |
 | ^O | the cast: edit, rename an alias everywhere, order, character cards; m merges one into another, b splits one, giving the scenes you pick to a new character; g a new group (with its members), t moves a character into a group or out of one, and on a group n adds a member, e renames it, d dissolves it |
 | ^N, Alt+N | notes beside the writing (below); a note on the selection or the word at the cursor |

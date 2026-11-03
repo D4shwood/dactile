@@ -70,6 +70,16 @@ dactile import oyun.docx  # bir belgeden oyun (bkz. İçe aktarma)
 
 ![Ana ekran](docs/home.png)
 
+Ana ekran bir kelime işlemcinin açılış ekranı gibi dizilir. Soldaki sütun
+Giriş, Yeni, Aç, Ayarlar ve Tuşlar bölümlerine götürür; Tab sütun, kutucuklar
+ve liste arasında gezer, fare de çalışır. Oyunların üstündeki kutucuklar yeni
+bir oyun başlatır: boş bir oyun, tek ya da üç perdelik bir iskelet, bir dosya
+açmak ya da içe aktarmak, ya da örnek oyunun bir kopyası. Yeni (`n`) bütün
+şablonları gösterir: bu dördü, bir monolog, kısa bir skeç ve seninkiler.
+Yazıcıda Dosya › Şablon olarak kaydet, bir oyunun kapağını, kişilerini,
+perdelerini ve sahnelerini repliksiz olarak `~/.config/dactile/templates`
+klasörüne yazar; Yeni'de `d` seninkilerden birini çöp kutusuna atar.
+
 Ana ekranda `d` seçili oyunun yeni bir adla kopyasını çıkarır; `f` yanına
 yeni bir taslağını açar (`kar-masali-0.2.tex`: taslak numarası bir artar,
 karakter kartları da gelir). Taslaklar geldikleri oyunun üstünde ağaç gibi
@@ -108,6 +118,7 @@ durur; tıklayınca oraya gider.
 
 | Tuş | |
 |---|---|
+| F10 | üstteki menüler: Dosya, Düzen, Görünüm, Oyun, Notlar, Yardım; ←→ menüler arası, ⏎ seçileni yapar, bir harf o menüyü açar; tıklamak da olur |
 | ^P | komut paleti: her şey adıyla — yeni sahne, temalar, sayfa görünümü, animasyonlar… |
 | ^O | kişiler: düzenle, kısaltmayı her yerde değiştir, sıra, karakter kartları; m birini ötekiyle birleştirir, b birini böler (seçtiğin sahneler yeni karaktere geçer); g yeni grup (üyeleriyle birlikte), t karakteri bir gruba ya da gruptan dışarı taşır, grupta n yeni üye, e grubun adı, d grubu dağıtır |
 | ^N, Alt+N | yazının yanında notlar (aşağıda); seçili söze ya da imleçteki kelimeye not |

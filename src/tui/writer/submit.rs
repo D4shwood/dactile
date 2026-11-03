@@ -239,6 +239,26 @@ impl Writer {
             | FormKind::NoteEdit(_)
             | FormKind::NotesTake(_)
             | FormKind::NotesPath => return self.submit_note(form),
+            FormKind::TemplateName => {
+                let name = form.get("Şablon adı").trim().to_string();
+                if name.is_empty() {
+                    return Err(Box::new((
+                        form,
+                        lang::l("Şablonun bir adı olmalı.", "The template needs a name.").into(),
+                    )));
+                }
+                match dactile::templates::save(&self.buf.text, &name) {
+                    Ok(p) => self.say(
+                        &lang::f(
+                            "Şablon kaydedildi: {} (ana ekranda Yeni'de).",
+                            "Template saved: {} (under New on the home screen).",
+                            &[&dactile::config::tilde(&p)],
+                        ),
+                        false,
+                    ),
+                    Err(e) => self.say(&format!("{e:#}"), true),
+                }
+            }
         }
         Ok(())
     }

@@ -295,6 +295,22 @@ impl Writer {
                 self.take_notes(&text);
             }
             PAct::NotesFile => self.pick_notes_file(),
+            PAct::SaveTemplate => {
+                let title = self.doc.title(&self.buf.text).unwrap_or_default();
+                self.popup = Popup::Form(Form {
+                    kind: FormKind::TemplateName,
+                    title: lang::l(
+                        "şablon olarak kaydet: perdeler, sahneler, kişiler; replikler değil",
+                        "save as a template: acts, scenes, cast; not the lines",
+                    )
+                    .into(),
+                    fields: vec![Field::text("Şablon adı", &title, Vec::new())],
+                    focus: 0,
+                    at: 0..0,
+                    error: None,
+                    confirmed: false,
+                });
+            }
             PAct::About => self.say(
                 &lang::f(
                     "Dactile {} · tiyatro sınıfı {}",

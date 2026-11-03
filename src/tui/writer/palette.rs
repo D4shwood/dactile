@@ -18,6 +18,7 @@ pub enum PAct {
     NotesPaste,
     NotesFile,
     About,
+    SaveTemplate,
 }
 
 /// An entry of the command palette.

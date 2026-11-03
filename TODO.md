@@ -112,7 +112,17 @@ Each milestone ends with a demo and a beta, published once approved.
      the quote is gone.
    - A PDF copy with the open notes in the margin and a list of all of them
      at the end (class 1.6.0).
-7. **M14 1.0** → 1.0.0
+7. ~~**M13b menus and a start screen**~~ Done → 0.2.0-beta.6
+   - The writer's menus along the top (Dosya, Düzen, Görünüm, Oyun, Notlar,
+     Yardım): F10 or the mouse, each entry with its key, a tick for what is
+     on; the palette is made from them.
+   - The home screen as a word processor's start screen: a column (Giriş,
+     Yeni, Aç, Ayarlar, Tuşlar), tiles over the plays (an empty play, two
+     skeletons, open/import, the example).
+   - Templates: four skeletons (one act, three acts, a monologue, a short
+     sketch) and one's own, made from a play ("Save as a template": its
+     shape and cast, not its words) in `~/.config/dactile/templates`.
+8. **M14 1.0** → 1.0.0
    - A bug round; tests for lost work (lock, autosave, trash, renames); speed
      on long plays.
    - Renaming a character in plain text too ("Selin'in" → "Selma'nın",
@@ -144,3 +154,5 @@ Each milestone ends with a demo and a beta, published once approved.
 ## Far off
 
 - Windows, a phone app on the same core
+- To discuss: a desktop app (not in a terminal) on the same core, where the
+  board's cards and the notes could be dragged and dropped

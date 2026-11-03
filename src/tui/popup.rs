@@ -160,6 +160,8 @@ pub enum FormKind {
     NotesTake(Vec<dactile::notes::Note>),
     /// A file of notes, by its path (where no file chooser is).
     NotesPath,
+    /// The play as a template of one's own: its name.
+    TemplateName,
 }
 
 pub struct Field {
@@ -600,6 +602,7 @@ pub fn label_of(key: &str) -> &str {
         "Özet" => "Summary",
         "Başlık" => "Title",
         "Ad" => "Name",
+        "Şablon adı" => "Template name",
         "Kısaltma" => "Alias",
         "Tam ad" => "Full name",
         "Açıklama" => "Description",

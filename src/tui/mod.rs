@@ -78,6 +78,7 @@ pub fn run(start: Start) -> Result<()> {
                         Some(Event::Key(k)) if k.kind != KeyEventKind::Release => {
                             h.key(k, &mut cfg)
                         }
+                        Some(Event::Mouse(m)) => h.mouse(m, &mut cfg),
                         _ => h.tick(),
                     };
                     match action {

@@ -17,6 +17,9 @@ use ratatui::widgets::Paragraph;
 use std::path::{Path, PathBuf};
 use unicode_width::UnicodeWidthStr;
 
+mod start;
+use start::{Focus, Hits, Section};
+
 /// From this width on, the scenes and the voices stand side by side.
 const ANATOMY_WIDE: u16 = 64;
 
@@ -62,8 +65,21 @@ pub struct Home {
     /// When the page of another play came: it unrolls.
     page_born: std::time::Instant,
     page_for: Option<PathBuf>,
-    /// `?`: every key in a window.
-    keys_open: bool,
+    /// The left column's section, where the keys go, and what is chosen
+    /// in each: a tile, a template, an entry under Aç.
+    section: Section,
+    focus: Focus,
+    tile: usize,
+    grid: usize,
+    grid_cols: usize,
+    open_sel: usize,
+    /// What the new play being named starts from.
+    new_from: dactile::templates::Template,
+    templates: Vec<dactile::templates::Template>,
+    hits: Hits,
+    /// Whether the column showed, and where it ends, at the last draw.
+    side_shown: bool,
+    side_right: u16,
     /// `i`: a document being imported.
     importing: Option<super::importing::Importing>,
 }
@@ -110,7 +126,17 @@ impl Home {
             page: None,
             page_born: std::time::Instant::now(),
             page_for: None,
-            keys_open: false,
+            section: Section::Home,
+            focus: Focus::Main,
+            tile: 0,
+            grid: 0,
+            grid_cols: 1,
+            open_sel: 0,
+            new_from: dactile::templates::all(Lang::Tr).swap_remove(0),
+            templates: Vec::new(),
+            hits: Hits::default(),
+            side_shown: false,
+            side_right: 0,
             importing: None,
         };
         h.refresh(cfg);
@@ -174,15 +200,12 @@ impl Home {
             }
             return Action::Stay;
         }
-        if std::mem::take(&mut self.keys_open) {
-            // Any key closes the keys; Esc and ? do nothing else.
-            if matches!(k.code, KeyCode::Esc | KeyCode::Char('?')) {
-                return Action::Stay;
-            }
+        if let Some(a) = self.section_key(k, cfg) {
+            return a;
         }
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
         match k.code {
-            KeyCode::Char('?') => self.keys_open = true,
+            KeyCode::Char('?') => self.go_section(Section::Keys, cfg),
             KeyCode::Char('q') | KeyCode::Esc => return Action::Quit,
             KeyCode::Char('c') if ctrl => return Action::Quit,
             KeyCode::Up => self.sel = self.sel.saturating_sub(1),
@@ -192,7 +215,12 @@ impl Home {
                     return Action::Open(p.path.clone());
                 }
             }
-            KeyCode::Char('n') => self.form = Some(new_play_form()),
+            // Yeni; again, an empty play.
+            KeyCode::Char('n') if self.section == Section::New => {
+                let blank = dactile::templates::all(Lang::Tr).swap_remove(0);
+                return self.start(start::Start::Make(blank), cfg);
+            }
+            KeyCode::Char('n') => self.go_section(Section::New, cfg),
             KeyCode::Char('p') => {
                 if let Some(p) = self.plays.get(self.sel)
                     && let Err(e) = dactile::build::open(&dactile::build::pdf_path(&p.path))
@@ -200,26 +228,9 @@ impl Home {
                     self.message = Some((format!("{e:#}"), true));
                 }
             }
-            KeyCode::Char('o') => {
-                let dir = format!("{}/", config::tilde(&cfg.plays_dir()));
-                self.form = Some(Form {
-                    kind: FormKind::OpenPath,
-                    title: lang::l("dosya aç", "open a file").into(),
-                    fields: vec![Field::text("Dosya", &dir, Vec::new())],
-                    focus: 0,
-                    at: 0..0,
-                    error: None,
-                    confirmed: false,
-                });
-            }
-            KeyCode::Char('i') => {
-                if super::importing::can_choose() {
-                    self.importing = Some(super::importing::pick());
-                } else {
-                    self.form = Some(super::importing::path_form());
-                }
-            }
-            KeyCode::Char('s') => self.form = Some(settings_form(cfg, false)),
+            KeyCode::Char('o') => self.open_form(cfg),
+            KeyCode::Char('i') => self.import(),
+            KeyCode::Char('s') => self.go_section(Section::Settings, cfg),
             KeyCode::F(2) if !k.modifiers.contains(KeyModifiers::SHIFT) => {
                 if let Some(p) = self.plays.get(self.sel) {
                     let raw = dactile::info::get(
@@ -366,6 +377,29 @@ impl Home {
     /// Whether the screen is still typing itself out (the name's cursor
     /// blinks at the slow pace).
     /// What the import waits on, when it comes.
+    /// `o`: a .tex by its path.
+    fn open_form(&mut self, cfg: &Config) {
+        let dir = format!("{}/", config::tilde(&cfg.plays_dir()));
+        self.form = Some(Form {
+            kind: FormKind::OpenPath,
+            title: lang::l("dosya aç", "open a file").into(),
+            fields: vec![Field::text("Dosya", &dir, Vec::new())],
+            focus: 0,
+            at: 0..0,
+            error: None,
+            confirmed: false,
+        });
+    }
+
+    /// `i`: a document, from the desktop's chooser or by its path.
+    fn import(&mut self) {
+        if super::importing::can_choose() {
+            self.importing = Some(super::importing::pick());
+        } else {
+            self.form = Some(super::importing::path_form());
+        }
+    }
+
     pub fn tick(&mut self) -> Action {
         match &mut self.importing {
             Some(imp) => {
@@ -516,12 +550,13 @@ impl Home {
                     "tr" => Lang::Tr,
                     _ => lang::system(),
                 };
-                let text = library::template(&title, &cfg.author, lang);
-                let made = path
-                    .parent()
-                    .map_or(Ok(()), std::fs::create_dir_all)
-                    .map_err(anyhow::Error::from)
-                    .and_then(|_| dactile::file::write_atomic(&path, &text));
+                let made = dactile::templates::make(&self.new_from, &title, &cfg.author, lang)
+                    .and_then(|text| {
+                        path.parent()
+                            .map_or(Ok(()), std::fs::create_dir_all)
+                            .map_err(anyhow::Error::from)
+                            .and_then(|_| dactile::file::write_atomic(&path, &text))
+                    });
                 match made {
                     Ok(()) => Action::Open(path),
                     Err(e) => {
@@ -905,12 +940,26 @@ impl Home {
                 height: 1,
             },
         );
-        let body = Rect {
+        let whole = Rect {
             x: side,
             y: area.y + 5,
             width: inner_w,
             height: area.height.saturating_sub(9),
         };
+        let (col, mut body) = self.split(whole);
+        self.side_shown = col.is_some();
+        self.side_right = body.x;
+        match col {
+            Some(col) => self.draw_side(f, col),
+            None => self.hits.side.clear(),
+        }
+        if self.side_shown && self.section != Section::Home {
+            self.draw_section(f, body, cfg);
+        } else if !self.first_run {
+            body = self.draw_tiles(f, body);
+        }
+        // The page beside the list, under the tiles.
+        let page_top = body.y;
         if self.first_run {
             let hello = lang::l(
                 "Hoş geldin. Önce birkaç şey: dil, oyunların duracağı klasör ve adın.",
@@ -920,6 +969,7 @@ impl Home {
                 Paragraph::new(hello).style(theme::base().fg(MUTED)),
                 Rect { height: 1, ..body },
             );
+        } else if self.side_shown && self.section != Section::Home {
         } else if self.plays.is_empty() {
             let lines = vec![
                 Line::from(Span::styled(
@@ -949,11 +999,7 @@ impl Home {
         } else {
             // The list, and the chosen play's first page when there is room,
             // as tall as the screen.
-            let page_w = if body.width >= 90 {
-                (body.width * 42 / 100).clamp(44, 64)
-            } else {
-                0
-            };
+            let page_w = page_width(body.width);
             let mut list = Rect {
                 width: body
                     .width
@@ -1000,9 +1046,9 @@ impl Home {
                 let page = Rect {
                     x: body.x + body.width - page_w,
                     width: page_w,
-                    y: area.y + 5,
+                    y: page_top,
                     // Its shadow ends above the message line.
-                    height: area.height.saturating_sub(8),
+                    height: (area.y + area.height).saturating_sub(3 + page_top),
                 };
                 let path = self.plays.get(self.sel).map(|p| p.path.clone());
                 if path != self.page_for {
@@ -1053,6 +1099,10 @@ impl Home {
         } else {
             &[
                 ("⏎", lang::l("aç", "open")),
+                (
+                    "Tab",
+                    lang::l("sütun · kutucuklar · liste", "column · tiles · list"),
+                ),
                 ("n", lang::l("yeni oyun", "new play")),
                 ("i", lang::l("içe aktar", "import")),
                 ("f", lang::l("yeni taslak", "new draft")),
@@ -1077,9 +1127,6 @@ impl Home {
                 height: 1,
             },
         );
-        if self.keys_open {
-            draw_keys(f, area);
-        }
         if let Some(imp) = &self.importing {
             imp.draw(f, area);
         }
@@ -1088,7 +1135,17 @@ impl Home {
             let opens = std::time::Duration::from_millis(160);
             let before = (cfg.animations && self.form_born.elapsed() < opens)
                 .then(|| f.buffer_mut().clone());
-            popup::draw_form(f, area, form);
+            // The settings stand in their section, right of the column.
+            let room = if self.side_shown && self.section == Section::Settings {
+                Rect {
+                    x: self.side_right,
+                    width: area.width.saturating_sub(self.side_right + side),
+                    ..area
+                }
+            } else {
+                area
+            };
+            popup::draw_form(f, room, form);
             if let Some(before) = before {
                 super::anim::unroll(f.buffer_mut(), &before, self.form_born, opens);
             }
@@ -1406,10 +1463,13 @@ impl Home {
 
     /// The plays, two rows each: the title and when, then who and how long.
     /// A play's drafts stand above it as a tree.
-    fn draw_list(&self, f: &mut Frame, area: Rect) {
+    fn draw_list(&mut self, f: &mut Frame, area: Rect) {
         let per = 3usize;
         let rows = (area.height as usize / per).max(1);
         let start = self.sel.saturating_sub(rows.saturating_sub(1));
+        self.hits.list = (start..self.plays.len().min(start + rows))
+            .map(|i| (area.y + ((i - start) * per) as u16, per as u16, i))
+            .collect();
         let guide = Style::default().fg(FAINT);
         let mut lines = Vec::new();
         for (i, p) in self.plays.iter().enumerate().skip(start).take(rows) {
@@ -1547,10 +1607,23 @@ impl Home {
 /// The chosen play's cover in miniature, on a page like the writer's, with
 /// its numbers under it.
 /// `?`: every key of the home screen.
+/// The width of the chosen play's page, none where the screen is narrow.
+fn page_width(w: u16) -> u16 {
+    if w >= 90 {
+        (w * 42 / 100).clamp(44, 64)
+    } else {
+        0
+    }
+}
+
 fn draw_keys(f: &mut Frame, area: Rect) {
-    let keys: [(&str, &str, &str); 13] = [
+    let keys: [(&str, &str, &str); 14] = [
         ("⏎", "oyunu aç", "open the play"),
-        ("n", "yeni oyun", "a new play"),
+        (
+            "n",
+            "yeni: şablonlar; iki kez boş oyun",
+            "new: the templates; twice, empty",
+        ),
         (
             "i",
             "Word, LibreOffice, PDF ya da metin belgesini içe aktar",
@@ -1573,6 +1646,7 @@ fn draw_keys(f: &mut Frame, area: Rect) {
         ("Del Del", "çöp kutusuna", "to the trash"),
         ("u", "çöpten geri getir", "back from the trash"),
         ("s", "ayarlar", "settings"),
+        ("Tab", "sütun, kutucuklar, liste", "column, tiles, list"),
         ("q", "çık", "quit"),
     ];
     let w = 46u16.min(area.width.saturating_sub(4));

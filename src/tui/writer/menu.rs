@@ -81,6 +81,12 @@ pub fn menus() -> Vec<MenuDef> {
                     "",
                     PAct::NotesPdf,
                 ),
+                it(
+                    "Şablon olarak kaydet",
+                    "Save as a template",
+                    "",
+                    PAct::SaveTemplate,
+                ),
                 None,
                 it("Çık", "Quit", "^Q", k(Char('q'), c)),
             ],
