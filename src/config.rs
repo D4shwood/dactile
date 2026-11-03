@@ -34,11 +34,6 @@ pub struct Config {
     pub pages: bool,
     /// The writer's ribbon folded to its tabs.
     pub ribbon_folded: bool,
-    /// The writer's zoom, in percent of the terminal's font (Konsole).
-    pub zoom: u16,
-    /// The terminal's font when not zoomed, "Family,size"; empty: found
-    /// in Konsole's and KDE's settings.
-    pub font: String,
     /// The keyboard drawn on the help screen: "q" (Turkish Q), "f" (Turkish
     /// F) or "us".
     pub keyboard: String,
@@ -62,8 +57,6 @@ impl Default for Config {
             animations: true,
             pages: false,
             ribbon_folded: false,
-            zoom: 100,
-            font: String::new(),
             keyboard: "q".into(),
             recent: Vec::new(),
         }

@@ -378,7 +378,6 @@ impl Writer {
             animations: self.animations,
             pages: self.pages,
             ribbon_folded: self.ribbon_folded,
-            zoom: self.zoom,
         }
     }
 
@@ -394,45 +393,5 @@ impl Writer {
         }
         let _ = file::snapshot(&self.history, &self.buf.text, true);
         Ok(())
-    }
-}
-
-impl Writer {
-    /// The writer's zoom on the terminal's font, as it was left.
-    pub fn zoom_in(&self) {
-        if self.zoom != 100 {
-            crate::tui::zoom::apply(self.zoom, &self.zoom_base);
-        }
-    }
-
-    /// The terminal's font as it was, leaving the writer.
-    pub fn zoom_out(&self) {
-        if self.zoom != 100 {
-            crate::tui::zoom::apply(100, &self.zoom_base);
-        }
-    }
-
-    /// Alt++, Alt+-, Alt+0: the font bigger, smaller, as it was.
-    pub(super) fn zoom(&mut self, dir: i8) {
-        if !crate::tui::zoom::supported() {
-            self.say(
-                lang::l(
-                    "Yakınlaştırma yalnız Konsole'da; başka terminalde kendi ^+ / ^- tuşları.",
-                    "Zoom works in Konsole only; elsewhere use the terminal's own ^+ / ^-.",
-                ),
-                true,
-            );
-            return;
-        }
-        self.zoom = crate::tui::zoom::step(self.zoom, dir);
-        crate::tui::zoom::apply(self.zoom, &self.zoom_base);
-        self.say(
-            &lang::f(
-                "Yakınlaştırma %{} · Alt++ büyüt, Alt+- küçült, Alt+0 eski hali",
-                "Zoom {}% · Alt++ bigger, Alt+- smaller, Alt+0 as it was",
-                &[&self.zoom],
-            ),
-            false,
-        );
     }
 }

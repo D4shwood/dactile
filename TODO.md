@@ -118,8 +118,6 @@ Each milestone ends with a demo and a beta, published once approved.
      the arrows, the mouse; folds with ^F1; Dosya is a page of its own
      (the play's details, PDF, copies, templates); quick access and a
      command search on the tabs' row; the palette is made from it.
-   - Zoom in the writer (Alt++, Alt+-, Alt+0): Konsole's font through its
-     profile escape, put back on leaving the writer.
    - The home screen as a word processor's start screen: a column (Giriş,
      Yeni, Aç, Ayarlar, Tuşlar), tiles over the plays (an empty play, two
      skeletons, open/import, the example).
