@@ -11,6 +11,7 @@ mod popup;
 mod roles;
 mod theme;
 mod writer;
+mod zoom;
 
 use anyhow::Result;
 use dactile::config::Config;
@@ -110,6 +111,7 @@ pub fn run(start: Start) -> Result<()> {
                             continue;
                         }
                         let _ = remember(w, &mut cfg);
+                        w.zoom_out();
                         if direct {
                             return Ok(());
                         }
@@ -126,6 +128,9 @@ pub fn run(start: Start) -> Result<()> {
         let _ = w.close();
         let _ = remember(w, &mut cfg);
     }
+    if let Screen::Writer(w) = &screen {
+        w.zoom_out();
+    }
     let _ = execute!(stdout(), DisableBracketedPaste, DisableMouseCapture);
     ratatui::restore();
     result
@@ -133,6 +138,7 @@ pub fn run(start: Start) -> Result<()> {
 
 fn open(path: &Path, cfg: &mut Config) -> Result<Writer> {
     let w = Writer::open(path, cfg)?;
+    w.zoom_in();
     cfg.opened(path);
     let _ = cfg.save();
     Ok(w)
@@ -149,5 +155,6 @@ fn remember(w: &Writer, cfg: &mut Config) -> Result<()> {
     cfg.animations = v.animations;
     cfg.pages = v.pages;
     cfg.ribbon_folded = v.ribbon_folded;
+    cfg.zoom = v.zoom;
     cfg.save()
 }

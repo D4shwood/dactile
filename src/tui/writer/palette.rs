@@ -26,6 +26,8 @@ pub enum PAct {
     FoldRibbon,
     /// Dosya's page, on the play's details.
     Info,
+    /// Bigger (1), smaller (-1), as it was (0).
+    Zoom(i8),
 }
 
 /// An entry of the command palette.

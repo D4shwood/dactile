@@ -146,6 +146,9 @@ pub struct Writer {
     ribbon_hits: Vec<(Rect, ribbon::Hit)>,
     ribbon_tab: usize,
     ribbon_folded: bool,
+    /// Percent of the terminal's font, and that font unzoomed.
+    zoom: u16,
+    zoom_base: (String, f32),
     /// Acts and scenes marked to hide or throw away, by where they start.
     /// Any edit clears them.
     marks: std::collections::BTreeSet<usize>,
@@ -223,6 +226,7 @@ pub struct View {
     pub pages: bool,
     pub animations: bool,
     pub ribbon_folded: bool,
+    pub zoom: u16,
 }
 
 /// What a build beside the play made: where, and how many PDFs.
@@ -362,6 +366,8 @@ impl Writer {
             ribbon_hits: Vec::new(),
             ribbon_tab: 1,
             ribbon_folded: cfg.ribbon_folded,
+            zoom: cfg.zoom,
+            zoom_base: super::zoom::base(&cfg.font),
             marks: Default::default(),
             trash: Vec::new(),
             menu_manual: cfg.menu == "manual",

@@ -299,6 +299,7 @@ impl Writer {
             PAct::InsertInline(s) => self.insert_snippet(s, false),
             PAct::FoldRibbon => self.fold_ribbon(),
             PAct::Info => self.popup = Popup::Backstage(0),
+            PAct::Zoom(dir) => self.zoom(dir),
             PAct::SaveTemplate => {
                 let title = self.doc.title(&self.buf.text).unwrap_or_default();
                 self.popup = Popup::Form(Form {

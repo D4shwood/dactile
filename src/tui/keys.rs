@@ -289,6 +289,14 @@ pub const BINDS: &[Bind] = &[
         "dim all but the cursor's line; Shift+F8: the cursor's role lit, the rest faint",
     ),
     b(
+        "Alt",
+        false,
+        false,
+        Cat::View,
+        "Alt++ / Alt+- / Alt+0: yazıcıda yazıyı büyüt, küçült, eski haline getir (Konsole)",
+        "Alt++ / Alt+- / Alt+0: the writer's text bigger, smaller, as it was (Konsole)",
+    ),
+    b(
         "F10",
         false,
         false,

@@ -253,6 +253,15 @@ pub fn tabs() -> Vec<Tab> {
                         b("Şeridi katla", "Fold ribbon", "⌃", "^F1", PAct::FoldRibbon),
                     ],
                 ),
+                g(
+                    "Yakınlaştırma",
+                    "Zoom",
+                    vec![
+                        b("Büyüt", "Bigger", "⊕", "Alt++", PAct::Zoom(1)),
+                        b("Küçült", "Smaller", "⊖", "Alt+-", PAct::Zoom(-1)),
+                        b("%100", "100%", "⊙", "Alt+0", PAct::Zoom(0)),
+                    ],
+                ),
             ],
         },
         Tab {
