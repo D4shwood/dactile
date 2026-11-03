@@ -120,6 +120,7 @@ impl Writer {
                 );
             }
             KeyCode::F(5) => self.build(),
+            KeyCode::F(10) => self.open_bar(0),
             KeyCode::F(8) if shift => self.toggle_role_view(),
             KeyCode::F(8) => {
                 self.dim = !self.dim;

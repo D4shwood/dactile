@@ -289,6 +289,14 @@ pub const BINDS: &[Bind] = &[
         "dim all but the cursor's line; Shift+F8: the cursor's role lit, the rest faint",
     ),
     b(
+        "F10",
+        false,
+        false,
+        Cat::File,
+        "menüler: Dosya, Düzen, Görünüm, Oyun, Notlar, Yardım; fareyle de",
+        "the menus: File, Edit, View, Play, Notes, Help; by mouse too",
+    ),
+    b(
         "F9",
         false,
         false,

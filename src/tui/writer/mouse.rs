@@ -4,6 +4,10 @@ use super::*;
 
 impl Writer {
     pub fn mouse(&mut self, m: MouseEvent) {
+        // The menus along the top, and the one open.
+        if matches!(self.popup, Popup::None | Popup::Bar(_)) && self.bar_mouse(m) {
+            return;
+        }
         // On the help screen the mouse points at keys.
         if let Popup::Help(h) = &mut self.popup {
             if matches!(m.kind, MouseEventKind::Moved | MouseEventKind::Down(_)) {

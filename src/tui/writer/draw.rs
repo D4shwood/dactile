@@ -1,6 +1,7 @@
 //! Drawing the writer.
 
 use super::*;
+use unicode_width::UnicodeWidthStr;
 
 impl Writer {
     pub(super) fn keep_visible(&mut self) {
@@ -174,6 +175,10 @@ impl Writer {
             }
             // Drawn below: it keeps where its caps are, for the mouse.
             Popup::Help(_) => {}
+            Popup::Bar(bar) => {
+                let bar = *bar;
+                self.draw_bar(f, area, bar);
+            }
             Popup::Palette(q, sel) => {
                 let items = palette_items(q);
                 panels::draw_palette(f, area, q, &items, *sel);
@@ -223,16 +228,19 @@ impl Writer {
         } else {
             Span::styled(lang::l("kaydedildi ", "saved "), Style::default().fg(FAINT))
         };
-        let left = Line::from(vec![
-            Span::styled(" dactile", Style::default().fg(MUTED)),
-            Span::styled(" — ", Style::default().fg(FAINT)),
-            Span::styled(
-                title,
-                Style::default().fg(BEIGE).add_modifier(Modifier::BOLD),
-            ),
-        ]);
-        f.render_widget(Paragraph::new(left).style(theme::base()), area);
         let w = state.content.chars().count() as u16;
+        // The menus, then the title in what is left before the state.
+        let mut spans = self.bar_titles();
+        let used: usize = spans.iter().map(|s| s.content.width()).sum();
+        let room = (area.width as usize).saturating_sub(used + w as usize + 6);
+        if room > 4 {
+            spans.push(Span::styled("  — ", Style::default().fg(FAINT)));
+            spans.push(Span::styled(
+                popup::fit(&title, room),
+                Style::default().fg(BEIGE).add_modifier(Modifier::BOLD),
+            ));
+        }
+        f.render_widget(Paragraph::new(Line::from(spans)).style(theme::base()), area);
         let right = Rect {
             x: area.x + area.width.saturating_sub(w),
             width: w.min(area.width),
@@ -369,6 +377,7 @@ impl Writer {
                 | Popup::Help(_)
                 | Popup::Form(_)
                 | Popup::Search(..)
+                | Popup::Bar(_)
         );
         let cursor = self.cursor_stop().filter(|c| {
             !covered && c.row >= self.shown && c.row < self.shown + area.height as usize
@@ -662,6 +671,7 @@ impl Writer {
         // (key, what, how much it matters): the least needed go first when
         // the screen is narrow.
         let keys = [
+            ("F10", lang::l("menü", "menu"), 9),
             ("F1", lang::l("yardım", "help"), 9),
             ("^P", lang::l("komutlar", "commands"), 8),
             ("\\", lang::l("öneri", "suggest"), 7),

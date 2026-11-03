@@ -286,6 +286,23 @@ impl Writer {
             }
             PAct::Board => self.open_board(),
             PAct::NotesPdf => self.notes_pdf(),
+            PAct::NotesPaste => {
+                let text = self
+                    .clipboard
+                    .as_mut()
+                    .and_then(|c| c.get_text().ok())
+                    .unwrap_or_else(|| self.copied.clone());
+                self.take_notes(&text);
+            }
+            PAct::NotesFile => self.pick_notes_file(),
+            PAct::About => self.say(
+                &lang::f(
+                    "Dactile {} · tiyatro sınıfı {}",
+                    "Dactile {} · the tiyatro class {}",
+                    &[&env!("CARGO_PKG_VERSION"), &dactile::class::version()],
+                ),
+                false,
+            ),
             PAct::Memorize => match self.block().and_then(|b| self.doc.speaker(b)) {
                 Some(a) => self.open_memo(a.to_string(), false),
                 None => self.say(

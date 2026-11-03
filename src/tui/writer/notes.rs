@@ -639,7 +639,7 @@ impl Writer {
     }
 
     /// Notes out of a pasted reply or a file: asked who they are from.
-    fn take_notes(&mut self, text: &str) {
+    pub(super) fn take_notes(&mut self, text: &str) {
         let looks_ours = text
             .lines()
             .any(|l| l.starts_with("- [") || l.starts_with("* ["));
@@ -691,7 +691,7 @@ impl Writer {
     }
 
     /// `i`: a file of notes, from the desktop's chooser or by its path.
-    fn pick_notes_file(&mut self) {
+    pub(super) fn pick_notes_file(&mut self) {
         if !super::super::importing::can_choose() {
             self.popup = Popup::Form(self.notes_path_form());
             return;

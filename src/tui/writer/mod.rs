@@ -5,6 +5,7 @@ mod casting;
 mod draw;
 mod find;
 mod forms;
+mod menu;
 mod mouse;
 mod notes;
 mod palette;
@@ -140,6 +141,9 @@ pub struct Writer {
     keyboard: String,
     /// The margin map's rows on screen and the block each one opens.
     map_hits: Vec<(u16, usize)>,
+    /// The open menu's rows on screen, and its box, for the mouse.
+    bar_hits: Vec<(u16, usize)>,
+    bar_rect: Rect,
     /// Acts and scenes marked to hide or throw away, by where they start.
     /// Any edit clears them.
     marks: std::collections::BTreeSet<usize>,
@@ -257,6 +261,8 @@ enum Popup {
     Roles,
     /// Learning a role by heart.
     Memorize(Memo),
+    /// F10: a menu of the top row open.
+    Bar(menu::Bar),
 }
 
 impl Writer {
@@ -348,6 +354,8 @@ impl Writer {
             eat_space: false,
             keyboard: cfg.keyboard.clone(),
             map_hits: Vec::new(),
+            bar_hits: Vec::new(),
+            bar_rect: Rect::default(),
             marks: Default::default(),
             trash: Vec::new(),
             menu_manual: cfg.menu == "manual",
