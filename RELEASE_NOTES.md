@@ -1,4 +1,4 @@
-The fifth beta of Dactile 0.2, a terminal app for writing stage plays in the
+The sixth beta of Dactile 0.2, a terminal app for writing stage plays in the
 syntax of the tiyatro XeLaTeX class. Linux x86_64 only for now.
 
 ```sh
@@ -7,52 +7,53 @@ cd dactile-*-x86_64-linux
 ./dactile install
 ```
 
-## New since 0.2.0-beta.4
+## New since 0.2.0-beta.5
 
-**Import a play**
-- `i` on the home screen opens the desktop's file chooser (or asks for a
-  path where there is none); `dactile import FILE` does it from the shell.
-- Reads Word (.docx), OpenDocument (.odt), PDF with text in it, Markdown and
-  plain text, with nothing else installed. PDFs go through `pdftotext` where
-  it is installed, which keeps the layout better.
-- Finds the speeches written as `NAME: text`, `NAME — text`, `NAME. text` or
-  the name alone on its line; the cast list, acts and scenes, the title and
-  the author; italics become stage directions. What it doesn't recognise
-  stays as plain text.
-- PDFs lose their running heads, page numbers and margin line numbers, and
-  wrapped lines are joined again; short lines, as in verse, are kept.
-- Before writing the play, a preview shows every name with its alias, its
-  number of lines and its first line: rename it, change the alias, merge two
-  names into one, or mark one as not a character.
-- Scanned PDFs, which need OCR, are not read yet.
+**Notes beside the play**
+- ^N shows notes on the right, from anyone: an AI, a workshop, a reader,
+  yourself. They live in `oyun.notlar.md` beside the play, a Markdown task
+  list you can edit by hand.
+- Paste a reply with numbered items (`139: …`), read a file, or write a note
+  on the selection (Alt+N). Each note finds its place again by what it
+  quotes, underlined in its author's colour.
+- Mark notes done, hide, archive, reply, edit. `u` makes a
+  `“wrong” → right` correction, changing only the words that differ, and
+  never one that would break the play; a note whose quote is gone looks
+  fixed.
+- A PDF copy with the open notes in the margin and a list of all of them at
+  the end (class 1.6.0).
 
-**Line breaks in print**
-- The class (now 1.5.0) breaks a speech where its line ends in the source,
-  as a word processor does with Enter. A blank line, a `#` heading or a
-  command on the next line still ends the speech; `\\` at a line end is not
-  doubled.
+**A ribbon in the writer**
+- Along the top, as in a word processor: Dosya, Giriş, Ekle, Görünüm, Oyun,
+  Notlar, Yardım, each tab's buttons in groups with their keys.
+- F10 shows a letter on each tab and then each button, so two letters do
+  anything (F10 E A puts in a stage direction); the arrows and the mouse
+  work too. ^F1 folds it to its tabs.
+- Ekle puts in acts, scenes, characters, directions, a pause, a preface,
+  director's notes. Dosya opens a page with the play's details, the PDF,
+  the copies and templates.
 
-**Lost work and safety**
-- Every save, the autosave too, looks at the disk just before: it never
-  writes over a change made elsewhere that it hasn't seen, and a save over
-  one keeps the other version in the history first.
-- A save that fails on quit keeps the writer open with the play in it.
-- Notes (`.dactile.toml`) that can't be read are moved aside, not saved
-  over.
-- XeLaTeX runs without shell escape; the lock between two Dactiles is made
-  atomically and taken over with ^S twice.
+**A start screen and templates**
+- The home screen has a column (Giriş, Yeni, Aç, Ayarlar, Tuşlar) and a row
+  of tiles over the plays: an empty play, a one-act and a three-act
+  skeleton, open or import, a copy of the example play. The mouse works.
+- Four skeletons (one act, three acts, a monologue, a short sketch), and
+  your own: Dosya › Save as a template keeps a play's cover, cast, acts and
+  scenes, not its lines.
+
+**Fixes**
+- A brace left open spoils only its own block, not the rest of the play.
 
 It is a beta: keep a copy of anything precious, and report what breaks.
 
 ---
 
-Dactile 0.2'nin beşinci betası. Artık oyun içe aktarılabiliyor: ana ekranda
-`i` (ya da `dactile import DOSYA`) Word, OpenDocument, metinli PDF, Markdown
-ve düz metin dosyalarını oyuna çeviriyor; ek bir şey kurmak gerekmiyor.
-Replikler (`İSİM: metin`, `İSİM — metin`, `İSİM. metin`, ya da ad tek
-satırda), kişiler listesi, perde ve sahneler, başlık ve yazar tanınıyor;
-italikler yönerge oluyor. Yazmadan önce bir önizlemede adlar düzeltilebiliyor,
-birleştirilebiliyor ya da "karakter değil" diye işaretlenebiliyor. Taranmış
-PDF'ler (OCR) henüz okunmuyor. Sınıf 1.5.0: replik içindeki satır sonu,
-Word'deki Enter gibi baskıda da satırı kırıyor. Kaydetme artık başka yerde
-yapılmış bir değişikliğin üstüne yazmıyor; okunamayan notlar kenara alınıyor.
+Dactile 0.2'nin altıncı betası. Oyunun yanında notlar: ^N bir AI'dan,
+atölyeden, okurdan ya da kendinden gelen notları sağda gösteriyor; notlar
+oyunun yanındaki `oyun.notlar.md` dosyasında duruyor. `u` bir notun
+`“yanlış” → doğru` düzeltmesini yapıyor, oyunu bozacak bir düzeltmeyi hiç
+yapmıyor; notlu bir PDF kopyası da çıkıyor (sınıf 1.6.0). Yazıcıda Word'deki
+gibi bir şerit var: sekmeler, gruplanmış düğmeler, F10 ile harf kısayolları,
+fare; ^F1 katlıyor. Ana ekran bir açılış ekranı oldu: solda bir sütun,
+oyunların üstünde yeni oyun kutucukları; dört hazır şablon ve "Şablon olarak
+kaydet" ile kendi şablonların.
