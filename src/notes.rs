@@ -771,7 +771,9 @@ impl Index {
             // A note quoting the source as it is (`\\ic{…}`, a brace) gives
             // its correction as source too: written as it stands. Plain
             // words get TeX's special characters escaped.
-            let source = ['\\', '{', '}'].iter().any(|c| f.from.contains(*c) || f.to.contains(*c));
+            let source = ['\\', '{', '}']
+                .iter()
+                .any(|c| f.from.contains(*c) || f.to.contains(*c));
             let to = if source {
                 to
             } else {
@@ -786,6 +788,73 @@ impl Index {
         }
         out
     }
+}
+
+/// Why a note's correction is not made.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Refused {
+    /// It suggests none (no `→`).
+    Nothing,
+    /// The words to change aren't in the text.
+    NotFound,
+    /// Made, it would break the play: what would go wrong, and where.
+    Breaks { what: String, line: usize },
+}
+
+/// The note's corrections, only if the play comes out of them as sound as
+/// it went in: no brace left open or astray, no command or character TeX
+/// would stop at that wasn't there before, every speech, direction and
+/// heading where it was. A correction is words for words; one that would
+/// change what TeX reads is refused, never half made.
+pub fn checked_fixes(text: &str, note: &Note) -> Result<Vec<Edit>, Refused> {
+    if note.fixes().is_empty() {
+        return Err(Refused::Nothing);
+    }
+    let edits = Index::new(text).fix_edits(note);
+    if edits.is_empty() {
+        return Err(Refused::NotFound);
+    }
+    let after = crate::tex::apply(text, &edits);
+    let sound = |t: &str| {
+        let doc = crate::render::Doc::new(t);
+        let known = crate::check::known(t, &doc);
+        let problems = crate::check::problems(t, &doc, &known);
+        let kinds: Vec<std::mem::Discriminant<crate::lex::Kind>> = doc
+            .blocks
+            .iter()
+            .map(|b| std::mem::discriminant(&b.kind))
+            .collect();
+        (problems, kinds)
+    };
+    let (before_p, before_k) = sound(text);
+    let (after_p, after_k) = sound(&after);
+    // A problem of a kind there is more of now than before.
+    let count = |ps: &[crate::check::Problem], w: &crate::check::What| {
+        ps.iter()
+            .filter(|p| std::mem::discriminant(&p.what) == std::mem::discriminant(w))
+            .count()
+    };
+    if let Some(p) = after_p
+        .iter()
+        .find(|p| count(&after_p, &p.what) > count(&before_p, &p.what))
+    {
+        return Err(Refused::Breaks {
+            what: p.message(),
+            line: after[..p.span.start].matches('\n').count() + 1,
+        });
+    }
+    if before_k != after_k {
+        let at = edits.iter().map(|e| e.range.start).min().unwrap_or(0);
+        return Err(Refused::Breaks {
+            what: crate::lang::l(
+                "oyunun yapısı değişirdi (bir replik, yönerge ya da başlık)",
+                "the play's shape would change (a speech, a direction or a heading)",
+            )
+            .into(),
+            line: text[..at].matches('\n').count() + 1,
+        });
+    }
+    Ok(edits)
 }
 
 /// The part of `from` (folded) that `to` changes, as folded byte offsets,

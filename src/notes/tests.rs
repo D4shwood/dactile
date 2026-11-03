@@ -237,7 +237,10 @@ fn a_correction_in_source_stays_source() {
     let out = crate::tex::apply(
         play,
         &[
-            ix.fix_edits(&note(1, "“çalar.}Mustafa gelir.” → “çalar.} Mustafa gelir.”")),
+            ix.fix_edits(&note(
+                1,
+                "“çalar.}Mustafa gelir.” → “çalar.} Mustafa gelir.”",
+            )),
             ix.fix_edits(&note(2, "“\\ic{gülümser.}. Gel” → “\\ic{gülümser.} Gel”")),
             ix.fix_edits(&note(3, "“Yüzde 50 kaldı” → “yüzde 50% kaldı”")),
         ]
@@ -246,4 +249,61 @@ fn a_correction_in_source_stays_source() {
     assert!(out.contains("\\ic{kapıyı çalar.} Mustafa gelir."), "{out}");
     assert!(out.contains("\\ic{gülümser.} Gel."), "{out}");
     assert!(out.contains("\\ma yüzde 50\\% kaldı."), "{out}");
+}
+
+/// What happened on a real play, made up again: an AI quoting the source,
+/// braces and all, and corrections that, made blindly, would break it.
+#[test]
+fn a_correction_never_breaks_the_play() {
+    let play = "\\documentclass{tiyatro}\n\\karakter{LAYLA}{la}\n\\karakter{MUSTAFA}{mus}\n\\begin{document}\n#sahne Bir\n\n\\la Gel! \\ic{kapıyı çalar, devam ediyordur.}Mustafa gelir.\n\\mus İyiyim \\ic{öyle gözükmüyordur.}. Üstüme geldiler.\n\\la Yüzde 50 kaldı.\n\n#sahne İki\n\n\\mus Sabah.\n\\end{document}\n";
+    let note = |line: usize, t: &str| Note {
+        line: Some(line),
+        text: t.into(),
+        ..Note::default()
+    };
+    let made = |n: &Note| crate::tex::apply(play, &checked_fixes(play, n).unwrap());
+    // Source for source: braces stay braces.
+    let out = made(&note(
+        7,
+        "“devam ediyordur.}Mustafa gelir.” → “devam ediyordur.} Mustafa gelir.”",
+    ));
+    assert!(
+        out.contains("\\ic{kapıyı çalar, devam ediyordur.} Mustafa gelir."),
+        "{out}"
+    );
+    let out = made(&note(
+        8,
+        "“\\ic{öyle gözükmüyordur.}. Üstüme” → “\\ic{öyle gözükmüyordur.} Üstüme”",
+    ));
+    assert!(
+        out.contains("\\ic{öyle gözükmüyordur.} Üstüme geldiler."),
+        "{out}"
+    );
+    // Words for words: escaped as typing would.
+    let out = made(&note(9, "“Yüzde 50 kaldı” → “yüzde 50% kaldı”"));
+    assert!(out.contains("\\la yüzde 50\\% kaldı."), "{out}");
+    // A brace lost, a brace too many, a command nobody knows, a speech
+    // gone: refused, the play untouched.
+    for (line, bad) in [
+        (
+            8,
+            "“\\ic{öyle gözükmüyordur.}” → “\\ic{öyle gözükmüyordur.”",
+        ),
+        (7, "“Gel!” → “Gel! }”"),
+        (7, "“Gel!” → “\\gel{} Gel!”"),
+        (13, "“\\mus Sabah.” → “Sabah.”"),
+    ] {
+        match checked_fixes(play, &note(line, bad)) {
+            Err(Refused::Breaks { line: at, .. }) => assert!(at > 0),
+            other => panic!("{bad}: {other:?}"),
+        }
+    }
+    assert_eq!(
+        checked_fixes(play, &note(7, "kim gelir?")),
+        Err(Refused::Nothing)
+    );
+    assert_eq!(
+        checked_fixes(play, &note(7, "“Gitti” → Geldi")),
+        Err(Refused::NotFound)
+    );
 }

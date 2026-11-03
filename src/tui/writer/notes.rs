@@ -489,22 +489,30 @@ impl Writer {
     /// `u`: the note's corrections made, the note done.
     fn apply_note(&mut self, i: usize) {
         let note = self.notes.list[i].clone();
-        let edits = self.places().index.fix_edits(&note);
-        if edits.is_empty() {
-            let msg = if self.notes.list[i].fixes().is_empty() {
-                lang::l(
-                    "Bu notta uygulanacak öneri yok (“yanlış” → doğru gibi).",
-                    "This note suggests nothing to apply (“wrong” → right).",
-                )
-            } else {
-                lang::l(
-                    "Önerinin yanlışı metinde bulunamadı: belki düzeltilmiş.",
-                    "The words to change aren't in the text: put right already?",
-                )
-            };
-            self.say(msg, true);
-            return;
-        }
+        let edits = match dnotes::checked_fixes(&self.buf.text, &note) {
+            Ok(e) => e,
+            Err(r) => {
+                let msg = match r {
+                    dnotes::Refused::Nothing => lang::l(
+                        "Bu notta uygulanacak öneri yok (“yanlış” → doğru gibi).",
+                        "This note suggests nothing to apply (“wrong” → right).",
+                    )
+                    .to_string(),
+                    dnotes::Refused::NotFound => lang::l(
+                        "Önerinin yanlışı metinde bulunamadı: belki düzeltilmiş.",
+                        "The words to change aren't in the text: put right already?",
+                    )
+                    .to_string(),
+                    dnotes::Refused::Breaks { what, line } => lang::f(
+                        "Uygulanmadı: {}. satırda {} Elle düzelt (e ile notu da).",
+                        "Not applied: at line {}, {} Fix it by hand (e edits the note).",
+                        &[&line, &what],
+                    ),
+                };
+                self.say(&msg, true);
+                return;
+            }
+        };
         if !self.editable() {
             return;
         }

@@ -453,10 +453,7 @@ impl Writer {
                     && let Some(pr) = self.problems.iter().find(|r| r.span.contains(&b))
                 {
                     // A brace astray spoils its block: plainly marked.
-                    let brace = matches!(
-                        pr.what,
-                        check::What::Unclosed | check::What::ExtraClose
-                    );
+                    let brace = matches!(pr.what, check::What::Unclosed | check::What::ExtraClose);
                     style = style
                         .add_modifier(Modifier::UNDERLINED)
                         .underline_color(if brace { p.warn } else { p.faint });
