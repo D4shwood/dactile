@@ -768,7 +768,15 @@ impl Index {
             } else {
                 at.start..at.start
             };
-            let to = crate::buffer::escape_pasted(&to, true);
+            // A note quoting the source as it is (`\\ic{…}`, a brace) gives
+            // its correction as source too: written as it stands. Plain
+            // words get TeX's special characters escaped.
+            let source = ['\\', '{', '}'].iter().any(|c| f.from.contains(*c) || f.to.contains(*c));
+            let to = if source {
+                to
+            } else {
+                crate::buffer::escape_pasted(&to, true)
+            };
             if !out
                 .iter()
                 .any(|e| e.range.start < range.end && range.start < e.range.end)

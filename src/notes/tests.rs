@@ -224,3 +224,26 @@ fn a_copy_with_notes() {
     );
     assert!(tex.trim_end().ends_with("\\end{document}"));
 }
+
+#[test]
+fn a_correction_in_source_stays_source() {
+    let play = "\\la Maria! \\ic{kapıyı çalar.}Mustafa gelir.\n\\mus İyiyim \\ic{gülümser.}. Gel.\n\\ma Yüzde 50 kaldı.\n";
+    let ix = Index::new(play);
+    let note = |line: usize, t: &str| Note {
+        line: Some(line),
+        text: t.into(),
+        ..Note::default()
+    };
+    let out = crate::tex::apply(
+        play,
+        &[
+            ix.fix_edits(&note(1, "“çalar.}Mustafa gelir.” → “çalar.} Mustafa gelir.”")),
+            ix.fix_edits(&note(2, "“\\ic{gülümser.}. Gel” → “\\ic{gülümser.} Gel”")),
+            ix.fix_edits(&note(3, "“Yüzde 50 kaldı” → “yüzde 50% kaldı”")),
+        ]
+        .concat(),
+    );
+    assert!(out.contains("\\ic{kapıyı çalar.} Mustafa gelir."), "{out}");
+    assert!(out.contains("\\ic{gülümser.} Gel."), "{out}");
+    assert!(out.contains("\\ma yüzde 50\\% kaldı."), "{out}");
+}
