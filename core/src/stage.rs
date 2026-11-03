@@ -510,7 +510,7 @@ mod tests {
 
     #[test]
     fn the_example() {
-        let text = include_str!("../examples/ornek-oyun.tex");
+        let text = include_str!("../../examples/ornek-oyun.tex");
         let doc = Doc::new(text);
         let st = read(text, &doc, &[]);
         // "\ihdo Çıkar." at the end.

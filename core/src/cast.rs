@@ -782,7 +782,7 @@ mod tests {
     use super::*;
     use crate::tex::apply;
 
-    const PLAY: &str = include_str!("../examples/ornek-oyun.tex");
+    const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 
     #[test]
     fn merging_and_splitting() {

@@ -188,7 +188,7 @@ fn a_hand_written_file() {
 
 #[test]
 fn a_copy_with_notes() {
-    let play = include_str!("../../examples/ornek-oyun.tex");
+    let play = include_str!("../../../examples/ornek-oyun.tex");
     let doc = crate::render::Doc::new(play);
     let mut notes = Notes::parse(
         "## Yazım\n\n- [ ] 47 · **Claude** · “taş durdu” → taşı durdu\n  - **Salih**: bakarım\n- [x] 55 · **Claude** · “Biraz ısınsam”: çözüldü\n- [ ] 1 · **Atölye** · kapakta bir not\n- [ ] 49 · **Atölye** · 100% sahne_dışı & {belirsiz}\n",

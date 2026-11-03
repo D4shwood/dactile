@@ -241,7 +241,7 @@ fn split_words(text: &str, range: Range<usize>, out: &mut Vec<Range<usize>>) {
 mod tests {
     use super::*;
 
-    const PLAY: &str = include_str!("../examples/ornek-oyun.tex");
+    const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 
     #[test]
     fn words_of_a_line() {

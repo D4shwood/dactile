@@ -404,7 +404,7 @@ pub fn is_character(cast: &Cast, alias: &str) -> bool {
 mod tests {
     use super::*;
 
-    const PLAY: &str = include_str!("../examples/ornek-oyun.tex");
+    const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 
     #[test]
     fn heading_menu() {

@@ -24,8 +24,8 @@ Each milestone ends with a demo and a beta, published once approved.
      `dactile pdf <play>` from the shell. Dim moved to F8.
    - ~~Never opened by itself.~~ Done: Alt+O in the writer ("PDF ready … Alt+O
      opens it"), "Open the PDF" on ^P, `p` on the home screen.
-   - ~~No build errors~~ Done (`src/check.rs`, `dactile check <play>`; tested
-     against XeLaTeX itself: `cargo test --test broken_sources -- --ignored`),
+   - ~~No build errors~~ Done (`core/src/check.rs`, `dactile check <play>`; tested
+     against XeLaTeX itself: `cargo test -p dactile --test broken_sources -- --ignored`),
      and nothing that pulls the eye while writing:
      - A thin, faint underline where something would break; the detail in the
        status line only with the cursor there.
@@ -66,7 +66,7 @@ Each milestone ends with a demo and a beta, published once approved.
 3. ~~**M10 entrances and exits**~~ Done, kept small; its class commands in 0.2.0-beta.2
    - `\girer{…}` / `\cikar{…}` in the class, printed as a direction:
      "(SELİN girer.)", "(SELİN ile OZAN girerler.)"; in the `\` menu.
-   - `src/stage.rs` reads who is on stage, quietly: the commands, and verbs
+   - `core/src/stage.rs` reads who is on stage, quietly: the commands, and verbs
      in directions (girer, gelir, sahneye çıkar / çıkar, gider…); each scene
      starts empty, the opening directions and whoever speaks fill it.
    - Nothing on screen while writing: no chips, no underlines. It feeds M11
@@ -76,7 +76,7 @@ Each milestone ends with a demo and a beta, published once approved.
      B lineup), an actor per role; the play's own PDF never shows them.
    - Actor copies, all at once (`oyun-kopyalar/`): the role's lines on a grey
      band, the rest faint, their entrances and exits bold (from
-     `src/stage.rs`), scenes without them down to their headings, a cover
+     `core/src/stage.rs`), scenes without them down to their headings, a cover
      with the actor, their scenes and pages, lines, words and time. Class
      1.4.0: `\tiyatrocopy`, `\tiyatromark`, `\tiyatrocopycover`.
    - The scene/role table: on F9, as CSV, as a landscape PDF.
@@ -139,10 +139,10 @@ Each milestone ends with a demo and a beta, published once approved.
 
 
 - Doubling: one actor in two roles never on stage at once, with time to
-  change between an exit and the next entrance (from `src/stage.rs`)
+  change between an exit and the next entrance (from `core/src/stage.rs`)
 
 - A continuity check, run on demand (never while writing): someone who
-  went out speaks again, someone who never leaves; from `src/stage.rs`
+  went out speaks again, someone who never leaves; from `core/src/stage.rs`
 
 - A brutalist home screen, on `b`: kept on the `brutal-home` branch (raw
   concrete grey, black rules, one oxide red), hidden until it is developed

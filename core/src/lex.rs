@@ -706,7 +706,7 @@ mod tests {
     use super::*;
     use crate::source;
 
-    const PLAY: &str = include_str!("../examples/ornek-oyun.tex");
+    const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 
     fn body_blocks(t: &str) -> (Cast, Vec<Block>) {
         let cast = Cast::of_play(t);

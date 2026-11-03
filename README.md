@@ -47,7 +47,7 @@ entry, and copies the tiyatro class into your TeX tree (`~/texmf`), so plays
 compile from any folder. `dactile uninstall` removes all three; your plays
 and settings stay.
 
-From source: `cargo install --path .`, then `dactile install`.
+From source: `cargo install --path tui`, then `dactile install`.
 
 - **Spell checking** needs a Turkish Hunspell dictionary (`tr_TR.aff` and
   `tr_TR.dic`) in `~/.local/share/hunspell` or `/usr/share/hunspell`; on

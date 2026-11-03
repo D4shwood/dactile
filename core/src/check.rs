@@ -531,7 +531,7 @@ pub fn stops(problems: &[Problem]) -> Option<&Problem> {
 mod tests {
     use super::*;
 
-    const PLAY: &str = include_str!("../examples/ornek-oyun.tex");
+    const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 
     fn check(t: &str) -> Vec<(String, What)> {
         let doc = Doc::new(t);

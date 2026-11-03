@@ -1,7 +1,7 @@
 //! Checks against real plays, read only. They stay outside the repo; point
 //! DACTILE_REAL_PLAYS at a folder (or a single .tex) and run:
 //!
-//!     DACTILE_REAL_PLAYS=~/oyunlar cargo test --test real_plays -- --ignored --nocapture
+//!     DACTILE_REAL_PLAYS=~/oyunlar cargo test -p dactile --test real_plays -- --ignored --nocapture
 //!
 //! Each play must survive these changes and their reversal byte for byte, and
 //! every declaration must read back as itself.

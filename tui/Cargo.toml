@@ -1,0 +1,24 @@
+[package]
+name = "dactile-light"
+description = "Dactile Light: the terminal app for writing stage plays with the tiyatro class"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+readme = "../README.md"
+
+# The command stays `dactile` until the desktop app takes the name.
+[[bin]]
+name = "dactile"
+path = "src/main.rs"
+
+[dependencies]
+dactile = { path = "../core" }
+anyhow = "1"
+chrono = "0.4.45"
+dirs = "7.0.0"
+unicode-width = "0.2.2"
+arboard = { version = "3.7", default-features = false, features = ["wayland-data-control"] }
+clap = { version = "4.6", features = ["derive"] }
+ratatui = "0.30.2"
+rfd = { version = "0.17.2", default-features = false, features = ["xdg-portal"] }

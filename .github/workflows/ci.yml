@@ -13,11 +13,11 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo fmt --check
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test
-      # The core alone, as another frontend would use it.
-      - run: cargo test --no-default-features --lib
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      # The core alone, as the desktop app uses it.
+      - run: cargo test -p dactile
 
   # The tiyatro class: the example play must compile in draft and final mode.
   tex:

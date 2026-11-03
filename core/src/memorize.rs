@@ -161,7 +161,7 @@ mod tests {
 
     #[test]
     fn the_example() {
-        let text = include_str!("../examples/ornek-oyun.tex");
+        let text = include_str!("../../examples/ornek-oyun.tex");
         let doc = Doc::new(text);
         let all = cues(text, &doc, "oz");
         let ours: Vec<&Cue> = all.iter().filter(|c| c.ours).collect();

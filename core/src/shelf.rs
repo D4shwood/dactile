@@ -368,7 +368,7 @@ mod tests {
     use super::*;
     use crate::tex::apply;
 
-    const PLAY: &str = include_str!("../examples/ornek-oyun.tex");
+    const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 
     fn names(text: &str) -> Vec<String> {
         units(text, &Doc::new(text))

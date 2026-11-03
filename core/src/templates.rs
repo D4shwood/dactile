@@ -11,7 +11,7 @@ use crate::tex::{self, Edit};
 use std::path::{Path, PathBuf};
 
 /// The example play, fictional, that shows what the class does.
-pub const EXAMPLE: &str = include_str!("../examples/ornek-oyun.tex");
+pub const EXAMPLE: &str = include_str!("../../examples/ornek-oyun.tex");
 
 /// The first line of a template of one's own, before its name.
 const MARK: &str = "% Dactile şablonu: ";

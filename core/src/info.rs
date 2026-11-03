@@ -128,7 +128,7 @@ mod tests {
     use super::*;
     use crate::tex::apply;
 
-    const PLAY: &str = include_str!("../examples/ornek-oyun.tex");
+    const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 
     #[test]
     fn reading_and_writing() {

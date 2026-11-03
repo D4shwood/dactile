@@ -90,7 +90,7 @@ pub fn paste_lines(s: &str, cast: &Cast) -> (String, usize) {
 mod tests {
     use super::*;
 
-    const PLAY: &str = include_str!("../examples/ornek-oyun.tex");
+    const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 
     /// The block holding `needle`, as if the line there were still empty.
     fn block_of(doc: &Doc, needle: &str) -> usize {

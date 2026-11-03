@@ -1469,7 +1469,7 @@ impl Builder<'_> {
 mod tests {
     use super::*;
 
-    const PLAY: &str = include_str!("../examples/ornek-oyun.tex");
+    const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 
     /// The cached layout is the full one, edit after edit.
     #[test]

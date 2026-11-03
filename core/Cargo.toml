@@ -1,0 +1,20 @@
+[package]
+name = "dactile"
+description = "Dactile's core: stage plays in the tiyatro class's syntax, read and written back byte for byte"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+readme = "../README.md"
+
+[dependencies]
+anyhow = "1"
+chrono = "0.4.45"
+dirs = "7.0.0"
+serde = { version = "1", features = ["derive"] }
+spellbook = "0.4.2"
+toml = "1"
+unicode-width = "0.2.2"
+zip = { version = "9.2.1", default-features = false, features = ["deflate"] }
+quick-xml = "0.42.0"
+pdf-extract = "0.12.1"

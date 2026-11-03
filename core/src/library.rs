@@ -473,7 +473,7 @@ mod tests {
 
     #[test]
     fn copies_and_drafts() {
-        let play = include_str!("../examples/ornek-oyun.tex");
+        let play = include_str!("../../examples/ornek-oyun.tex");
         let copy = derive(play, Some("Kar & Masal"), None);
         assert_eq!(info::get(&copy, "title").as_deref(), Some("Kar \\& Masal"));
         assert_eq!(info::get(&copy, "draft").as_deref(), Some("0.1"));

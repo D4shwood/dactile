@@ -47,7 +47,7 @@ ekler ve tiyatro sınıfını TeX ağacına (`~/texmf`) kopyalar; oyunlar her
 klasörden derlenir. `dactile uninstall` üçünü de kaldırır; oyunların ve
 ayarların kalır.
 
-Kaynaktan: `cargo install --path .`, ardından `dactile install`.
+Kaynaktan: `cargo install --path tui`, ardından `dactile install`.
 
 - **Yazım denetimi** için Türkçe bir Hunspell sözlüğü (`tr_TR.aff` ve
   `tr_TR.dic`) `~/.local/share/hunspell` ya da `/usr/share/hunspell` içinde

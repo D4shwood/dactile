@@ -235,7 +235,7 @@ mod tests {
     use super::*;
     use crate::{lex, source};
 
-    const PLAY: &str = include_str!("../examples/ornek-oyun.tex");
+    const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 
     fn outline(t: &str) -> (Vec<Block>, Outline) {
         let cast = Cast::of_play(t);

@@ -7,7 +7,7 @@
 use dactile::{build, check, render::Doc, tex};
 use std::path::Path;
 
-const PLAY: &str = include_str!("../examples/ornek-oyun.tex");
+const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 
 fn with_body(extra: &str) -> String {
     PLAY.replace("\\end{document}", &format!("{extra}\n\\end{{document}}"))

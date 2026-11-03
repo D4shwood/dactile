@@ -392,7 +392,7 @@ fn launch(path: &Path) -> anyhow::Result<()> {
 mod tests {
     use super::*;
 
-    const PLAY: &str = include_str!("../examples/ornek-oyun.tex");
+    const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 
     #[test]
     fn casts_as_the_class_writes_them() {

@@ -35,9 +35,9 @@ pub mod writing;
 /// The tiyatro class files, carried inside the app so a play needs nothing
 /// installed besides XeLaTeX.
 pub mod class {
-    pub const CLS: &str = include_str!("../tex/tiyatro.cls");
-    pub const CORE: &str = include_str!("../tex/tiyatro-core.sty");
-    pub const THEME: &str = include_str!("../tex/tiyatro-theme.sty");
+    pub const CLS: &str = include_str!("../../tex/tiyatro.cls");
+    pub const CORE: &str = include_str!("../../tex/tiyatro-core.sty");
+    pub const THEME: &str = include_str!("../../tex/tiyatro-theme.sty");
 
     /// The files by name, ready to be written next to a play or into a
     /// TEXINPUTS folder.

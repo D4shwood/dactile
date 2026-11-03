@@ -42,7 +42,7 @@ mod tests {
         assert_eq!(format(40), "40 sn");
         assert_eq!(format(130), "2 dk");
         assert_eq!(format(3900), "1 sa 05 dk");
-        let doc = Doc::new(include_str!("../examples/ornek-oyun.tex"));
+        let doc = Doc::new(include_str!("../../examples/ornek-oyun.tex"));
         let s = &doc.outline.scenes[0];
         // 30 spoken words and 24 in directions at 130 a minute.
         assert_eq!((s.words, s.direction_words), (30, 24));

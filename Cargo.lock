@@ -483,19 +483,30 @@ name = "dactile"
 version = "0.2.0-beta.6"
 dependencies = [
  "anyhow",
- "arboard",
  "chrono",
- "clap",
  "dirs",
  "pdf-extract",
  "quick-xml 0.42.0",
- "ratatui",
- "rfd",
  "serde",
  "spellbook",
  "toml",
  "unicode-width",
  "zip",
+]
+
+[[package]]
+name = "dactile-light"
+version = "0.2.0-beta.6"
+dependencies = [
+ "anyhow",
+ "arboard",
+ "chrono",
+ "clap",
+ "dactile",
+ "dirs",
+ "ratatui",
+ "rfd",
+ "unicode-width",
 ]
 
 [[package]]
