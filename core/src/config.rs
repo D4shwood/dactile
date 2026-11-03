@@ -34,6 +34,8 @@ pub struct Config {
     pub pages: bool,
     /// The writer's ribbon folded to its tabs.
     pub ribbon_folded: bool,
+    /// The desktop app's page, in percent: the text grows, the window doesn't.
+    pub page_zoom: u16,
     /// The keyboard drawn on the help screen: "q" (Turkish Q), "f" (Turkish
     /// F) or "us".
     pub keyboard: String,
@@ -57,6 +59,7 @@ impl Default for Config {
             animations: true,
             pages: false,
             ribbon_folded: false,
+            page_zoom: 100,
             keyboard: "q".into(),
             recent: Vec::new(),
         }

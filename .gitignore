@@ -11,3 +11,8 @@
 # Dactile's own files next to a play
 *.dactile-lock
 *.dactile.toml
+
+# The desktop app's front end
+/app/node_modules
+/app/dist
+/app/src-tauri/gen

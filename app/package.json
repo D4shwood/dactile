@@ -1,0 +1,29 @@
+{
+  "name": "dactile-app",
+  "private": true,
+  "version": "0.2.0-beta.6",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@codemirror/commands": "^6.8.0",
+    "@codemirror/search": "^6.5.10",
+    "@codemirror/state": "^6.5.2",
+    "@codemirror/view": "^6.36.4",
+    "@tauri-apps/api": "^2.5.0",
+    "pdfjs-dist": "^4.10.38"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.3",
+    "@tauri-apps/cli": "^2.5.0",
+    "@tsconfig/svelte": "^5.0.4",
+    "svelte": "^5.28.2",
+    "svelte-check": "^4.1.6",
+    "typescript": "~5.8.3",
+    "vite": "^6.3.5"
+  }
+}

@@ -1,0 +1,129 @@
+/* Dactile's look: claret and beige, and the page in the themes the terminal
+   app has (tui/src/tui/theme.rs). The chrome around the page is the same
+   warm grey in each; the page takes the theme. */
+
+:root {
+  --claret: #b0444a;
+  --claret-deep: #8e3238;
+  --beige: #d8cfc0;
+
+  --chrome: #f3efe7;
+  --chrome-2: #e8e1d4;
+  --chrome-line: #d6cdbd;
+  --chrome-fg: #2a2520;
+  --chrome-muted: #7a7064;
+  --desk: #d9d2c5;
+
+  /* The page: paper by default. */
+  --bg: #e9e3d6;
+  --page: #fbf8f1;
+  --fg: #221f1b;
+  --muted: #6e665a;
+  --faint: #a89f90;
+  --star: #6b3b1f;
+  --name-ref: #5e4a34;
+  --heading: #932c34;
+  --warn: #b05820;
+  --selection: #d2c4a6;
+
+  --serif: "EB Garamond", "Libertinus Serif", "Noto Serif", "DejaVu Serif", Georgia, serif;
+  --sans: "Inter", "Noto Sans", "Cantarell", system-ui, sans-serif;
+  --mono: "JetBrains Mono", "Hack", "Noto Sans Mono", monospace;
+
+  color-scheme: light;
+}
+
+:root[data-theme="sepia"] {
+  --page: #f6ead2;
+  --desk: #d8c8a8;
+  --fg: #3a2a1a;
+  --muted: #7a6246;
+  --faint: #b29a78;
+  --star: #7a3b12;
+  --name-ref: #6b4a2a;
+  --heading: #8a3324;
+  --selection: #ddc596;
+}
+
+:root[data-theme="contrast"] {
+  --page: #ffffff;
+  --desk: #c8c8c8;
+  --fg: #000000;
+  --muted: #303030;
+  --faint: #707070;
+  --star: #000000;
+  --name-ref: #1a1a1a;
+  --heading: #a00010;
+  --warn: #b04000;
+  --selection: #ffd84d;
+}
+
+:root[data-theme="night"],
+:root[data-theme="dark"] {
+  --chrome: #22252b;
+  --chrome-2: #2b2f37;
+  --chrome-line: #3a3f4a;
+  --chrome-fg: #e2e4e8;
+  --chrome-muted: #9198a5;
+  color-scheme: dark;
+}
+
+:root[data-theme="night"] {
+  --desk: #171b22;
+  --page: #1f2530;
+  --fg: #d6dbe4;
+  --muted: #8d96a8;
+  --faint: #4e576a;
+  --star: #e2c08d;
+  --name-ref: #c9b38a;
+  --heading: #d57f86;
+  --warn: #d79a5a;
+  --selection: #313c52;
+}
+
+:root[data-theme="dark"] {
+  --desk: #0e0e0e;
+  --page: #151515;
+  --fg: #e6e6e6;
+  --muted: #888888;
+  --faint: #4a4a4a;
+  --star: #d8cfc0;
+  --name-ref: #d8cfc0;
+  --heading: #b0444a;
+  --warn: #c88a5a;
+  --selection: #3a2a2c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--chrome);
+  color: var(--chrome-fg);
+  font: 14px/1.4 var(--sans);
+  overflow: hidden;
+  user-select: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+input,
+textarea {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--claret);
+  outline-offset: 1px;
+}

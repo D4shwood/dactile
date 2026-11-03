@@ -49,6 +49,12 @@ ayarların kalır.
 
 Kaynaktan: `cargo install --path tui`, ardından `dactile install`.
 
+**Masaüstü uygulaması** (yapım aşamasında, `app/` içinde): aynı oyunlar,
+büyütülebilen bir sayfada; Word'deki gibi bir şerit, sayfanın yanında PDF ve
+sahnelerin sürüklendiği bir pano. WebKitGTK ve Node.js ister; `app/`
+içinde `npm install`, ardından `npm run tauri dev`. Terminal sürümü Dactile
+Light olarak kalıyor.
+
 - **Yazım denetimi** için Türkçe bir Hunspell sözlüğü (`tr_TR.aff` ve
   `tr_TR.dic`) `~/.local/share/hunspell` ya da `/usr/share/hunspell` içinde
   olmalı; Arch'ta `paru -S hunspell-tr`. Sözlük yoksa geri kalan her şey

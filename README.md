@@ -49,6 +49,11 @@ and settings stay.
 
 From source: `cargo install --path tui`, then `dactile install`.
 
+**The desktop app** (in progress, in `app/`): the same plays on a page you
+can zoom, a word processor's ribbon, the PDF beside the page, and a board to
+drag scenes on. It needs WebKitGTK and Node.js; from `app/`, `npm install`
+then `npm run tauri dev`. The terminal app stays as Dactile Light.
+
 - **Spell checking** needs a Turkish Hunspell dictionary (`tr_TR.aff` and
   `tr_TR.dic`) in `~/.local/share/hunspell` or `/usr/share/hunspell`; on
   Arch, `paru -S hunspell-tr`. Without one, everything else works.

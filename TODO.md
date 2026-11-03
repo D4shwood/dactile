@@ -132,6 +132,23 @@ Each milestone ends with a demo and a beta, published once approved.
    - A GIF for the README, a short guide.
    - An AUR package (`dactile-bin`) from the release workflow.
 
+## The desktop app
+
+The main app from here on (`app/`: Tauri 2, Svelte 5, CodeMirror 6, on
+`core`); the terminal one stays as Dactile Light. Linux first.
+
+- **A. Everything, thinly** — done: the start screen (a column, template
+  tiles, the plays with a preview), the writer on a page (chips for
+  speakers and directions, Enter for the answering speaker, Tab for the
+  next, TeX escapes as typed, zoom of the page alone), the ribbon (key tips
+  on Alt, the search box, Dosya's page), the PDF beside the page with a jump
+  to a build error's line, the board (scenes and acts dragged, one undo).
+- **B.** The greyed buttons: cast and characters, notes panel, spelling,
+  search, summaries, split and join, casting, memorize.
+- **C.** Import, drafts and copies, the trash; a play's settings.
+- **D.** An AppImage and an AUR package; the `dactile` command goes to the
+  app, Dactile Light becomes `dactile-light`. Then Windows and macOS.
+
 ## 1.x
 
 - Scanned PDFs: a separate tool for OCR (Tesseract with Turkish), whose
@@ -156,5 +173,3 @@ Each milestone ends with a demo and a beta, published once approved.
 ## Far off
 
 - Windows, a phone app on the same core
-- To discuss: a desktop app (not in a terminal) on the same core, where the
-  board's cards and the notes could be dragged and dropped
