@@ -32,6 +32,8 @@ pub struct Config {
     pub animations: bool,
     /// Page view: A4-shaped sheets.
     pub pages: bool,
+    /// The writer's ribbon folded to its tabs.
+    pub ribbon_folded: bool,
     /// The keyboard drawn on the help screen: "q" (Turkish Q), "f" (Turkish
     /// F) or "us".
     pub keyboard: String,
@@ -54,6 +56,7 @@ impl Default for Config {
             theme: String::new(),
             animations: true,
             pages: false,
+            ribbon_folded: false,
             keyboard: "q".into(),
             recent: Vec::new(),
         }

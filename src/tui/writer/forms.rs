@@ -8,8 +8,12 @@ impl Writer {
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
         match &mut self.popup {
             Popup::None => false,
-            Popup::Bar(_) => {
-                self.bar_key(k);
+            Popup::Ribbon(_) => {
+                self.ribbon_key(k);
+                true
+            }
+            Popup::Backstage(_) => {
+                self.backstage_key(k);
                 true
             }
             Popup::Menu(m) => match k.code {

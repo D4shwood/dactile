@@ -1,7 +1,6 @@
 //! Drawing the writer.
 
 use super::*;
-use unicode_width::UnicodeWidthStr;
 
 impl Writer {
     pub(super) fn keep_visible(&mut self) {
@@ -22,7 +21,7 @@ impl Writer {
     }
 
     pub(super) fn text_height(&self) -> usize {
-        self.height.saturating_sub(3).max(1) as usize
+        self.height.saturating_sub(2 + self.top_h()).max(1) as usize
     }
 
     pub fn draw(&mut self, f: &mut Frame) {
@@ -50,9 +49,17 @@ impl Writer {
             ratatui::widgets::Block::default().style(theme::base()),
             area,
         );
-        self.draw_header(f, Rect { height: 1, ..area });
+        let top = self.top_h();
+        self.draw_ribbon(
+            f,
+            Rect {
+                height: top,
+                ..area
+            },
+            false,
+        );
         let body = Rect {
-            y: area.y + 1,
+            y: area.y + top,
             height: self.text_height() as u16,
             ..area
         };
@@ -175,9 +182,15 @@ impl Writer {
             }
             // Drawn below: it keeps where its caps are, for the mouse.
             Popup::Help(_) => {}
-            Popup::Bar(bar) => {
-                let bar = *bar;
-                self.draw_bar(f, area, bar);
+            // Folded, the buttons drop over the text.
+            Popup::Ribbon(nav) => {
+                if self.ribbon_folded && nav.on_btns {
+                    self.draw_ribbon(f, area, true);
+                }
+            }
+            Popup::Backstage(sel) => {
+                let sel = *sel;
+                self.draw_backstage(f, area, sel);
             }
             Popup::Palette(q, sel) => {
                 let items = palette_items(q);
@@ -204,52 +217,6 @@ impl Writer {
         if let Some(before) = before {
             anim::unroll(f.buffer_mut(), &before, self.popup_born, POPUP_OPENS);
         }
-    }
-
-    pub(super) fn draw_header(&self, f: &mut Frame, area: Rect) {
-        let title = self.doc.title(&self.buf.text).unwrap_or_else(|| {
-            self.path
-                .file_stem()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_default()
-        });
-        let state = if self.read_only {
-            Span::styled(
-                lang::l("salt okunur ", "read-only "),
-                Style::default().fg(WARN),
-            )
-        } else if self.conflict {
-            Span::styled(
-                lang::l("dışarıda değişti ", "changed elsewhere "),
-                Style::default().fg(WARN),
-            )
-        } else if self.buf.dirty {
-            Span::styled("• ", Style::default().fg(MUTED))
-        } else {
-            Span::styled(lang::l("kaydedildi ", "saved "), Style::default().fg(FAINT))
-        };
-        let w = state.content.chars().count() as u16;
-        // The menus, then the title in what is left before the state.
-        let mut spans = self.bar_titles();
-        let used: usize = spans.iter().map(|s| s.content.width()).sum();
-        let room = (area.width as usize).saturating_sub(used + w as usize + 6);
-        if room > 4 {
-            spans.push(Span::styled("  — ", Style::default().fg(FAINT)));
-            spans.push(Span::styled(
-                popup::fit(&title, room),
-                Style::default().fg(BEIGE).add_modifier(Modifier::BOLD),
-            ));
-        }
-        f.render_widget(Paragraph::new(Line::from(spans)).style(theme::base()), area);
-        let right = Rect {
-            x: area.x + area.width.saturating_sub(w),
-            width: w.min(area.width),
-            ..area
-        };
-        f.render_widget(
-            Paragraph::new(Line::from(state)).style(theme::base()),
-            right,
-        );
     }
 
     /// The play's headings in the margin left of the page, where there is
@@ -377,7 +344,8 @@ impl Writer {
                 | Popup::Help(_)
                 | Popup::Form(_)
                 | Popup::Search(..)
-                | Popup::Bar(_)
+                | Popup::Ribbon(_)
+                | Popup::Backstage(_)
         );
         let cursor = self.cursor_stop().filter(|c| {
             !covered && c.row >= self.shown && c.row < self.shown + area.height as usize
@@ -671,7 +639,7 @@ impl Writer {
         // (key, what, how much it matters): the least needed go first when
         // the screen is narrow.
         let keys = [
-            ("F10", lang::l("menü", "menu"), 9),
+            ("F10", lang::l("şerit", "ribbon"), 9),
             ("F1", lang::l("yardım", "help"), 9),
             ("^P", lang::l("komutlar", "commands"), 8),
             ("\\", lang::l("öneri", "suggest"), 7),

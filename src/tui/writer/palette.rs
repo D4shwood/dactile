@@ -19,6 +19,13 @@ pub enum PAct {
     NotesFile,
     About,
     SaveTemplate,
+    /// A snippet on a line of its own, or at the cursor; `‸` is where the
+    /// cursor goes.
+    Insert(&'static str),
+    InsertInline(&'static str),
+    FoldRibbon,
+    /// Dosya's page, on the play's details.
+    Info,
 }
 
 /// An entry of the command palette.
@@ -33,11 +40,18 @@ pub struct PItem {
 /// menus have, each once, and the themes.
 pub(super) fn palette_items(q: &str) -> Vec<PItem> {
     let mut all: Vec<(String, &'static str, PAct)> = Vec::new();
-    for d in super::menu::menus() {
-        for it in d.items.iter().flatten() {
-            if all.iter().all(|(_, _, a)| *a != it.act) {
-                all.push((format!("{} › {}", d.name(), it.name()), it.key, it.act));
+    for t in super::ribbon::tabs() {
+        for b in t.btns() {
+            if all.iter().all(|(_, _, a)| *a != b.act) {
+                all.push((format!("{} › {}", t.name(), b.name()), b.key, b.act));
             }
+        }
+    }
+    let file = super::ribbon::tabs()[super::ribbon::FILE_TAB].name();
+    for (tr, en, key, act) in super::ribbon::backstage() {
+        if all.iter().all(|(_, _, a)| *a != act) {
+            let name = if lang::is_tr() { tr } else { en };
+            all.push((format!("{file} › {name}"), key, act));
         }
     }
     for t in theme::THEMES {

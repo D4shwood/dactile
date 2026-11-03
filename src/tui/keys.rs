@@ -293,8 +293,8 @@ pub const BINDS: &[Bind] = &[
         false,
         false,
         Cat::File,
-        "menüler: Dosya, Düzen, Görünüm, Oyun, Notlar, Yardım; fareyle de",
-        "the menus: File, Edit, View, Play, Notes, Help; by mouse too",
+        "şerit: sekmelerde ve düğmelerde harfler, ya da oklar; ^F1 katlar; fareyle de",
+        "the ribbon: letters on tabs and buttons, or the arrows; ^F1 folds it; by mouse too",
     ),
     b(
         "F9",

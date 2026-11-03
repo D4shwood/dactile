@@ -295,6 +295,10 @@ impl Writer {
                 self.take_notes(&text);
             }
             PAct::NotesFile => self.pick_notes_file(),
+            PAct::Insert(s) => self.insert_snippet(s, true),
+            PAct::InsertInline(s) => self.insert_snippet(s, false),
+            PAct::FoldRibbon => self.fold_ribbon(),
+            PAct::Info => self.popup = Popup::Backstage(0),
             PAct::SaveTemplate => {
                 let title = self.doc.title(&self.buf.text).unwrap_or_default();
                 self.popup = Popup::Form(Form {

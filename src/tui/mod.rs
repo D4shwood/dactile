@@ -148,5 +148,6 @@ fn remember(w: &Writer, cfg: &mut Config) -> Result<()> {
     cfg.theme = v.theme;
     cfg.animations = v.animations;
     cfg.pages = v.pages;
+    cfg.ribbon_folded = v.ribbon_folded;
     cfg.save()
 }

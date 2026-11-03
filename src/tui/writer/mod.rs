@@ -5,10 +5,10 @@ mod casting;
 mod draw;
 mod find;
 mod forms;
-mod menu;
 mod mouse;
 mod notes;
 mod palette;
+mod ribbon;
 mod saving;
 mod scenes;
 mod spelling;
@@ -141,9 +141,11 @@ pub struct Writer {
     keyboard: String,
     /// The margin map's rows on screen and the block each one opens.
     map_hits: Vec<(u16, usize)>,
-    /// The open menu's rows on screen, and its box, for the mouse.
-    bar_hits: Vec<(u16, usize)>,
-    bar_rect: Rect,
+    /// The ribbon's tabs and buttons on screen, for the mouse; the tab
+    /// shown, and whether only the tabs show.
+    ribbon_hits: Vec<(Rect, ribbon::Hit)>,
+    ribbon_tab: usize,
+    ribbon_folded: bool,
     /// Acts and scenes marked to hide or throw away, by where they start.
     /// Any edit clears them.
     marks: std::collections::BTreeSet<usize>,
@@ -220,6 +222,7 @@ pub struct View {
     pub theme: String,
     pub pages: bool,
     pub animations: bool,
+    pub ribbon_folded: bool,
 }
 
 /// What a build beside the play made: where, and how many PDFs.
@@ -261,8 +264,10 @@ enum Popup {
     Roles,
     /// Learning a role by heart.
     Memorize(Memo),
-    /// F10: a menu of the top row open.
-    Bar(menu::Bar),
+    /// F10: the keys on the ribbon.
+    Ribbon(ribbon::Nav),
+    /// Dosya: its page, the entry chosen.
+    Backstage(usize),
 }
 
 impl Writer {
@@ -354,8 +359,9 @@ impl Writer {
             eat_space: false,
             keyboard: cfg.keyboard.clone(),
             map_hits: Vec::new(),
-            bar_hits: Vec::new(),
-            bar_rect: Rect::default(),
+            ribbon_hits: Vec::new(),
+            ribbon_tab: 1,
+            ribbon_folded: cfg.ribbon_folded,
             marks: Default::default(),
             trash: Vec::new(),
             menu_manual: cfg.menu == "manual",

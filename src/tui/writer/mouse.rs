@@ -5,7 +5,11 @@ use super::*;
 impl Writer {
     pub fn mouse(&mut self, m: MouseEvent) {
         // The menus along the top, and the one open.
-        if matches!(self.popup, Popup::None | Popup::Bar(_)) && self.bar_mouse(m) {
+        if matches!(self.popup, Popup::Backstage(_)) {
+            self.backstage_mouse(m);
+            return;
+        }
+        if matches!(self.popup, Popup::None | Popup::Ribbon(_)) && self.ribbon_mouse(m) {
             return;
         }
         // On the help screen the mouse points at keys.

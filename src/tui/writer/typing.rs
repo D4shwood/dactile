@@ -120,7 +120,7 @@ impl Writer {
                 );
             }
             KeyCode::F(5) => self.build(),
-            KeyCode::F(10) => self.open_bar(0),
+            KeyCode::F(10) => self.open_ribbon(),
             KeyCode::F(8) if shift => self.toggle_role_view(),
             KeyCode::F(8) => {
                 self.dim = !self.dim;
@@ -221,6 +221,7 @@ impl Writer {
             KeyCode::Char('n') if ctrl => self.toggle_notes(),
             KeyCode::Char('n') if alt => self.new_note(),
             KeyCode::Char('s') if alt => self.suggest(),
+            KeyCode::F(1) if ctrl => self.fold_ribbon(),
             KeyCode::F(1) => self.popup = Popup::Help(keys::Help::default()),
             KeyCode::Char('p') if ctrl => self.popup = Popup::Palette(String::new(), 0),
             KeyCode::Char('k') if ctrl => {

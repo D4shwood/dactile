@@ -117,7 +117,7 @@ screen the play's outline sits in the margin; a click goes there.
 
 | Key | |
 |---|---|
-| F10 | the menus along the top: File, Edit, View, Play, Notes, Help; ←→ between them, ⏎ runs an entry, a letter opens a menu; a click works too |
+| F10 | the ribbon along the top, as in a word processor: tabs (File, Home, Insert, View, Play, Notes, Help) and their buttons in groups; F10 shows a letter on each tab, then on each button (F10 N A puts in a stage direction), the arrows work too, and the mouse. File opens a page of its own: the play's details, PDF, copies, templates. ^F1 folds the ribbon to its tabs |
 | ^P | the command palette: everything by name — new scene, themes, page view, animations… |
 | ^O | the cast: edit, rename an alias everywhere, order, character cards; m merges one into another, b splits one, giving the scenes you pick to a new character; g a new group (with its members), t moves a character into a group or out of one, and on a group n adds a member, e renames it, d dissolves it |
 | ^N, Alt+N | notes beside the writing (below); a note on the selection or the word at the cursor |

@@ -118,7 +118,7 @@ durur; tıklayınca oraya gider.
 
 | Tuş | |
 |---|---|
-| F10 | üstteki menüler: Dosya, Düzen, Görünüm, Oyun, Notlar, Yardım; ←→ menüler arası, ⏎ seçileni yapar, bir harf o menüyü açar; tıklamak da olur |
+| F10 | üstteki şerit, bir kelime işlemcideki gibi: sekmeler (Dosya, Giriş, Ekle, Görünüm, Oyun, Notlar, Yardım) ve altında gruplanmış düğmeler; F10 her sekmenin, sonra her düğmenin üstünde bir harf gösterir (F10 E A bir sahne yönergesi ekler), oklar ve fare de çalışır. Dosya ayrı bir sayfa açar: oyunun bilgileri, PDF, kopyalar, şablonlar. ^F1 şeridi sekmelerine katlar |
 | ^P | komut paleti: her şey adıyla — yeni sahne, temalar, sayfa görünümü, animasyonlar… |
 | ^O | kişiler: düzenle, kısaltmayı her yerde değiştir, sıra, karakter kartları; m birini ötekiyle birleştirir, b birini böler (seçtiğin sahneler yeni karaktere geçer); g yeni grup (üyeleriyle birlikte), t karakteri bir gruba ya da gruptan dışarı taşır, grupta n yeni üye, e grubun adı, d grubu dağıtır |
 | ^N, Alt+N | yazının yanında notlar (aşağıda); seçili söze ya da imleçteki kelimeye not |

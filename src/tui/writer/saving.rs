@@ -377,6 +377,7 @@ impl Writer {
             theme: self.theme.clone(),
             animations: self.animations,
             pages: self.pages,
+            ribbon_folded: self.ribbon_folded,
         }
     }
 
