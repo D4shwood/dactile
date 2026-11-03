@@ -6,6 +6,7 @@ mod draw;
 mod find;
 mod forms;
 mod mouse;
+mod notes;
 mod palette;
 mod saving;
 mod scenes;
@@ -13,6 +14,7 @@ mod spelling;
 mod submit;
 mod typing;
 
+use notes::{NOTES_W, NoteMark, NotesView};
 use palette::palette_items;
 pub use palette::{PAct, PItem};
 
@@ -186,6 +188,13 @@ pub struct Writer {
     /// The play as it was before this session's first move, split or
     /// merge, kept as a draft.
     kept: Option<PathBuf>,
+    /// The notes on the play (`oyun.notlar.md`) and their panel (^N).
+    notes: dactile::notes::Notes,
+    notes_view: NotesView,
+    notes_scroll: usize,
+    note_marks: Vec<NoteMark>,
+    /// Who one's own notes are from: the name in the settings.
+    me: String,
     pub quit: bool,
 }
 
@@ -219,6 +228,8 @@ enum Armed {
     Quit,
     /// ^S while another Dactile holds the play: take the lock.
     TakeLock,
+    /// x on a note: delete it.
+    DeleteNote,
 }
 
 enum Popup {
@@ -362,8 +373,14 @@ impl Writer {
             roles: RolesPanel::default(),
             role_view: None,
             kept: None,
+            notes: Default::default(),
+            notes_view: NotesView::default(),
+            notes_scroll: 0,
+            note_marks: Vec::new(),
+            me: cfg.author.clone(),
             quit: false,
         };
+        w.load_notes();
         // The dictionary takes a moment to load: in the background.
         if let Some((aff, dic)) = spell::find() {
             let (tx, rx) = channel();
@@ -411,6 +428,8 @@ impl Writer {
         let room = self.width
             - if self.strip_shown() {
                 board::STRIP_W
+            } else if self.notes_beside() {
+                NOTES_W
             } else {
                 0
             };
@@ -434,7 +453,9 @@ impl Writer {
 
     /// Whether the strip is on and the paper and it fit side by side.
     fn strip_shown(&self) -> bool {
-        self.strip && self.width >= MARGIN + PAGE_TEXT + PAGE_RIGHT + 4 + board::STRIP_W
+        self.strip
+            && !self.notes_view.open
+            && self.width >= MARGIN + PAGE_TEXT + PAGE_RIGHT + 4 + board::STRIP_W
     }
 
     /// Rows of text on a sheet in page view: an A4 sheet as wide as the

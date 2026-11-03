@@ -37,6 +37,15 @@
 %   \tiyatrogap{n}                      n empty lines' room, for notes
 %   \tiyatronoend                      no "Perde Sonu" and "Son" at the end
 %
+% And into a copy with the notes on the play: room for them right of the
+% text, each note beside its line, numbered, in its author's colour.
+%
+%   \tiyatronotes                      in the preamble: the wide margin
+%   \tiyatronote{RRGGBB}{Who}{n}{text}  note n beside this line
+%   \tiyatronoted{RRGGBB}{words}        the words a note is about
+%   \tiyatronoteslist{Title}{...}       all of them at the end, with replies:
+%   \tiyatronoteitem{RRGGBB}{n}{Who}{where}{text}  \tiyatronotereply{RRGGBB}{Who}{text}
+%
 % A line that starts with # is a heading, up to the end of the line:
 %
 %   #perde Title        #sahne Place — Time        #sahne[2.1] Place
@@ -499,6 +508,66 @@
         \bool_lazy_and:nnT { \g__tiy_copy_bool } { ! \g__tiy_own_bool }
           { \color { tiyfaint } }
       }
+  }
+
+% ------------------------------------------------------------------ a copy with notes
+
+\NewDocumentCommand \tiyatronotes { }
+  {
+    \RequirePackage { xcolor }
+    \geometry
+      {
+        left = 2.2cm , right = 6.6cm ,
+        marginparwidth = 5.2cm , marginparsep = 0.7cm
+      }
+  }
+
+\NewDocumentCommand \tiyatronote { m m m +m }
+  {
+    \textsuperscript { \textcolor [ HTML ] {#1} { \bfseries #3 } }
+    \marginpar
+      {
+        \raggedright \setstretch { 1 } \footnotesize
+        \textcolor [ HTML ] {#1} { \bfseries #3 \nobreakspace #2 } \par
+        #4
+      }
+  }
+
+\NewDocumentCommand \tiyatronoted { m m } { \textcolor [ HTML ] {#1} {#2} }
+
+% After the play's end ("Son"), on a page of its own.
+\NewDocumentCommand \tiyatronoteslist { m +m }
+  { \AtEndDocument { \__tiy_notes_list:nn {#1} {#2} } }
+
+\cs_new_protected:Npn \__tiy_notes_list:nn #1#2
+  {
+    \clearpage
+    \group_begin:
+    \setstretch { 1 }
+    \skip_zero:N \leftskip
+    \dim_zero:N \parindent
+    { \centering \large \bfseries #1 \par }
+    \skip_vertical:n { 1.5em }
+    #2
+    \par
+    \group_end:
+  }
+
+\NewDocumentCommand \tiyatronoteitem { m m m m +m }
+  {
+    \par \noindent
+    \textcolor [ HTML ] {#1} { \bfseries #2 \nobreakspace #3 }
+    \quad { \small \itshape #4 } \par
+    \noindent #5 \par
+    \skip_vertical:n { 0.6em }
+  }
+
+\NewDocumentCommand \tiyatronotereply { m m +m }
+  {
+    \skip_vertical:n { -0.4em }
+    \par \noindent \hspace* { 1.5em }
+    \textcolor [ HTML ] {#1} { \itshape #2 : } \nobreakspace #3 \par
+    \skip_vertical:n { 0.6em }
   }
 
 % ------------------------------------------------------------------ scenes and acts

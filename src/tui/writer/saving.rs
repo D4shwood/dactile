@@ -59,9 +59,11 @@ impl Writer {
                 }
             }
         }
+        self.tick_notes();
         if self.checked.elapsed() >= CHECK_EVERY {
             self.checked = Instant::now();
             self.check_disk();
+            self.check_notes_disk();
         }
         let due = self.buf.dirty
             && self
@@ -130,6 +132,7 @@ impl Writer {
                 self.conflict = false;
                 self.disk_time = file::modified(&self.path);
                 let _ = file::snapshot(&self.history, &self.buf.text, false);
+                self.notes_follow();
                 // An .aux there already gets the casts: a run by hand is
                 // right in one pass too. Not while XeLaTeX writes it.
                 if self.building.is_none() {
@@ -264,7 +267,16 @@ impl Writer {
     }
 
     pub(super) fn aside_done(&mut self, result: Aside) {
+        let notes = std::mem::take(&mut self.notes_view.building);
         match result {
+            Ok((out, _)) if notes => self.say(
+                &lang::f(
+                    "Notlu kopya hazır: {} (notlarda o açar)",
+                    "The copy with notes is ready: {} (o in the notes opens it)",
+                    &[&dactile::config::tilde(&out)],
+                ),
+                false,
+            ),
             Ok((out, n)) => {
                 let msg = if n == 1 {
                     lang::f(

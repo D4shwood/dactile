@@ -17,6 +17,7 @@ pub mod lang;
 pub mod lex;
 pub mod library;
 pub mod memorize;
+pub mod notes;
 pub mod outline;
 pub mod render;
 pub mod shelf;
@@ -59,6 +60,6 @@ pub mod class {
 mod tests {
     #[test]
     fn class_version() {
-        assert_eq!(super::class::version(), "1.5.0");
+        assert_eq!(super::class::version(), "1.6.0");
     }
 }

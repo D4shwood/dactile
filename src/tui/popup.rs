@@ -151,6 +151,15 @@ pub enum FormKind {
     GroupName(Option<usize>),
     /// Moving a character (alias) into a group, or out of one.
     MoveTo(String),
+    /// A note of one's own at this line of the play.
+    NoteNew(usize),
+    /// A reply to this note, an edit of it.
+    NoteReply(usize),
+    NoteEdit(usize),
+    /// Notes pasted or read from a file: who they are from.
+    NotesTake(Vec<dactile::notes::Note>),
+    /// A file of notes, by its path (where no file chooser is).
+    NotesPath,
 }
 
 pub struct Field {
@@ -162,6 +171,8 @@ pub struct Field {
     pub toggle: bool,
     /// Changed by hand: an automatic value (the alias) stops following.
     pub touched: bool,
+    /// Where typing goes, in characters; none: at the end.
+    pub at: Option<usize>,
 }
 
 impl Field {
@@ -172,6 +183,7 @@ impl Field {
             options,
             toggle: false,
             touched: false,
+            at: None,
         }
     }
     pub fn flag(label: &str, on: bool) -> Field {
@@ -181,10 +193,24 @@ impl Field {
             options: Vec::new(),
             toggle: true,
             touched: false,
+            at: None,
         }
     }
     pub fn on(&self) -> bool {
         self.value == "evet"
+    }
+
+    /// The cursor, in characters.
+    pub fn cursor(&self) -> usize {
+        let n = self.value.chars().count();
+        self.at.map_or(n, |a| a.min(n))
+    }
+
+    fn byte(&self, chars: usize) -> usize {
+        self.value
+            .char_indices()
+            .nth(chars)
+            .map_or(self.value.len(), |(i, _)| i)
     }
 }
 
@@ -221,6 +247,7 @@ impl Form {
                 .clone(),
         };
         f.value = next;
+        f.at = None;
         true
     }
 }
@@ -491,12 +518,12 @@ pub fn draw_form(f: &mut Frame, area: Rect, form: &Form) {
                 Style::default().fg(FG),
             )
         } else {
-            // A typing field: a band to type on, as wide as the window.
+            // A typing field: a band to type on, as wide as the window;
+            // a long value slides so the cursor stays on it.
             let room = (inner.width.saturating_sub(label_w + 1)) as usize;
-            Span::styled(
-                format!("{:<room$}", fl.value),
-                Style::default().fg(FG).bg(FIELD),
-            )
+            let from = (fl.cursor() + 1).saturating_sub(room.max(1));
+            let seen: String = fl.value.chars().skip(from).take(room).collect();
+            Span::styled(format!("{seen:<room$}"), Style::default().fg(FG).bg(FIELD))
         };
         let mut spans = vec![label, value];
         if focused && !fl.toggle && !fl.options.is_empty() && fl.value.is_empty() {
@@ -518,8 +545,10 @@ pub fn draw_form(f: &mut Frame, area: Rect, form: &Form) {
             },
         );
         if focused && !fl.toggle {
+            let room = (inner.width.saturating_sub(label_w + 1)) as usize;
+            let from = (fl.cursor() + 1).saturating_sub(room.max(1));
             cursor = Some(Position::new(
-                inner.x + label_w + fl.value.chars().count() as u16,
+                inner.x + label_w + (fl.cursor() - from) as u16,
                 y,
             ));
         }
@@ -602,6 +631,10 @@ pub fn label_of(key: &str) -> &str {
         "Grup adı" => "Group name",
         "Üyeler (kısaltmalar)" => "Members (aliases)",
         "Grup" => "Group",
+        "Kimden" => "From",
+        "Not" => "Note",
+        "Satır" => "Line",
+        "Cevap" => "Reply",
         other => other,
     }
 }
@@ -631,11 +664,33 @@ pub fn edit(form: &mut Form, k: ratatui::crossterm::event::KeyEvent) -> Outcome 
         }
         KeyCode::Backspace => {
             let f = &mut form.fields[form.focus];
-            if !f.toggle {
-                f.value.pop();
+            let c = f.cursor();
+            if !f.toggle && c > 0 {
+                let b = f.byte(c - 1);
+                f.value.remove(b);
+                f.at = Some(c - 1);
                 f.touched = true;
             }
         }
+        KeyCode::Delete => {
+            let f = &mut form.fields[form.focus];
+            let c = f.cursor();
+            if !f.toggle && c < f.value.chars().count() {
+                let b = f.byte(c);
+                f.value.remove(b);
+                f.touched = true;
+            }
+        }
+        KeyCode::Left => {
+            let f = &mut form.fields[form.focus];
+            f.at = Some(f.cursor().saturating_sub(1));
+        }
+        KeyCode::Right => {
+            let f = &mut form.fields[form.focus];
+            f.at = Some(f.cursor() + 1);
+        }
+        KeyCode::Home => form.fields[form.focus].at = Some(0),
+        KeyCode::End => form.fields[form.focus].at = None,
         KeyCode::Char(' ') if form.fields[form.focus].toggle => {
             let f = &mut form.fields[form.focus];
             f.value = if f.on() { "hayır" } else { "evet" }.into();
@@ -643,7 +698,10 @@ pub fn edit(form: &mut Form, k: ratatui::crossterm::event::KeyEvent) -> Outcome 
         KeyCode::Char(c) => {
             let f = &mut form.fields[form.focus];
             if !f.toggle {
-                f.value.push(c);
+                let at = f.cursor();
+                let b = f.byte(at);
+                f.value.insert(b, c);
+                f.at = Some(at + 1);
                 f.touched = true;
             }
         }

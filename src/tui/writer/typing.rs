@@ -13,6 +13,13 @@ impl Writer {
             self.keep_visible();
             return;
         }
+        if self.notes_view.open
+            && self.notes_view.focus
+            && matches!(self.popup, Popup::None)
+            && self.notes_key(k, armed)
+        {
+            return;
+        }
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
         let alt = k.modifiers.contains(KeyModifiers::ALT);
         let shift = k.modifiers.contains(KeyModifiers::SHIFT);
@@ -210,6 +217,8 @@ impl Writer {
                 });
             }
             KeyCode::Char('i') if alt => self.popup = Popup::Form(self.info_form()),
+            KeyCode::Char('n') if ctrl => self.toggle_notes(),
+            KeyCode::Char('n') if alt => self.new_note(),
             KeyCode::Char('s') if alt => self.suggest(),
             KeyCode::F(1) => self.popup = Popup::Help(keys::Help::default()),
             KeyCode::Char('p') if ctrl => self.popup = Popup::Palette(String::new(), 0),

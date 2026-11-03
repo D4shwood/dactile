@@ -14,6 +14,7 @@ pub enum PAct {
     NewCharacter,
     Board,
     Memorize,
+    NotesPdf,
 }
 
 /// An entry of the command palette.
@@ -44,6 +45,24 @@ pub(super) fn palette_items(q: &str) -> Vec<PItem> {
             "Casting: actors, the scene/role table, numbers",
             "F9",
             k(F(9), n),
+        ),
+        (
+            "Notlar: AI'dan, atölyeden, okurdan; yanda",
+            "Notes from an AI, a workshop, a reader; beside",
+            "^N",
+            k(Char('n'), c),
+        ),
+        (
+            "Buraya not: seçili söze ya da kelimeye",
+            "A note here, on the selection or the word",
+            "Alt+N",
+            k(Char('n'), a),
+        ),
+        (
+            "Notlu PDF kopyası: açık notlar kenarda",
+            "A PDF copy with the open notes in the margin",
+            "",
+            PAct::NotesPdf,
         ),
         (
             "Sahne şeridi: yazının yanında",

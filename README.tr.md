@@ -110,6 +110,7 @@ durur; tıklayınca oraya gider.
 |---|---|
 | ^P | komut paleti: her şey adıyla — yeni sahne, temalar, sayfa görünümü, animasyonlar… |
 | ^O | kişiler: düzenle, kısaltmayı her yerde değiştir, sıra, karakter kartları; m birini ötekiyle birleştirir, b birini böler (seçtiğin sahneler yeni karaktere geçer); g yeni grup (üyeleriyle birlikte), t karakteri bir gruba ya da gruptan dışarı taşır, grupta n yeni üye, e grubun adı, d grubu dağıtır |
+| ^N, Alt+N | yazının yanında notlar (aşağıda); seçili söze ya da imleçteki kelimeye not |
 | ^G, ^G ^G | yazının yanında sahne şeridi; hızlıca iki kez: pano (aşağıda) |
 | F9 | dağıtım: kim kimi oynuyor, sahne/rol tablosu, sayılar (aşağıda) |
 | Alt+E, Alt+B, Alt+J | imlecin sahnesinin özeti; sahneyi imlecin satırından böl; sonrakiyle birleştir |
@@ -216,6 +217,44 @@ olan iki adı birleştirir (ve yeniden ayırır), `x` hiç karakter olmayanı
 komut satırından, adları geldiği gibi alarak yapar. Taranmış bir PDF, sayfa
 resimleri, önce OCR'dan geçmeli.
 
+### Notlar
+
+Oyun üstüne herkesin notu (bir AI'ın okuması, atölye, bir okur, kendin)
+oyunun yanında, `oyun.notlar.md` içinde durur: her editörün (Obsidian'ın da)
+okuyup yazabildiği bir Markdown görev listesi:
+
+```text
+## Düz yazım yanlışları
+
+- [ ] 139 · **Claude** · “Gaztesi” → Gazetesi
+  - **Salih**: ikinci perdede de aynı
+- [x] 20 · **Atölye** · “loş bir bir ışığın”: çift “bir”
+```
+
+`[ ]` açık, `[x]` çözüldü, `[-]` gizli; `## Arşiv: …` altındakiler arşivde.
+Sayı oyunun bir satırıdır; not yerini alıntıladığı sözle yeniden bulur, üstüne
+satır eklense de kaybolmaz, kaydedince sayısı da onu izler.
+
+^N notları sağda açar: ↑↓ birinden ötekine gider, metin onun yerine kayar ve
+yer yanar; Esc panel açık kalarak metne döner, ^N yine kapatır. Açık notlar
+metinde yazarlarının renginde altı çizili, kenarda bir noktayla görünür.
+Panelde:
+
+| Tuş | |
+|---|---|
+| p | bir cevabı yapıştır (bir AI'ınki, bir okurun e-postası): numaralı her madde (`139: …`, `- 20: …`, `• 68 (gazete metni): …`) bir not, bir dizi maddenin üstündeki kısa satır başlıkları olur; kimden geldiğini sorar |
+| i | bir not dosyasını (`.md`, `.txt`) aynı yolla al (ya da Dactile'ın kendi biçimindekini) |
+| n | seçili söze ya da imleçteki kelimeye kendi notun (metinden Alt+N) |
+| ␣ | çözüldü, üstü çizili; ya da yeniden açık |
+| u | notun düzeltmesini yap, `“yanlış” → doğru`: yalnız farklı sözler değişir, ^Z geri alır, not çözülür |
+| r, e | cevap yaz; notu, satırını ve cevaplarını düzenle |
+| h, a, x | gizle, arşivle, sil (x iki kez) |
+| f, s | yalnız bir yazarın notları; çözülen, gizli ve arşivdekiler de |
+| c, o | açık notlar kenarda, numaralı, her biri yazarının renginde bir PDF kopya; sonda hepsi cevaplarıyla (`oyun - notlu.pdf`); onu aç |
+
+Notun alıntıladığı söz metinden gidince panel "düzeltilmiş gibi" der; çizmek
+sana kalır. Oyun kendiliğinden hiç değişmez.
+
 ## tiyatro sınıfı
 
 Sınıf [tex/](tex/) klasöründe; Dactile onu kendi içinde taşır.
@@ -256,6 +295,11 @@ Sınıf [tex/](tex/) klasöründe; Dactile onu kendi içinde taşır.
   gerisini soldurur (`xcolor` paketi); bir yönergeden önce `\tiyatromark` onu
   kalın yapar; `\tiyatrocopycover{…}` kapağa ekler; `\tiyatrogap{n}` bir
   repliğin sözleri yerine n satırlık boşluk bırakır.
+- **Notlu kopya:** önsözde `\tiyatronotes` sağ kenarı genişletir,
+  `\tiyatronote{RRGGBB}{Kim}{n}{metin}` n. notu satırının yanına koyar,
+  `\tiyatronoted{RRGGBB}{söz}` notun söylediği sözü boyar,
+  `\tiyatronoteslist{Başlık}{…}` oyunun sonundan sonra hepsini
+  `\tiyatronoteitem` ve `\tiyatronotereply` ile listeler.
 
 ```sh
 xelatex oyun.tex

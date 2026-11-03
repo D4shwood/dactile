@@ -101,7 +101,18 @@ Each milestone ends with a demo and a beta, published once approved.
      scene headings, the preface and notes, four ways of writing a line.
    - Also: the class breaks a speech's lines itself (1.5.0), so the line
      ends of an imported speech print as they read.
-6. **M13 1.0** → 1.0.0
+6. ~~**M13 notes**~~ Done → 0.2.0-beta.6
+   - Notes from anyone (an AI, a workshop, a reader, oneself) in
+     `oyun.notlar.md` beside the play, a Markdown task list; ^N shows them
+     on the right, each one's place underlined in its author's colour.
+   - Pasted or read from a file (numbered items, headings as groups), or
+     written on the selection; found again by what they quote.
+   - Done, hidden, archived, replies, edits; `u` makes a `“wrong” → right`
+     correction, changing only the words that differ; "looks fixed" when
+     the quote is gone.
+   - A PDF copy with the open notes in the margin and a list of all of them
+     at the end (class 1.6.0).
+7. **M14 1.0** → 1.0.0
    - A bug round; tests for lost work (lock, autosave, trash, renames); speed
      on long plays.
    - Renaming a character in plain text too ("Selin'in" → "Selma'nın",

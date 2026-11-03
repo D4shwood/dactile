@@ -109,6 +109,7 @@ screen the play's outline sits in the margin; a click goes there.
 |---|---|
 | ^P | the command palette: everything by name — new scene, themes, page view, animations… |
 | ^O | the cast: edit, rename an alias everywhere, order, character cards; m merges one into another, b splits one, giving the scenes you pick to a new character; g a new group (with its members), t moves a character into a group or out of one, and on a group n adds a member, e renames it, d dissolves it |
+| ^N, Alt+N | notes beside the writing (below); a note on the selection or the word at the cursor |
 | ^G, ^G ^G | the scene strip beside the writing; twice quickly, the board (below) |
 | F9 | casting: who plays whom, the scene/role table, the numbers (below) |
 | Alt+E, Alt+B, Alt+J | the cursor's scene's summary; split the scene at the cursor's line; join it with the next |
@@ -217,6 +218,45 @@ the title and author. ⏎ writes the play to your plays folder and opens it.
 `dactile import FILE` does the same from the command line, taking the names
 as they come. A scanned PDF, pictures of pages, needs OCR first.
 
+### Notes
+
+Notes on the play from anyone — an AI's review, a workshop, a reader, your
+own — live beside it in `oyun.notlar.md`, a Markdown task list any editor
+(Obsidian too) reads and writes:
+
+```text
+## Spelling
+
+- [ ] 139 · **Claude** · “Gaztesi” → Gazetesi
+  - **Salih**: the same in act two
+- [x] 20 · **Workshop** · “loş bir bir ışığın”: “bir” twice
+```
+
+`[ ]` is open, `[x]` done, `[-]` hidden; what is under `## Archive: …` is
+archived. The number is a line of the play; a note finds its place again by
+what it quotes, so lines added above it don't lose it, and on save its number
+follows.
+
+^N opens the notes on the right: ↑↓ goes from one to the next, the text
+moving to its place, lit; Esc goes back to the text with the panel open, ^N
+again closes it. Open notes are underlined in the text in their author's
+colour, with a dot in the margin. In the panel:
+
+| Key | |
+|---|---|
+| p | paste a reply (an AI's, a reader's mail): each numbered item (`139: …`, `- 20: …`, `• 68 (newspaper): …`) is a note, a short line before a run of them their heading; it asks who they are from |
+| i | take a file of notes, `.md` or `.txt`, the same way (or one in Dactile's own form) |
+| n | a note of your own on the selection or the word at the cursor (Alt+N from the text) |
+| ␣ | done, struck through, or open again |
+| u | make the note's correction, `“wrong” → right`: only the words that differ change, ^Z undoes it, the note is done |
+| r, e | reply to it; edit it, its line and its replies |
+| h, a, x | hide it, archive it, delete it (x twice) |
+| f, s | only one author's notes; the done, hidden and archived ones too |
+| c, o | a PDF copy with the open notes in its margin, numbered, each in its author's colour, and all of them with their replies at the end (`oyun - notlu.pdf`); open it |
+
+When what a note quotes is gone from the text, the panel says it looks fixed;
+ticking it is yours. Nothing changes the play by itself.
+
 ## The tiyatro class
 
 [tex/](tex/) holds the class, which Dactile carries inside itself:
@@ -255,6 +295,11 @@ as they come. A scanned PDF, pictures of pages, needs OCR first.
   rest (the `xcolor` package), `\tiyatromark` before a direction makes it
   bold, `\tiyatrocopycover{…}` adds to the cover, `\tiyatrogap{n}` leaves n
   lines' room where a line's words were.
+- a copy with notes: `\tiyatronotes` in the preamble widens the right
+  margin, `\tiyatronote{RRGGBB}{Who}{n}{text}` puts note n there beside its
+  line, `\tiyatronoted{RRGGBB}{words}` colours what it is about, and
+  `\tiyatronoteslist{Title}{…}` lists them all after the end, with
+  `\tiyatronoteitem` and `\tiyatronotereply`.
 
 ```sh
 xelatex oyun.tex

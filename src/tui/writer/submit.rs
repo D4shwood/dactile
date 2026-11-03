@@ -234,6 +234,11 @@ impl Writer {
             FormKind::MoveTo(alias) => return self.submit_move_to(form, alias),
             FormKind::EditCharacter(old) => return self.submit_edit_character(form, old),
             FormKind::Character => return self.submit_new_character(form),
+            FormKind::NoteNew(_)
+            | FormKind::NoteReply(_)
+            | FormKind::NoteEdit(_)
+            | FormKind::NotesTake(_)
+            | FormKind::NotesPath => return self.submit_note(form),
         }
         Ok(())
     }

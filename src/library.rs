@@ -265,6 +265,7 @@ pub fn companions(play: &Path) -> Vec<PathBuf> {
     let mut out = vec![
         crate::sidecar::path_for(play),
         crate::shelf::trash_path(play),
+        crate::notes::path_for(play),
     ];
     for ext in OUTPUTS {
         out.push(play.with_extension(ext));
@@ -297,6 +298,8 @@ pub fn rename(from: &Path, to: &Path, drafts: &[PathBuf]) -> anyhow::Result<()> 
             crate::sidecar::path_for(to)
         } else if f == crate::shelf::trash_path(from) {
             crate::shelf::trash_path(to)
+        } else if f == crate::notes::path_for(from) {
+            crate::notes::path_for(to)
         } else {
             let ext = OUTPUTS
                 .iter()

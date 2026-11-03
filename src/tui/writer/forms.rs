@@ -422,25 +422,10 @@ impl Writer {
                 }
                 return;
             }
-            KeyCode::Backspace => {
-                let f = &mut form.fields[form.focus];
-                if !f.toggle {
-                    f.value.pop();
-                    f.touched = true;
-                }
+            // Typing, and moving along the field.
+            _ => {
+                popup::edit(form, k);
             }
-            KeyCode::Char(' ') if form.fields[form.focus].toggle => {
-                let f = &mut form.fields[form.focus];
-                f.value = if f.on() { "hayır" } else { "evet" }.into();
-            }
-            KeyCode::Char(c) => {
-                let f = &mut form.fields[form.focus];
-                if !f.toggle {
-                    f.value.push(c);
-                    f.touched = true;
-                }
-            }
-            _ => {}
         }
         // The alias follows the name until it is edited by hand.
         if matches!(

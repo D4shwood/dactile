@@ -143,6 +143,22 @@ pub const BINDS: &[Bind] = &[
         "the cast: edit, card, order, new, delete",
     ),
     b(
+        "N",
+        true,
+        false,
+        Cat::Panel,
+        "notlar yanda: AI'ın, atölyenin, senin; uygula, çiz, cevapla",
+        "notes beside: an AI's, a workshop's, yours; apply, tick, reply",
+    ),
+    b(
+        "N",
+        false,
+        true,
+        Cat::Panel,
+        "seçili söze ya da imleçteki kelimeye not",
+        "a note on the selection or the word at the cursor",
+    ),
+    b(
         "G",
         true,
         false,

@@ -60,6 +60,7 @@ impl Writer {
         self.draw_sheet(f, body);
         self.draw_map(f, body);
         self.mark_misspelt();
+        self.mark_notes();
         self.draw_text(f, body);
         if self.strip_shown() {
             let units = shelf::units(&self.buf.text, &self.doc);
@@ -81,6 +82,9 @@ impl Writer {
                 &items,
                 self.buf.cursor,
             );
+        }
+        if self.notes_view.open {
+            self.draw_notes(f, body);
         }
         let status = Rect {
             y: area.y + area.height.saturating_sub(2),
@@ -382,6 +386,8 @@ impl Writer {
             Some((b, n))
         });
         let mut shown_chars = 0usize;
+        // Notes whose margin dot is drawn: on the first row of their place.
+        let mut dotted: Vec<usize> = Vec::new();
         let buf = f.buffer_mut();
         for (i, row) in self
             .lay
@@ -450,12 +456,51 @@ impl Writer {
                         .add_modifier(Modifier::UNDERLINED)
                         .underline_color(p.faint);
                 }
+                // A note's place: underlined in its author's colour; the
+                // note chosen in the panel lit.
+                if let Some(b) = c.byte
+                    && let Some(m) = self
+                        .note_marks
+                        .iter()
+                        .filter(|m| m.range.contains(&b) && (m.quoted || m.chosen))
+                        .max_by_key(|m| m.chosen)
+                {
+                    if m.chosen {
+                        style = style.bg(p.selection);
+                    }
+                    if !self.misspelt.iter().any(|r| r.contains(&b)) {
+                        style = style
+                            .add_modifier(Modifier::UNDERLINED)
+                            .underline_color(m.color);
+                    }
+                }
                 if let (Some(s), Some(b)) = (&sel, c.byte)
                     && s.contains(&b)
                 {
                     style = style.bg(p.selection);
                 }
                 buf[(x, y)].set_char(c.ch).set_style(style);
+            }
+            // A dot in the margin where a note starts.
+            let bytes = row.cells.iter().filter_map(|c| c.byte);
+            if let (Some(lo), Some(hi)) = (bytes.clone().min(), bytes.max())
+                && let Some((k, m)) = self
+                    .note_marks
+                    .iter()
+                    .enumerate()
+                    .filter(|(k, m)| {
+                        !dotted.contains(k) && m.range.start <= hi && lo <= m.range.end
+                    })
+                    .max_by_key(|(_, m)| m.chosen)
+            {
+                dotted.push(k);
+                let x = left.saturating_sub(2);
+                if x < right {
+                    let ch = if m.chosen { '▸' } else { '•' };
+                    buf[(x, y)]
+                        .set_char(ch)
+                        .set_style(Style::default().bg(p.bg).fg(m.color));
+                }
             }
         }
         // Who speaks next, faint, on the empty line.
@@ -620,6 +665,7 @@ impl Writer {
             ("\\", lang::l("öneri", "suggest"), 7),
             ("^O", lang::l("kişiler", "cast"), 8),
             ("^G", lang::l("pano", "board"), 6),
+            ("^N", lang::l("notlar", "notes"), 6),
             ("^F", lang::l("bul", "find"), 4),
             ("^K", lang::l("ara", "search"), 3),
             ("^Z", lang::l("geri al", "undo"), 2),

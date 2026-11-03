@@ -285,6 +285,7 @@ impl Writer {
                 );
             }
             PAct::Board => self.open_board(),
+            PAct::NotesPdf => self.notes_pdf(),
             PAct::Memorize => match self.block().and_then(|b| self.doc.speaker(b)) {
                 Some(a) => self.open_memo(a.to_string(), false),
                 None => self.say(
