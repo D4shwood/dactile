@@ -1,6 +1,7 @@
 //! Dactile's desktop app: a Svelte front end over the `dactile` library.
 //! Each command here passes a call from the window on to `play` or `view`.
 
+pub mod complete;
 pub mod notes;
 pub mod play;
 pub mod spell;
@@ -258,6 +259,27 @@ fn learn(app: Shared, word: String) -> Res<()> {
     Ok(())
 }
 
+/// The menu after a backslash (or a `#`, with `hash`).
+#[tauri::command]
+fn complete(text: String, at: usize, query: String, hash: bool) -> Vec<complete::Item> {
+    complete::items(&text, at, &query, hash)
+}
+
+#[tauri::command]
+fn heading(text: String, at: usize, act: bool, place: String, time: String) -> Change {
+    complete::heading(&text, at, act, &place, &time)
+}
+
+#[tauri::command]
+fn fields(text: String) -> complete::Fields {
+    complete::fields(&text)
+}
+
+#[tauri::command]
+fn verbs(text: String) -> Vec<String> {
+    complete::verbs(&text)
+}
+
 /// An error in the window, written where `npm run tauri dev` shows it.
 #[tauri::command]
 fn log(message: String) {
@@ -345,6 +367,10 @@ pub fn run() {
             misspelt,
             suggest,
             learn,
+            complete,
+            verbs,
+            heading,
+            fields,
         ])
         .run(tauri::generate_context!())
         .expect("the window could not open");

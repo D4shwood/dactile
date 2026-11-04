@@ -157,7 +157,6 @@ export const api = {
   startup: () => invoke<string | null>("startup"),
   pick: () => invoke<string | null>("pick"),
   pdf: (path: string) => invoke<ArrayBuffer>("pdf", { path }),
-};
   misspelt: (text: string, from: number, to: number) => invoke<Checked>("misspelt", { text, from, to }),
   suggest: (word: string) => invoke<string[]>("suggest", { word }),
   learn: (word: string) => invoke<void>("learn", { word }),
@@ -165,4 +164,21 @@ export const api = {
 export type Checked =
   | { kind: "loading" }
   | { kind: "missing"; why: string }
+  complete: (text: string, at: number, query: string, hash: boolean) =>
+    invoke<Item[]>("complete", { text, at, query, hash }),
+  verbs: (text: string) => invoke<string[]>("verbs", { text }),
+  heading: (text: string, at: number, act: boolean, place: string, time: string) =>
+    invoke<Change>("heading", { text, at, act, place, time }),
+  fields: (text: string) => invoke<{ places: string[]; times: string[] }>("fields", { text }),
+};
+
+/// A suggestion after a backslash (app/src-tauri/src/complete.rs).
+export interface Item {
+  key: string;
+  label: string;
+  group: "scene" | "character" | "command" | "macro";
+  action: "insert" | "scene" | "act" | "character";
+  text: string;
+  cursor: number;
+}
   | { kind: "words"; ranges: [number, number][] };

@@ -308,6 +308,17 @@ const typing = EditorView.inputHandler.of((view, from, to, text) => {
     userEvent: "input.type",
   });
   return true;
+/// A backslash typed at the cursor, as the keyboard would.
+export function typeBackslash(view: EditorView) {
+  const { from, to } = view.state.selection.main;
+  view.dispatch({
+    changes: { from, to, insert: "\\" },
+    selection: { anchor: from + 1 },
+    effects: openRaw.of(from),
+    userEvent: "input.type",
+  });
+}
+
 });
 
 function escapePasted(s: string, dialogue: boolean) {

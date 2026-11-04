@@ -5,9 +5,11 @@
   import { redo, selectAll, undo } from "@codemirror/commands";
   import { openSearchPanel } from "@codemirror/search";
   import { api, type BuildResult, type Card, type NoteCard, type Opened, type Preview, type Settings } from "./api";
-  import { currentView, extensions, insertSnippet, openCover, pickNote, setNotes, setSource, setView } from "./editor";
+  import { currentView, extensions, insertSnippet, typeBackslash, openCover, pickNote, setNotes, setSource, setView } from "./editor";
   import { BACKSTAGE, type Act } from "./ribbon";
   import { closeMenu, nextWord, showMenu, spelling } from "./spelling";
+  import { completion, openMenu } from "./completion";
+  import HeadingForm from "./HeadingForm.svelte";
   import Ribbon from "./Ribbon.svelte";
   import Pdf from "./Pdf.svelte";
   import Board from "./Board.svelte";
@@ -53,6 +55,8 @@
   let templateName = $state("");
   let message = $state<{ text: string; warn: boolean } | null>(null);
   let help = $state<"" | "keys" | "about">("");
+  /// A new scene's or act's form, from the menu: where it goes.
+  let headingForm = $state<{ act: boolean; at: number; places: string[]; times: string[] } | null>(null);
   let where = $state("");
 
   const l = (t: string, e: string) => (tr ? t : e);
@@ -360,6 +364,10 @@
       case "spelling":
         spellNext();
         break;
+      case "search":
+        view.focus();
+        if (!opened.read_only) openMenu(view, typeBackslash);
+        break;
       case "commands":
         ribbon?.focusSearch();
         break;
@@ -433,7 +441,7 @@
         leave();
         break;
     }
-    if (!["commands", "find", "spelling", "note-here", "notes-paste", "notes-file"].includes(id)) view.focus();
+    if (!["commands", "find", "spelling", "search", "note-here", "notes-paste", "notes-file"].includes(id)) view.focus();
   }
 
   function run(a: Act) {
@@ -489,6 +497,7 @@
       if (e.key === "p") id = "commands";
       if (e.key === "w") id = "close";
       if (e.key === "n") id = "notes";
+      if (e.key === "k") id = "search";
     }
     if (e.altKey && !mod && (e.key === "n" || e.key === "N")) id = "note-here";
     if (e.altKey && !mod && (e.key === "s" || e.key === "S")) id = "spelling";
@@ -509,6 +518,26 @@
     // Ctrl+wheel: the page grows, the window and the ribbon don't.
     e.preventDefault();
     setZoom(zoom + (e.deltaY < 0 ? 10 : -10));
+  }
+
+  /// A suggestion that is a form: a new scene or act (characters: soon).
+  async function openForm(kind: "scene" | "act" | "character", at: number) {
+    if (kind === "character") return say(l("Yeni karakter formu yakında.", "The new character form is coming."));
+    const f = await api.fields(view.state.doc.toString());
+    headingForm = { act: kind === "act", at, ...f };
+  }
+
+  async function writeHeading(a: string, b: string) {
+    const f = headingForm!;
+    headingForm = null;
+    const c = await api.heading(view.state.doc.toString(), f.at, f.act, a, b);
+    view.dispatch({
+      changes: { from: c.from, to: c.to, insert: c.insert },
+      selection: { anchor: c.at },
+      scrollIntoView: true,
+      userEvent: "input.complete",
+    });
+    view.focus();
   }
 
   /// Alt+S: the next misspelt word, picked, with its suggestions.
@@ -543,6 +572,10 @@
               saveTimer = setTimeout(() => dirty && save(), 4000);
             },
             save: () => key("save"),
+          }),
+          completion({
+            tr: () => tr,
+            form: (kind, at) => void openForm(kind, at),
           }),
           spelling({
             tr: () => tr,
@@ -705,6 +738,17 @@
     </div>
   {/if}
 
+  {#if headingForm}
+    <HeadingForm
+      {tr}
+      act={headingForm.act}
+      places={headingForm.places}
+      times={headingForm.times}
+      done={writeHeading}
+      cancel={() => ((headingForm = null), view.focus())}
+    />
+  {/if}
+
   {#if help}
     <div class="modal" role="dialog" tabindex="-1" onclick={() => (help = "")} onkeydown={() => {}}>
       <div class="sheet">
@@ -721,6 +765,8 @@
               <tr><td>Enter</td><td>{l("replik sonunda: karşı tarafın repliği", "at a line's end: the other speaker's line")}</td></tr>
               <tr><td>Tab</td><td>{l("konuşmacıdan hemen sonra: sıradaki kişi", "right after the speaker: the next one")}</td></tr>
               <tr><td>\</td><td>{l("bloğu kaynak olarak aç, makro yaz", "open the block as source, write a macro")}</td></tr>
+              <tr><td>Ctrl+K</td><td>{l("karakterler, komutlar, makrolar menüsü", "the menu of characters, commands, macros")}</td></tr>
+              <tr><td>Alt+S</td><td>{l("sıradaki yazım hatası ve önerileri", "the next misspelt word and its suggestions")}</td></tr>
               <tr><td>Ctrl+N</td><td>{l("notlar paneli", "the notes panel")}</td></tr>
               <tr><td>Alt+N</td><td>{l("seçili yere ya da kelimeye not", "a note on the selection or the word")}</td></tr>
               <tr><td>F7</td><td>{l("kâğıt sayfa ya da pencere boyu metin", "a paper sheet, or the text across the window")}</td></tr>
@@ -995,6 +1041,49 @@
     text-decoration: underline wavy #d23a2f;
     text-decoration-skip-ink: none;
     text-underline-offset: 3px;
+  }
+  :global(.dactile-menu.cm-tooltip) {
+    background: var(--chrome);
+    color: var(--chrome-fg);
+    border: 1px solid var(--chrome-line);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    font-family: var(--sans, system-ui);
+  }
+  :global(.dactile-menu.cm-tooltip-autocomplete > ul) {
+    max-height: 18em;
+    min-width: 320px;
+    font-family: inherit;
+  }
+  :global(.dactile-menu.cm-tooltip-autocomplete > ul > li) {
+    padding: 3px 10px;
+    line-height: 1.5;
+  }
+  :global(.dactile-menu.cm-tooltip-autocomplete > ul > li[aria-selected]) {
+    background: var(--claret);
+    color: #f6efe4;
+  }
+  :global(.dactile-menu .cm-completionLabel) {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  :global(.dactile-menu .cm-completionDetail) {
+    margin-left: 1em;
+    font-family: system-ui, sans-serif;
+    font-style: normal;
+    font-size: 12.5px;
+    opacity: 0.75;
+  }
+  :global(.dactile-menu completion-section) {
+    display: block;
+    padding: 4px 10px 2px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--chrome-muted);
+    border-bottom: 0;
   }
   :global(.spell-menu) {
     position: fixed;
