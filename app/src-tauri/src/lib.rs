@@ -3,6 +3,7 @@
 
 pub mod complete;
 pub mod notes;
+pub mod people;
 pub mod play;
 pub mod spell;
 pub mod view;
@@ -280,6 +281,56 @@ fn verbs(text: String) -> Vec<String> {
     complete::verbs(&text)
 }
 
+#[tauri::command]
+fn cast(text: String, by_lines: bool) -> Vec<people::Row> {
+    people::list(&text, by_lines)
+}
+
+#[tauri::command]
+fn suggest_alias(text: String, name: String) -> String {
+    people::suggest_alias(&text, &name)
+}
+
+#[tauri::command]
+fn character_add(text: String, form: people::Form, at: Option<usize>) -> Res<people::Made> {
+    people::add(&text, &form, at)
+}
+
+#[tauri::command]
+fn renames(text: String, old: String, new: String) -> usize {
+    people::renames(&text, &old, &new)
+}
+
+/// A character changed; its cards in `.dactile.toml` follow a new alias.
+#[tauri::command]
+fn character_edit(app: Shared, text: String, old: String, form: people::Form) -> Res<people::Made> {
+    let made = people::edit(&text, &old, &form)?;
+    let alias = form.alias.trim();
+    if alias != old
+        && let Some(open) = app.lock().unwrap().open.as_ref()
+        && let Ok(mut side) = dactile::sidecar::Sidecar::load(&open.path)
+    {
+        side.rename(&old, alias);
+        side.save(&open.path).map_err(err)?;
+    }
+    Ok(made)
+}
+
+#[tauri::command]
+fn character_remove(text: String, alias: String) -> Res<people::Made> {
+    people::remove(&text, &alias)
+}
+
+#[tauri::command]
+fn character_merge(text: String, from: String, into: String) -> Res<people::Made> {
+    people::merge(&text, &from, &into)
+}
+
+#[tauri::command]
+fn character_shift(text: String, alias: String, up: bool) -> Option<people::Made> {
+    people::shift(&text, &alias, up)
+}
+
 /// An error in the window, written where `npm run tauri dev` shows it.
 #[tauri::command]
 fn log(message: String) {
@@ -371,6 +422,14 @@ pub fn run() {
             verbs,
             heading,
             fields,
+            cast,
+            suggest_alias,
+            character_add,
+            renames,
+            character_edit,
+            character_remove,
+            character_merge,
+            character_shift,
         ])
         .run(tauri::generate_context!())
         .expect("the window could not open");

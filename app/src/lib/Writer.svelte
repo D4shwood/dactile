@@ -4,12 +4,14 @@
   import { EditorView } from "@codemirror/view";
   import { redo, selectAll, undo } from "@codemirror/commands";
   import { openSearchPanel } from "@codemirror/search";
-  import { api, type BuildResult, type Card, type NoteCard, type Opened, type Preview, type Settings } from "./api";
+  import { api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Made, type NoteCard, type Opened, type Preview, type Settings } from "./api";
   import { currentView, extensions, insertSnippet, typeBackslash, openCover, pickNote, setNotes, setSource, setView } from "./editor";
   import { BACKSTAGE, type Act } from "./ribbon";
   import { closeMenu, nextWord, showMenu, spelling } from "./spelling";
   import { completion, openMenu } from "./completion";
   import HeadingForm from "./HeadingForm.svelte";
+  import Cast from "./Cast.svelte";
+  import CharacterFormView from "./CharacterForm.svelte";
   import Ribbon from "./Ribbon.svelte";
   import Pdf from "./Pdf.svelte";
   import Board from "./Board.svelte";
@@ -36,7 +38,12 @@
   let source = $state(false);
   let typewriter = $state(false);
   /// What stands beside the page.
-  let side = $state<"" | "pdf" | "notes">("");
+  let side = $state<"" | "pdf" | "notes" | "cast">("");
+  let castRows = $state<CastEntry[]>([]);
+  let byLines = $state(false);
+  /// A character's form: who (null for a new one), and where its first
+  /// line goes when it came from the menu.
+  let characterForm = $state<{ old: string | null; start: CharacterForm; at: number | null; text: string } | null>(null);
   /// The page as a sheet on a desk (F7), or the text across the window.
   let sheet = $state(true);
   let noteCards = $state<NoteCard[]>([]);
@@ -84,6 +91,7 @@
         if (view.state.doc === doc) view.dispatch({ effects: setView.of(v) });
         if (board && view.state.doc === doc) cards = await api.board(doc.toString());
         if (side === "notes" && view.state.doc === doc) await refreshNotes();
+        if (side === "cast" && view.state.doc === doc) await refreshCast();
         locate();
       },
       now ? 0 : 140,
@@ -170,6 +178,97 @@
   function at(pos: number) {
     board = false;
     view.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: "start", yMargin: 60 }) });
+    view.focus();
+  }
+
+  // ------------------------------------------------------------ the cast
+
+  async function refreshCast() {
+    castRows = await api.cast(view.state.doc.toString(), byLines);
+  }
+
+  async function openCast(on = side !== "cast") {
+    side = on ? "cast" : "";
+    showNotes();
+    keepCursor();
+    if (on) await refreshCast();
+  }
+
+  $effect(() => {
+    byLines;
+    if (untrack(() => side) === "cast") void refreshCast();
+  });
+
+  /// A change from the cast panel or form: one undo step.
+  function applyMade(m: Made) {
+    const c = m.change;
+    view.dispatch({
+      changes: { from: c.from, to: c.to, insert: c.insert },
+      selection: m.cursor !== null ? { anchor: m.cursor } : undefined,
+      scrollIntoView: m.cursor !== null,
+      userEvent: "input.cast",
+    });
+    if (m.message) say(m.message);
+    if (side === "cast") void refreshCast();
+  }
+
+  async function castCall(f: () => Promise<Made | null>) {
+    try {
+      const m = await f();
+      if (m) applyMade(m);
+    } catch (e) {
+      say(String(e), true);
+    }
+  }
+
+  function newCharacter(at: number | null = null) {
+    if (opened.read_only) return;
+    characterForm = {
+      old: null,
+      at,
+      text: view.state.doc.toString(),
+      start: { name: "", alias: "", full: "", desc: "", star: false, in_table: true, hidden: false },
+    };
+  }
+
+  function editCharacter(r: CastEntry) {
+    if (opened.read_only) return;
+    characterForm = {
+      old: r.alias,
+      at: null,
+      text: view.state.doc.toString(),
+      start: {
+        name: r.name,
+        alias: r.alias,
+        full: r.full,
+        desc: r.desc,
+        star: r.star,
+        in_table: r.kind === "cast" || r.kind === "member",
+        hidden: r.kind === "hidden",
+      },
+    };
+  }
+
+  /// The form's answer: null when done, else why not.
+  async function characterDone(f: CharacterForm): Promise<string | null> {
+    const cf = characterForm!;
+    const text = view.state.doc.toString();
+    try {
+      const m = cf.old === null ? await api.characterAdd(text, f, cf.at) : await api.characterEdit(text, cf.old, f);
+      characterForm = null;
+      applyMade(m);
+      view.focus();
+      return null;
+    } catch (e) {
+      return String(e);
+    }
+  }
+
+  /// A character's first line, picked.
+  function firstLine(alias: string) {
+    const b = currentView(view.state)?.blocks.find((b) => b.cls === "line" && b.alias === alias);
+    if (!b) return say(l(`\${alias} henüz konuşmuyor.`, `\${alias} hasn't spoken yet.`));
+    view.dispatch({ selection: { anchor: b.to }, effects: EditorView.scrollIntoView(b.from, { y: "center" }) });
     view.focus();
   }
 
@@ -389,6 +488,12 @@
       case "notes":
         openNotes();
         break;
+      case "cast":
+        openCast();
+        break;
+      case "new-character":
+        newCharacter();
+        break;
       case "note-here":
         noteHere();
         break;
@@ -498,6 +603,7 @@
       if (e.key === "w") id = "close";
       if (e.key === "n") id = "notes";
       if (e.key === "k") id = "search";
+      if (e.key === "o") id = "cast";
     }
     if (e.altKey && !mod && (e.key === "n" || e.key === "N")) id = "note-here";
     if (e.altKey && !mod && (e.key === "s" || e.key === "S")) id = "spelling";
@@ -522,7 +628,7 @@
 
   /// A suggestion that is a form: a new scene or act (characters: soon).
   async function openForm(kind: "scene" | "act" | "character", at: number) {
-    if (kind === "character") return say(l("Yeni karakter formu yakında.", "The new character form is coming."));
+    if (kind === "character") return newCharacter(at);
     const f = await api.fields(view.state.doc.toString());
     headingForm = { act: kind === "act", at, ...f };
   }
@@ -652,6 +758,19 @@
     </div>
     {#if side === "pdf"}
       <Pdf {tr} result={built} {building} close={() => (side = "")} {goto} />
+    {:else if side === "cast"}
+      <Cast
+        {tr}
+        rows={castRows}
+        bind:byLines
+        add={() => newCharacter()}
+        edit={editCharacter}
+        remove={(a) => castCall(() => api.characterRemove(view.state.doc.toString(), a))}
+        merge={(a, b) => castCall(() => api.characterMerge(view.state.doc.toString(), a, b))}
+        shift={(a, up) => castCall(() => api.characterShift(view.state.doc.toString(), a, up))}
+        find={firstLine}
+        close={() => openCast(false)}
+      />
     {:else if side === "notes"}
       <Notes
         {tr}
@@ -738,6 +857,17 @@
     </div>
   {/if}
 
+  {#if characterForm}
+    <CharacterFormView
+      {tr}
+      text={characterForm.text}
+      old={characterForm.old}
+      start={characterForm.start}
+      done={characterDone}
+      cancel={() => ((characterForm = null), view.focus())}
+    />
+  {/if}
+
   {#if headingForm}
     <HeadingForm
       {tr}
@@ -765,6 +895,7 @@
               <tr><td>Enter</td><td>{l("replik sonunda: karşı tarafın repliği", "at a line's end: the other speaker's line")}</td></tr>
               <tr><td>Tab</td><td>{l("konuşmacıdan hemen sonra: sıradaki kişi", "right after the speaker: the next one")}</td></tr>
               <tr><td>\</td><td>{l("bloğu kaynak olarak aç, makro yaz", "open the block as source, write a macro")}</td></tr>
+              <tr><td>Ctrl+O</td><td>{l("kişiler paneli", "the cast panel")}</td></tr>
               <tr><td>Ctrl+K</td><td>{l("karakterler, komutlar, makrolar menüsü", "the menu of characters, commands, macros")}</td></tr>
               <tr><td>Alt+S</td><td>{l("sıradaki yazım hatası ve önerileri", "the next misspelt word and its suggestions")}</td></tr>
               <tr><td>Ctrl+N</td><td>{l("notlar paneli", "the notes panel")}</td></tr>

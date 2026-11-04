@@ -76,8 +76,8 @@ export const TABS: Tab[] = [
         b("Önsahne", "Prologue", "◇", "#önsahne", ins("#önsahne ‸")),
       ]),
       g("Kişi", "People", [
-        b("Karakter", "Character", "☺", "", soon),
-        b("Kişiler", "Cast", "⁂", "Ctrl+O", soon),
+        b("Karakter", "Character", "☺", "", k("new-character")),
+        b("Kişiler", "Cast", "⁂", "Ctrl+O", k("cast")),
       ]),
       g("Yönerge", "Directions", [
         b("Eylem", "Action", "⁋", "", ins("\\action{‸}")),
@@ -124,8 +124,8 @@ export const TABS: Tab[] = [
     tip: ["O", "P"],
     groups: [
       g("Kişiler", "Cast", [
-        b("Kişiler", "Cast", "⁂", "Ctrl+O", soon),
-        b("Yeni karakter", "New character", "☺", "", soon),
+        b("Kişiler", "Cast", "⁂", "Ctrl+O", k("cast")),
+        b("Yeni karakter", "New character", "☺", "", k("new-character")),
       ]),
       g("Sahneler", "Scenes", [
         b("Pano", "Board", "▦", "Ctrl+G", k("board")),

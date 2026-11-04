@@ -160,10 +160,6 @@ export const api = {
   misspelt: (text: string, from: number, to: number) => invoke<Checked>("misspelt", { text, from, to }),
   suggest: (word: string) => invoke<string[]>("suggest", { word }),
   learn: (word: string) => invoke<void>("learn", { word }),
-
-export type Checked =
-  | { kind: "loading" }
-  | { kind: "missing"; why: string }
   complete: (text: string, at: number, query: string, hash: boolean) =>
     invoke<Item[]>("complete", { text, at, query, hash }),
   verbs: (text: string) => invoke<string[]>("verbs", { text }),
@@ -173,12 +169,58 @@ export type Checked =
 };
 
 /// A suggestion after a backslash (app/src-tauri/src/complete.rs).
+  cast: (text: string, byLines: boolean) => invoke<CastEntry[]>("cast", { text, byLines }),
+  suggestAlias: (text: string, name: string) => invoke<string>("suggest_alias", { text, name }),
+  characterAdd: (text: string, form: CharacterForm, at: number | null) =>
+    invoke<Made>("character_add", { text, form, at }),
+  renames: (text: string, old: string, newAlias: string) => invoke<number>("renames", { text, old, new: newAlias }),
+  characterEdit: (text: string, old: string, form: CharacterForm) =>
+    invoke<Made>("character_edit", { text, old, form }),
+  characterRemove: (text: string, alias: string) => invoke<Made>("character_remove", { text, alias }),
+  characterMerge: (text: string, from: string, into: string) =>
+    invoke<Made>("character_merge", { text, from, into }),
+  characterShift: (text: string, alias: string, up: boolean) =>
+    invoke<Made | null>("character_shift", { text, alias, up }),
 export interface Item {
   key: string;
   label: string;
+/// A row of the cast panel (app/src-tauri/src/people.rs).
+export interface CastEntry {
+  group: boolean;
+  alias: string;
+  name: string;
+  full: string;
+  desc: string;
+  star: boolean;
+  kind: "cast" | "plain" | "hidden" | "member" | "group";
+  lines: number;
+  words: number;
+}
+
+export interface CharacterForm {
+  name: string;
+  alias: string;
+  full: string;
+  desc: string;
+  star: boolean;
+  in_table: boolean;
+  hidden: boolean;
+}
+
+/// A change to the play from the cast panel: one undo step.
+export interface Made {
+  change: Change;
+  cursor: number | null;
+  message: string;
+}
+
   group: "scene" | "character" | "command" | "macro";
   action: "insert" | "scene" | "act" | "character";
   text: string;
   cursor: number;
 }
   | { kind: "words"; ranges: [number, number][] };
+
+export type Checked =
+  | { kind: "loading" }
+  | { kind: "missing"; why: string }
