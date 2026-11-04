@@ -3,6 +3,7 @@
 
 pub mod notes;
 pub mod play;
+pub mod spell;
 pub mod view;
 
 use dactile::config::Config;
@@ -21,6 +22,8 @@ struct App {
     started: bool,
     /// The open play's notes.
     notes: Notes,
+    /// The open play's own words, and the spell checker's answers.
+    known: spell::Known,
 }
 
 impl App {
@@ -82,6 +85,10 @@ fn open(app: Shared, path: String) -> Res<Opened> {
     a.open = None;
     let (open, opened) = play::open(&mut a.cfg, &PathBuf::from(path)).map_err(err)?;
     a.notes = notes::load(&open.path);
+    let words = dactile::sidecar::Sidecar::load(&open.path)
+        .map(|s| s.words)
+        .unwrap_or_default();
+    a.known.set_words(&words);
     a.open = Some(open);
     Ok(opened)
 }
@@ -222,6 +229,35 @@ fn note_authors(app: Shared) -> Vec<String> {
     app.lock().unwrap().notes.authors()
 }
 
+/// The misspelt words between two places in the text.
+#[tauri::command]
+fn misspelt(
+    app: Shared,
+    sp: State<'_, spell::Shared>,
+    text: String,
+    from: usize,
+    to: usize,
+) -> spell::Checked {
+    spell::misspelt(&sp, &mut app.lock().unwrap().known, &text, from, to)
+}
+
+#[tauri::command]
+fn suggest(sp: State<'_, spell::Shared>, word: String) -> Vec<String> {
+    spell::suggest(&sp, &word)
+}
+
+/// A word the play keeps as spelt right, in its `.dactile.toml`.
+#[tauri::command]
+fn learn(app: Shared, word: String) -> Res<()> {
+    let mut a = app.lock().unwrap();
+    let path = a.open.as_ref().ok_or("no play open")?.path.clone();
+    let mut side = dactile::sidecar::Sidecar::load(&path).map_err(err)?;
+    side.add_word(&word);
+    side.save(&path).map_err(err)?;
+    a.known.set_words(&side.words);
+    Ok(())
+}
+
 /// An error in the window, written where `npm run tauri dev` shows it.
 #[tauri::command]
 fn log(message: String) {
@@ -272,7 +308,10 @@ fn dev_eval(app: tauri::AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .manage(Mutex::new(App::default()))
+        .manage(spell::Shared::default())
         .setup(|app| {
+            use tauri::Manager;
+            spell::load(app.state::<spell::Shared>().inner().clone());
             dev_eval(app.handle().clone());
             Ok(())
         })
@@ -303,6 +342,9 @@ pub fn run() {
             note_fix,
             note_authors,
             pdf,
+            misspelt,
+            suggest,
+            learn,
         ])
         .run(tauri::generate_context!())
         .expect("the window could not open");

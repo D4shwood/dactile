@@ -7,6 +7,7 @@
   import { api, type BuildResult, type Card, type NoteCard, type Opened, type Preview, type Settings } from "./api";
   import { currentView, extensions, insertSnippet, openCover, pickNote, setNotes, setSource, setView } from "./editor";
   import { BACKSTAGE, type Act } from "./ribbon";
+  import { closeMenu, nextWord, showMenu, spelling } from "./spelling";
   import Ribbon from "./Ribbon.svelte";
   import Pdf from "./Pdf.svelte";
   import Board from "./Board.svelte";
@@ -356,6 +357,9 @@
       case "find":
         openSearchPanel(view);
         break;
+      case "spelling":
+        spellNext();
+        break;
       case "commands":
         ribbon?.focusSearch();
         break;
@@ -429,7 +433,7 @@
         leave();
         break;
     }
-    if (!["commands", "find", "note-here", "notes-paste", "notes-file"].includes(id)) view.focus();
+    if (!["commands", "find", "spelling", "note-here", "notes-paste", "notes-file"].includes(id)) view.focus();
   }
 
   function run(a: Act) {
@@ -487,6 +491,7 @@
       if (e.key === "n") id = "notes";
     }
     if (e.altKey && !mod && (e.key === "n" || e.key === "N")) id = "note-here";
+    if (e.altKey && !mod && (e.key === "s" || e.key === "S")) id = "spelling";
     if (e.key === "Escape") {
       if (help) return void (help = "");
       if (backstage) return void (backstage = false);
@@ -504,6 +509,20 @@
     // Ctrl+wheel: the page grows, the window and the ribbon don't.
     e.preventDefault();
     setZoom(zoom + (e.deltaY < 0 ? 10 : -10));
+  }
+
+  /// Alt+S: the next misspelt word, picked, with its suggestions.
+  function spellNext() {
+    const w = nextWord(view.state, view.state.selection.main.head);
+    if (!w) return say(l("Yazım hatası görünmüyor.", "No misspelt words in sight."));
+    view.dispatch({
+      selection: { anchor: w.from, head: w.to },
+      effects: EditorView.scrollIntoView(w.from, { y: "center" }),
+    });
+    requestAnimationFrame(() => {
+      const c = view.coordsAtPos(w.from);
+      if (c) void showMenu(view, w, c.left, c.bottom + 4, tr, true);
+    });
   }
 
   // ------------------------------------------------------------ life
@@ -524,6 +543,11 @@
               saveTimer = setTimeout(() => dirty && save(), 4000);
             },
             save: () => key("save"),
+          }),
+          spelling({
+            tr: () => tr,
+            on: () => true,
+            missing: (why) => say(why, true),
           }),
           EditorState.readOnly.of(opened.read_only),
           EditorView.updateListener.of((u) => {
@@ -553,6 +577,7 @@
   });
 
   onDestroy(() => {
+    closeMenu();
     clearTimeout(viewTimer);
     clearTimeout(saveTimer);
     view?.destroy();
@@ -965,6 +990,56 @@
   }
   .page :global(.cm-note-picked) {
     background: color-mix(in srgb, var(--claret) 18%, transparent);
+  }
+  .page :global(.cm-misspelt) {
+    text-decoration: underline wavy #d23a2f;
+    text-decoration-skip-ink: none;
+    text-underline-offset: 3px;
+  }
+  :global(.spell-menu) {
+    position: fixed;
+    z-index: 50;
+    min-width: 180px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    background: var(--chrome);
+    color: var(--chrome-fg);
+    border: 1px solid var(--chrome-line);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    font-size: 13px;
+  }
+  :global(.spell-menu button) {
+    text-align: left;
+    background: none;
+    border: 0;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: inherit;
+  }
+  :global(.spell-menu button:hover),
+  :global(.spell-menu button:focus) {
+    background: var(--chrome-2);
+    outline: none;
+  }
+  :global(.spell-menu .spell-sugg) {
+    font-family: var(--serif);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  :global(.spell-menu .spell-learn) {
+    color: var(--claret);
+  }
+  :global(.spell-menu hr) {
+    border: 0;
+    border-top: 1px solid var(--chrome-line);
+    margin: 3px 0;
+  }
+  :global(.spell-quiet) {
+    padding: 5px 10px;
+    color: var(--chrome-muted);
   }
   .page :global(.cm-chip) {
     cursor: pointer;

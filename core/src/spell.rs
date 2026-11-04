@@ -81,7 +81,12 @@ impl Speller {
         {
             return true;
         }
-        self.dict.check(word) || self.dict.check(&lower) || self.dict.check(&title(&lower))
+        let known = |w: &str| {
+            let lower = crate::cast::lower_tr(w);
+            self.dict.check(w) || self.dict.check(&lower) || self.dict.check(&title(&lower))
+        };
+        // "Rüzgâr", "hâlâ": the dictionary may know them without the hat.
+        known(word) || (word.contains(HATS) && known(&word.chars().map(unhat).collect::<String>()))
     }
 
     pub fn suggest(&self, word: &str) -> Vec<String> {
@@ -89,6 +94,20 @@ impl Speller {
         self.dict.suggest(word, &mut out);
         out.truncate(8);
         out
+    }
+}
+
+const HATS: [char; 6] = ['â', 'î', 'û', 'Â', 'Î', 'Û'];
+
+fn unhat(c: char) -> char {
+    match c {
+        'â' => 'a',
+        'î' => 'i',
+        'û' => 'u',
+        'Â' => 'A',
+        'Î' => 'İ',
+        'Û' => 'U',
+        c => c,
     }
 }
 
@@ -292,6 +311,8 @@ mod tests {
             "Selin'in",
             "Gidiyorum",
             "SELİN",
+            "Rüzgârın",
+            "hâlâ",
         ] {
             assert!(s.check(w), "{w}");
         }

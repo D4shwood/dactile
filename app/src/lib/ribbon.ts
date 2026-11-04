@@ -59,7 +59,7 @@ export const TABS: Tab[] = [
       ]),
       g("Düzenleme", "Editing", [
         b("Bul", "Find", "⌕", "Ctrl+F", k("find")),
-        b("Yazım", "Spelling", "✓", "Alt+S", soon),
+        b("Yazım", "Spelling", "✓", "Alt+S", k("spelling")),
         b("Ara", "Search", "⌘", "Ctrl+K", soon),
         b("Komutlar", "Commands", "≡", "Ctrl+P", k("commands")),
       ]),

@@ -158,3 +158,11 @@ export const api = {
   pick: () => invoke<string | null>("pick"),
   pdf: (path: string) => invoke<ArrayBuffer>("pdf", { path }),
 };
+  misspelt: (text: string, from: number, to: number) => invoke<Checked>("misspelt", { text, from, to }),
+  suggest: (word: string) => invoke<string[]>("suggest", { word }),
+  learn: (word: string) => invoke<void>("learn", { word }),
+
+export type Checked =
+  | { kind: "loading" }
+  | { kind: "missing"; why: string }
+  | { kind: "words"; ranges: [number, number][] };
