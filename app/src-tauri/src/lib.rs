@@ -5,6 +5,7 @@ pub mod complete;
 pub mod notes;
 pub mod people;
 pub mod play;
+pub mod scenes;
 pub mod spell;
 pub mod summary;
 pub mod view;
@@ -27,6 +28,8 @@ struct App {
     notes: Notes,
     /// The open play's own words, and the spell checker's answers.
     known: spell::Known,
+    /// The draft kept before the play's shape first changed.
+    kept: Option<PathBuf>,
 }
 
 impl App {
@@ -88,6 +91,7 @@ fn open(app: Shared, path: String) -> Res<Opened> {
     a.open = None;
     let (open, opened) = play::open(&mut a.cfg, &PathBuf::from(path)).map_err(err)?;
     a.notes = notes::load(&open.path);
+    a.kept = None;
     let words = dactile::sidecar::Sidecar::load(&open.path)
         .map(|s| s.words)
         .unwrap_or_default();
@@ -355,6 +359,20 @@ fn summary_set(app: Shared, text: String, at: usize, summary: String) -> Res<Opt
     summary::set(&text, at, &summary, &path).map_err(err)
 }
 
+#[tauri::command]
+fn scene_split(app: Shared, text: String, at: usize) -> Res<people::Made> {
+    let mut a = app.lock().unwrap();
+    let path = a.open.as_ref().ok_or("no play open")?.path.clone();
+    scenes::split(&text, at, &path, &mut a.kept)
+}
+
+#[tauri::command]
+fn scene_join(app: Shared, text: String, at: usize) -> Res<people::Made> {
+    let mut a = app.lock().unwrap();
+    let path = a.open.as_ref().ok_or("no play open")?.path.clone();
+    scenes::join(&text, at, &path, &mut a.kept)
+}
+
 /// An error in the window, written where `npm run tauri dev` shows it.
 #[tauri::command]
 fn log(message: String) {
@@ -457,6 +475,8 @@ pub fn run() {
             summaries,
             summary_here,
             summary_set,
+            scene_split,
+            scene_join,
         ])
         .run(tauri::generate_context!())
         .expect("the window could not open");

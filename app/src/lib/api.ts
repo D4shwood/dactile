@@ -186,6 +186,8 @@ export const api = {
 };
 
 /// A scene's summary, under its heading (from `at` to the line's `end`).
+  sceneSplit: (text: string, at: number) => invoke<Made>("scene_split", { text, at }),
+  sceneJoin: (text: string, at: number) => invoke<Made>("scene_join", { text, at }),
 export interface Summary {
   at: number;
   end: number;
@@ -222,10 +224,6 @@ export interface Made {
   message: string;
 }
 
-  group: "scene" | "character" | "command" | "macro";
-  action: "insert" | "scene" | "act" | "character";
-  text: string;
-  cursor: number;
 /// A suggestion after a backslash (app/src-tauri/src/complete.rs).
 export interface Item {
   key: string;
@@ -234,5 +232,9 @@ export interface Item {
 
 export type Checked =
   | { kind: "loading" }
+  group: "scene" | "character" | "command" | "macro";
+  action: "insert" | "scene" | "act" | "character";
+  text: string;
+  cursor: number;
   | { kind: "missing"; why: string }
   | { kind: "words"; ranges: [number, number][] };

@@ -9,6 +9,7 @@
   import { BACKSTAGE, type Act } from "./ribbon";
   import { closeMenu, nextWord, showMenu, spelling } from "./spelling";
   import { completion, openMenu } from "./completion";
+  import { kept } from "./session";
   import HeadingForm from "./HeadingForm.svelte";
   import Cast from "./Cast.svelte";
   import SummaryForm from "./SummaryForm.svelte";
@@ -246,7 +247,7 @@
     view.dispatch({
       changes: { from: c.from, to: c.to, insert: c.insert },
       selection: m.cursor !== null ? { anchor: m.cursor } : undefined,
-      scrollIntoView: m.cursor !== null,
+      effects: m.cursor !== null ? EditorView.scrollIntoView(m.cursor, { y: "center" }) : [],
       userEvent: "input.cast",
     });
     if (m.message) say(m.message);
@@ -535,6 +536,14 @@
       case "summary":
         summaryHere();
         break;
+      case "split":
+      case "join":
+        if (!opened.read_only) {
+          const text = view.state.doc.toString();
+          const at = view.state.selection.main.head;
+          void castCall(() => (id === "split" ? api.sceneSplit(text, at) : api.sceneJoin(text, at)));
+        }
+        break;
       case "new-character":
         newCharacter();
         break;
@@ -652,6 +661,8 @@
     if (e.altKey && !mod && (e.key === "n" || e.key === "N")) id = "note-here";
     if (e.altKey && !mod && (e.key === "s" || e.key === "S")) id = "spelling";
     if (e.altKey && !mod && (e.key === "e" || e.key === "E")) id = "summary";
+    if (e.altKey && !mod && (e.key === "b" || e.key === "B")) id = "split";
+    if (e.altKey && !mod && (e.key === "j" || e.key === "J")) id = "join";
     if (e.key === "Escape") {
       if (help) return void (help = "");
       if (backstage) return void (backstage = false);
@@ -712,7 +723,7 @@
     view = new EditorView({
       parent: host,
       state: EditorState.create({
-        doc: opened.text,
+        doc: kept.get(opened) ?? opened.text,
         extensions: [
           extensions({
             changed: () => {
@@ -762,6 +773,7 @@
   });
 
   onDestroy(() => {
+    if (view) kept.set(opened, view.state.doc.toString());
     closeMenu();
     clearTimeout(viewTimer);
     clearTimeout(saveTimer);
@@ -952,6 +964,7 @@
               <tr><td>Tab</td><td>{l("konuşmacıdan hemen sonra: sıradaki kişi", "right after the speaker: the next one")}</td></tr>
               <tr><td>\</td><td>{l("bloğu kaynak olarak aç, makro yaz", "open the block as source, write a macro")}</td></tr>
               <tr><td>Alt+E</td><td>{l("sahnenin özeti (PDF'e girmez)", "the scene's summary (never printed)")}</td></tr>
+              <tr><td>Alt+B / Alt+J</td><td>{l("sahneyi imleçte böl / sonrakiyle birleştir", "split the scene at the cursor / join it with the next")}</td></tr>
               <tr><td>Ctrl+O</td><td>{l("kişiler paneli", "the cast panel")}</td></tr>
               <tr><td>Ctrl+K</td><td>{l("karakterler, komutlar, makrolar menüsü", "the menu of characters, commands, macros")}</td></tr>
               <tr><td>Alt+S</td><td>{l("sıradaki yazım hatası ve önerileri", "the next misspelt word and its suggestions")}</td></tr>
