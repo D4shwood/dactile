@@ -10,6 +10,7 @@
   import { closeMenu, nextWord, showMenu, spelling } from "./spelling";
   import { completion, openMenu } from "./completion";
   import { kept } from "./session";
+  import { mouse } from "./mouse";
   import HeadingForm from "./HeadingForm.svelte";
   import Cast from "./Cast.svelte";
   import SummaryForm from "./SummaryForm.svelte";
@@ -740,6 +741,7 @@
             form: (kind, at) => void openForm(kind, at),
           }),
           summaries,
+          mouse,
           spelling({
             tr: () => tr,
             on: () => true,
