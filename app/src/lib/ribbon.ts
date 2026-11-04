@@ -109,8 +109,8 @@ export const TABS: Tab[] = [
       ]),
       g("Odak", "Focus", [
         b("Daktilo", "Typewriter", "⌨", "F3", k("typewriter")),
-        b("Sahne odağı", "Scene focus", "◉", "F4", soon),
-        b("Soldur", "Dim", "◐", "F8", soon),
+        b("Sahne odağı", "Scene focus", "◉", "F4", k("focus")),
+        b("Soldur", "Dim", "◐", "F8", k("dim")),
       ]),
       g("Görünüş", "Look", [
         b("Tema", "Theme", "◈", "F6", k("theme")),

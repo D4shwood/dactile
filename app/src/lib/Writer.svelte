@@ -5,6 +5,7 @@
   import { redo, selectAll, undo } from "@codemirror/commands";
   import { openSearchPanel } from "@codemirror/search";
   import { api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Made, type Summary, type NoteCard, type Opened, type Preview, type Settings } from "./api";
+  import { focus, setCards, setDim, setFocus } from "./focus";
   import { currentView, extensions, insertSnippet, typeBackslash, openCover, pickNote, setNotes, setSource, setView } from "./editor";
   import { BACKSTAGE, type Act } from "./ribbon";
   import { closeMenu, nextWord, showMenu, spelling } from "./spelling";
@@ -62,6 +63,9 @@
   let building = $state(false);
   let built = $state<BuildResult | null>(null);
   let board = $state(false);
+  /// F4 and F8.
+  let focused = $state(false);
+  let dimmed = $state(false);
   let cards = $state<Card[]>([]);
   let backstage = $state(false);
   let page = $state("info");
@@ -97,6 +101,7 @@
         // Typed on meanwhile: the next one is on its way.
         if (view.state.doc === doc) view.dispatch({ effects: setView.of(v) });
         if (board && view.state.doc === doc) cards = await api.board(doc.toString());
+        if (focused && view.state.doc === doc) await refocus();
         if (side === "notes" && view.state.doc === doc) await refreshNotes();
         if (side === "cast" && view.state.doc === doc) await refreshCast();
         if (view.state.doc === doc) await refreshSummaries();
@@ -434,6 +439,13 @@
     pasting = t;
   }
 
+  /// The scenes for F4, as the board sees them.
+  async function refocus() {
+    const doc = view.state.doc;
+    const c = await api.board(doc.toString());
+    if (focused && view.state.doc === doc) view.dispatch({ effects: [setCards.of({ cards: c, tr }), setFocus.of(true)] });
+  }
+
   // ------------------------------------------------------------ the board
 
   async function openBoard() {
@@ -536,6 +548,17 @@
         break;
       case "summary":
         summaryHere();
+        break;
+      case "focus":
+        focused = !focused;
+        if (focused) void refocus();
+        else view.dispatch({ effects: setFocus.of(false) });
+        say(focused ? l("Sahne odağı: yalnız bu sahne.", "Scene focus: this scene only.") : l("Sahne odağı kapalı.", "Scene focus off."));
+        break;
+      case "dim":
+        dimmed = !dimmed;
+        view.dispatch({ effects: setDim.of(dimmed) });
+        say(dimmed ? l("Soldurma: yalnız imleçteki blok parlak.", "Dim: only the cursor's block lit.") : l("Soldurma kapalı.", "Dim off."));
         break;
       case "split":
       case "join":
@@ -642,9 +665,11 @@
       F1: mod ? "fold" : "keys",
       F2: "source",
       F3: "typewriter",
+      F4: "focus",
       F5: "build",
       F6: "theme",
       F7: "page",
+      F8: "dim",
       F12: "pdf-panel",
     };
     let id = keys[e.key];
@@ -741,6 +766,7 @@
             form: (kind, at) => void openForm(kind, at),
           }),
           summaries,
+          focus,
           mouse,
           spelling({
             tr: () => tr,
@@ -972,6 +998,8 @@
               <tr><td>Alt+S</td><td>{l("sıradaki yazım hatası ve önerileri", "the next misspelt word and its suggestions")}</td></tr>
               <tr><td>Ctrl+N</td><td>{l("notlar paneli", "the notes panel")}</td></tr>
               <tr><td>Alt+N</td><td>{l("seçili yere ya da kelimeye not", "a note on the selection or the word")}</td></tr>
+              <tr><td>F4</td><td>{l("sahne odağı: öteki sahneler tek satır", "scene focus: the other scenes one line each")}</td></tr>
+              <tr><td>F8</td><td>{l("imleçteki blok dışını soldur", "dim all but the cursor's block")}</td></tr>
               <tr><td>F7</td><td>{l("kâğıt sayfa ya da pencere boyu metin", "a paper sheet, or the text across the window")}</td></tr>
               <tr><td>F2</td><td>{l("bütün kaynak", "all of the source")}</td></tr>
               <tr><td>F6</td><td>{l("tema", "theme")}</td></tr>
@@ -1239,6 +1267,22 @@
   }
   .page :global(.cm-note-picked) {
     background: color-mix(in srgb, var(--claret) 18%, transparent);
+  }
+  .page :global(.cm-folded) {
+    margin: 0.4em 0;
+    padding: 0.2em 0.6em;
+    border-left: 2px solid var(--claret);
+    color: var(--faint);
+    font-style: italic;
+    cursor: pointer;
+  }
+  .page :global(.cm-folded:hover) {
+    color: var(--claret);
+  }
+  .page :global(.cm-dimmed .cm-line:not(.cm-here)),
+  .page :global(.cm-dimmed .cm-cover) {
+    opacity: 0.32;
+    transition: opacity 0.15s;
   }
   .page :global(.cm-summary) {
     margin: -0.4em auto 0.8em;

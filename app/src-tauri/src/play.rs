@@ -316,6 +316,8 @@ pub struct Card {
     pub lines: usize,
     /// Where it starts, in UTF-16 units: the editor goes there.
     pub at: usize,
+    /// Where its last line with something on it ends.
+    pub end: usize,
     /// The places it can be moved to (before card `p`; the count means
     /// after the last).
     pub places: Vec<usize>,
@@ -335,6 +337,7 @@ pub fn board(text: &str) -> Vec<Card> {
             title: u.title.trim().to_string(),
             lines: u.lines,
             at: view::unit_at(text, u.span.start),
+            end: view::unit_at(text, u.span.end),
             places: structure::places(&units, i),
         })
         .collect()

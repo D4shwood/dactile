@@ -103,6 +103,7 @@ export interface Card {
   title: string;
   lines: number;
   at: number;
+  end: number;
   places: number[];
 }
 
