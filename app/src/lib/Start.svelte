@@ -92,9 +92,11 @@
 
 <div class="start">
   <nav class="side">
-    <div class="brand">
-      <img src="/icon.png" alt="" />
-      <span>Dactile</span>
+    <!-- The terminal app's masthead: the name spaced out, a typewriter's
+         cursor blinking after it, and what it is typing itself out. -->
+    <div class="brand" aria-label="Dactile">
+      <div class="name">D A C T I L E<span class="caret"></span></div>
+      <div class="what">Dynamic Stagewright</div>
     </div>
     {#each SIDE as [id, icon, t, e]}
       <button class:on={section === id} onclick={() => (section = id)}>
@@ -257,15 +259,50 @@
     padding: 18px 0;
   }
   .brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 0 20px 22px;
-    font: 600 22px var(--serif);
+    margin: -18px 0 14px;
+    padding: 18px 20px 14px;
+    background: #151515;
+    font-family: var(--mono, ui-monospace, "DejaVu Sans Mono", monospace);
   }
-  .brand img {
-    width: 30px;
-    height: 30px;
+  .brand .name {
+    color: #d8cfc0;
+    font-weight: 700;
+    font-size: 19px;
+    white-space: nowrap;
+  }
+  .caret {
+    display: inline-block;
+    width: 0.6em;
+    height: 1.05em;
+    margin-left: 0.35em;
+    vertical-align: -0.15em;
+    background: #c4505a;
+    animation: blink 1.2s steps(1) infinite;
+  }
+  .brand .what {
+    margin-top: 4px;
+    color: #8f877b;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    width: 19ch;
+    animation: type 0.55s steps(19) 0.15s both;
+  }
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+  @keyframes type {
+    from {
+      width: 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .caret,
+    .brand .what {
+      animation: none;
+    }
   }
   .side button {
     display: flex;
