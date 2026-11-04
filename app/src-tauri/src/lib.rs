@@ -6,6 +6,7 @@ pub mod notes;
 pub mod people;
 pub mod play;
 pub mod spell;
+pub mod summary;
 pub mod view;
 
 use dactile::config::Config;
@@ -331,6 +332,29 @@ fn character_shift(text: String, alias: String, up: bool) -> Option<people::Made
     people::shift(&text, &alias, up)
 }
 
+fn sidecar(app: &Shared) -> Res<(PathBuf, dactile::sidecar::Sidecar)> {
+    let a = app.lock().unwrap();
+    let path = a.open.as_ref().ok_or("no play open")?.path.clone();
+    let side = dactile::sidecar::Sidecar::load(&path).map_err(err)?;
+    Ok((path, side))
+}
+
+#[tauri::command]
+fn summaries(app: Shared, text: String) -> Res<Vec<summary::Summary>> {
+    Ok(summary::list(&text, &sidecar(&app)?.1))
+}
+
+#[tauri::command]
+fn summary_here(app: Shared, text: String, at: usize) -> Res<summary::Here> {
+    summary::here(&text, at, &sidecar(&app)?.1)
+}
+
+#[tauri::command]
+fn summary_set(app: Shared, text: String, at: usize, summary: String) -> Res<Option<Change>> {
+    let (path, _) = sidecar(&app)?;
+    summary::set(&text, at, &summary, &path).map_err(err)
+}
+
 /// An error in the window, written where `npm run tauri dev` shows it.
 #[tauri::command]
 fn log(message: String) {
@@ -430,6 +454,9 @@ pub fn run() {
             character_remove,
             character_merge,
             character_shift,
+            summaries,
+            summary_here,
+            summary_set,
         ])
         .run(tauri::generate_context!())
         .expect("the window could not open");

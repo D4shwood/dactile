@@ -165,10 +165,6 @@ export const api = {
   verbs: (text: string) => invoke<string[]>("verbs", { text }),
   heading: (text: string, at: number, act: boolean, place: string, time: string) =>
     invoke<Change>("heading", { text, at, act, place, time }),
-  fields: (text: string) => invoke<{ places: string[]; times: string[] }>("fields", { text }),
-};
-
-/// A suggestion after a backslash (app/src-tauri/src/complete.rs).
   cast: (text: string, byLines: boolean) => invoke<CastEntry[]>("cast", { text, byLines }),
   suggestAlias: (text: string, name: string) => invoke<string>("suggest_alias", { text, name }),
   characterAdd: (text: string, form: CharacterForm, at: number | null) =>
@@ -181,9 +177,21 @@ export const api = {
     invoke<Made>("character_merge", { text, from, into }),
   characterShift: (text: string, alias: string, up: boolean) =>
     invoke<Made | null>("character_shift", { text, alias, up }),
-export interface Item {
-  key: string;
-  label: string;
+  summaries: (text: string) => invoke<Summary[]>("summaries", { text }),
+  summaryHere: (text: string, at: number) =>
+    invoke<{ at: number; title: string; text: string }>("summary_here", { text, at }),
+  summarySet: (text: string, at: number, summary: string) =>
+    invoke<Change | null>("summary_set", { text, at, summary }),
+  fields: (text: string) => invoke<{ places: string[]; times: string[] }>("fields", { text }),
+};
+
+/// A scene's summary, under its heading (from `at` to the line's `end`).
+export interface Summary {
+  at: number;
+  end: number;
+  text: string;
+}
+
 /// A row of the cast panel (app/src-tauri/src/people.rs).
 export interface CastEntry {
   group: boolean;
@@ -218,9 +226,13 @@ export interface Made {
   action: "insert" | "scene" | "act" | "character";
   text: string;
   cursor: number;
+/// A suggestion after a backslash (app/src-tauri/src/complete.rs).
+export interface Item {
+  key: string;
+  label: string;
 }
-  | { kind: "words"; ranges: [number, number][] };
 
 export type Checked =
   | { kind: "loading" }
   | { kind: "missing"; why: string }
+  | { kind: "words"; ranges: [number, number][] };

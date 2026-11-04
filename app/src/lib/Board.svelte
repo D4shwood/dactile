@@ -10,9 +10,12 @@
     move,
     open,
     close,
+    summaries = {},
   }: {
     tr: boolean;
     cards: Card[];
+    /// Scene summaries by where their card starts.
+    summaries?: Record<number, string>;
     move: (card: number, to: number) => void;
     open: (at: number) => void;
     close: () => void;
@@ -125,6 +128,7 @@
           >
             <div class="label">{c.label}</div>
             <div class="title">{c.title || "—"}</div>
+            {#if summaries[c.at]}<div class="summary">{summaries[c.at]}</div>{/if}
             <div class="lines">{c.lines} {tr ? "replik" : "lines"}</div>
           </div>
         {/each}
@@ -135,6 +139,14 @@
 </div>
 
 <style>
+  .summary {
+    margin: 4px 0 2px;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 12.5px;
+    line-height: 1.35;
+    color: var(--chrome-muted);
+  }
   .board {
     display: flex;
     flex-direction: column;

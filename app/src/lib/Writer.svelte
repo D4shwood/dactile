@@ -4,13 +4,15 @@
   import { EditorView } from "@codemirror/view";
   import { redo, selectAll, undo } from "@codemirror/commands";
   import { openSearchPanel } from "@codemirror/search";
-  import { api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Made, type NoteCard, type Opened, type Preview, type Settings } from "./api";
+  import { api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Made, type Summary, type NoteCard, type Opened, type Preview, type Settings } from "./api";
   import { currentView, extensions, insertSnippet, typeBackslash, openCover, pickNote, setNotes, setSource, setView } from "./editor";
   import { BACKSTAGE, type Act } from "./ribbon";
   import { closeMenu, nextWord, showMenu, spelling } from "./spelling";
   import { completion, openMenu } from "./completion";
   import HeadingForm from "./HeadingForm.svelte";
   import Cast from "./Cast.svelte";
+  import SummaryForm from "./SummaryForm.svelte";
+  import { setSummaries, summaries } from "./summaries";
   import CharacterFormView from "./CharacterForm.svelte";
   import Ribbon from "./Ribbon.svelte";
   import Pdf from "./Pdf.svelte";
@@ -40,6 +42,9 @@
   /// What stands beside the page.
   let side = $state<"" | "pdf" | "notes" | "cast">("");
   let castRows = $state<CastEntry[]>([]);
+  let sums = $state<Summary[]>([]);
+  /// Alt+E: the scene being summed up.
+  let summaryForm = $state<{ at: number; title: string; text: string } | null>(null);
   let byLines = $state(false);
   /// A character's form: who (null for a new one), and where its first
   /// line goes when it came from the menu.
@@ -92,6 +97,7 @@
         if (board && view.state.doc === doc) cards = await api.board(doc.toString());
         if (side === "notes" && view.state.doc === doc) await refreshNotes();
         if (side === "cast" && view.state.doc === doc) await refreshCast();
+        if (view.state.doc === doc) await refreshSummaries();
         locate();
       },
       now ? 0 : 140,
@@ -178,6 +184,41 @@
   function at(pos: number) {
     board = false;
     view.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: "start", yMargin: 60 }) });
+    view.focus();
+  }
+
+  // ------------------------------------------------------------ summaries
+
+  async function refreshSummaries() {
+    const doc = view.state.doc;
+    const s = await api.summaries(doc.toString()).catch(() => [] as Summary[]);
+    if (view.state.doc !== doc) return;
+    sums = s;
+    view.dispatch({ effects: setSummaries.of(s) });
+  }
+
+  /// Alt+E: the summary of the cursor's scene.
+  async function summaryHere() {
+    if (opened.read_only) return;
+    try {
+      summaryForm = await api.summaryHere(view.state.doc.toString(), view.state.selection.main.head);
+    } catch (e) {
+      say(String(e));
+    }
+  }
+
+  async function summaryDone(text: string) {
+    const f = summaryForm!;
+    summaryForm = null;
+    try {
+      const c = await api.summarySet(view.state.doc.toString(), f.at, text);
+      // The heading's id (%@k3), when it had none: hidden on the page.
+      if (c) view.dispatch({ changes: { from: c.from, to: c.to, insert: c.insert }, userEvent: "input.summary" });
+      await refreshSummaries();
+      say(text.trim() ? l("Özet kaydedildi (PDF'e girmez).", "Summary kept (never printed).") : l("Özet silindi.", "Summary removed."));
+    } catch (e) {
+      say(String(e), true);
+    }
     view.focus();
   }
 
@@ -491,6 +532,9 @@
       case "cast":
         openCast();
         break;
+      case "summary":
+        summaryHere();
+        break;
       case "new-character":
         newCharacter();
         break;
@@ -546,7 +590,7 @@
         leave();
         break;
     }
-    if (!["commands", "find", "spelling", "search", "note-here", "notes-paste", "notes-file"].includes(id)) view.focus();
+    if (!["commands", "find", "spelling", "search", "summary", "note-here", "notes-paste", "notes-file"].includes(id)) view.focus();
   }
 
   function run(a: Act) {
@@ -607,6 +651,7 @@
     }
     if (e.altKey && !mod && (e.key === "n" || e.key === "N")) id = "note-here";
     if (e.altKey && !mod && (e.key === "s" || e.key === "S")) id = "spelling";
+    if (e.altKey && !mod && (e.key === "e" || e.key === "E")) id = "summary";
     if (e.key === "Escape") {
       if (help) return void (help = "");
       if (backstage) return void (backstage = false);
@@ -683,6 +728,7 @@
             tr: () => tr,
             form: (kind, at) => void openForm(kind, at),
           }),
+          summaries,
           spelling({
             tr: () => tr,
             on: () => true,
@@ -753,7 +799,7 @@
         </div>
       </div>
       {#if board}
-        <Board {tr} {cards} {move} open={at} close={() => (board = false)} />
+        <Board {tr} {cards} {move} open={at} close={() => (board = false)} summaries={Object.fromEntries(sums.map((s) => [s.at, s.text]))} />
       {/if}
     </div>
     {#if side === "pdf"}
@@ -868,6 +914,16 @@
     />
   {/if}
 
+  {#if summaryForm}
+    <SummaryForm
+      {tr}
+      title={summaryForm.title}
+      start={summaryForm.text}
+      done={summaryDone}
+      cancel={() => ((summaryForm = null), view.focus())}
+    />
+  {/if}
+
   {#if headingForm}
     <HeadingForm
       {tr}
@@ -895,6 +951,7 @@
               <tr><td>Enter</td><td>{l("replik sonunda: karşı tarafın repliği", "at a line's end: the other speaker's line")}</td></tr>
               <tr><td>Tab</td><td>{l("konuşmacıdan hemen sonra: sıradaki kişi", "right after the speaker: the next one")}</td></tr>
               <tr><td>\</td><td>{l("bloğu kaynak olarak aç, makro yaz", "open the block as source, write a macro")}</td></tr>
+              <tr><td>Alt+E</td><td>{l("sahnenin özeti (PDF'e girmez)", "the scene's summary (never printed)")}</td></tr>
               <tr><td>Ctrl+O</td><td>{l("kişiler paneli", "the cast panel")}</td></tr>
               <tr><td>Ctrl+K</td><td>{l("karakterler, komutlar, makrolar menüsü", "the menu of characters, commands, macros")}</td></tr>
               <tr><td>Alt+S</td><td>{l("sıradaki yazım hatası ve önerileri", "the next misspelt word and its suggestions")}</td></tr>
@@ -1167,6 +1224,14 @@
   }
   .page :global(.cm-note-picked) {
     background: color-mix(in srgb, var(--claret) 18%, transparent);
+  }
+  .page :global(.cm-summary) {
+    margin: -0.4em auto 0.8em;
+    max-width: 80%;
+    text-align: center;
+    font-style: italic;
+    font-size: 0.9em;
+    color: var(--faint);
   }
   .page :global(.cm-misspelt) {
     text-decoration: underline wavy #d23a2f;

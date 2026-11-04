@@ -129,7 +129,7 @@ export const TABS: Tab[] = [
       ]),
       g("Sahneler", "Scenes", [
         b("Pano", "Board", "▦", "Ctrl+G", k("board")),
-        b("Özet", "Summary", "≣", "Alt+E", soon),
+        b("Özet", "Summary", "≣", "Alt+E", k("summary")),
         b("Böl", "Split", "⫶", "Alt+B", soon),
         b("Birleştir", "Join", "⋈", "Alt+J", soon),
       ]),
