@@ -145,7 +145,7 @@ fn the_file_round_trips() {
     };
     notes.list[0].state = State::Done;
     notes.list[1].replies.push(Reply {
-        author: "Salih".into(),
+        author: "Deniz".into(),
         text: "bilerek böyle".into(),
     });
     notes.list[2].state = State::Hidden;
@@ -167,9 +167,9 @@ fn the_file_round_trips() {
     want.sort_by_key(key);
     assert_eq!(got, want, "{md}");
     assert!(md.contains("- [x] 7 · **Claude** · "), "{md}");
-    assert!(md.contains("  - **Salih**: bilerek böyle\n"), "{md}");
+    assert!(md.contains("  - **Deniz**: bilerek böyle\n"), "{md}");
     assert!(md.contains("## Arşiv: Düz yazım yanlışları\n"), "{md}");
-    assert_eq!(notes.authors(), ["Claude", "Salih", "Atölye"]);
+    assert_eq!(notes.authors(), ["Claude", "Deniz", "Atölye"]);
 }
 
 #[test]
@@ -191,7 +191,7 @@ fn a_copy_with_notes() {
     let play = include_str!("../../../examples/ornek-oyun.tex");
     let doc = crate::render::Doc::new(play);
     let mut notes = Notes::parse(
-        "## Yazım\n\n- [ ] 47 · **Claude** · “taş durdu” → taşı durdu\n  - **Salih**: bakarım\n- [x] 55 · **Claude** · “Biraz ısınsam”: çözüldü\n- [ ] 1 · **Atölye** · kapakta bir not\n- [ ] 49 · **Atölye** · 100% sahne_dışı & {belirsiz}\n",
+        "## Yazım\n\n- [ ] 47 · **Claude** · “taş durdu” → taşı durdu\n  - **Deniz**: bakarım\n- [x] 55 · **Claude** · “Biraz ısınsam”: çözüldü\n- [ ] 1 · **Atölye** · kapakta bir not\n- [ ] 49 · **Atölye** · 100% sahne_dışı & {belirsiz}\n",
     );
     notes.list.push(Note {
         line: Some(41),

@@ -244,7 +244,7 @@ own — live beside it in `oyun.notlar.md`, a Markdown task list any editor
 ## Spelling
 
 - [ ] 139 · **Claude** · “Gaztesi” → Gazetesi
-  - **Salih**: the same in act two
+  - **Deniz**: the same in act two
 - [x] 20 · **Workshop** · “loş bir bir ışığın”: “bir” twice
 ```
 

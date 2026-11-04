@@ -6,7 +6,7 @@
 //! ## Spelling
 //!
 //! - [ ] 139 · **Claude** · “Gaztesi” → Gazetesi
-//!   - **Salih**: done in the second act too
+//!   - **Deniz**: done in the second act too
 //! - [x] 20 · **Workshop** · “loş bir bir ışığın”: “bir” twice
 //! ```
 //!

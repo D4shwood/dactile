@@ -244,7 +244,7 @@ okuyup yazabildiği bir Markdown görev listesi:
 ## Düz yazım yanlışları
 
 - [ ] 139 · **Claude** · “Gaztesi” → Gazetesi
-  - **Salih**: ikinci perdede de aynı
+  - **Deniz**: ikinci perdede de aynı
 - [x] 20 · **Atölye** · “loş bir bir ışığın”: çift “bir”
 ```
 
