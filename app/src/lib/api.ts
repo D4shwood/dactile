@@ -190,7 +190,55 @@ export const api = {
   sceneSplit: (text: string, at: number) => invoke<Made>("scene_split", { text, at }),
   sceneJoin: (text: string, at: number) => invoke<Made>("scene_join", { text, at }),
   fields: (text: string) => invoke<{ places: string[]; times: string[] }>("fields", { text }),
+  castingRoles: (text: string) => invoke<Roles>("casting_roles", { text }),
+  castingEdit: (edit: CastingEdit) => invoke<void>("casting_edit", { edit }),
+  castingCsv: (text: string) => invoke<string>("casting_csv", { text }),
+  castingPdf: (text: string) => invoke<string>("casting_pdf", { text }),
+  castingCopies: (text: string, kind: CopyKind) => invoke<[string, number]>("casting_copies", { text, kind }),
+  launch: (path: string) => invoke<void>("launch", { path }),
 };
+
+export interface RoleRow {
+  alias: string;
+  name: string;
+  actor: string | null;
+  lines: number;
+  words: number;
+  time: string;
+  scenes: number;
+  share: number;
+}
+
+export interface SceneRow {
+  name: string;
+  place: string;
+  at: number;
+  time: string;
+  lines: number;
+  /// By role: 0 absent, 1 on stage, 2 speaks.
+  here: number[];
+  act: string | null;
+}
+
+export interface Roles {
+  castings: string[];
+  casting: number;
+  wpm: number;
+  roles: RoleRow[];
+  scenes: SceneRow[];
+  play: string;
+  known: string[];
+}
+
+export type CastingEdit =
+  | { kind: "actor"; alias: string; actor: string }
+  | { kind: "new"; name: string }
+  | { kind: "rename"; name: string }
+  | { kind: "delete" }
+  | { kind: "pick"; casting: number }
+  | { kind: "wpm"; wpm: number };
+
+export type CopyKind = "full" | "rehearsal" | "light";
 
 /// A scene's summary, under its heading (from `at` to the line's `end`).
 export interface Summary {

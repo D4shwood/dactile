@@ -134,7 +134,7 @@ export const TABS: Tab[] = [
         b("Birleştir", "Join", "⋈", "Alt+J", k("join")),
       ]),
       g("Prova", "Rehearsal", [
-        b("Dağıtım", "Casting", "☍", "F9", soon),
+        b("Dağıtım", "Casting", "☍", "F9", k("casting")),
         b("Ezber", "Memorize", "◌", "", soon),
       ]),
       g("Kapak", "Cover", [b("Oyun bilgisi", "Cover details", "ⓘ", "Alt+İ", k("cover"))]),
@@ -183,7 +183,7 @@ export const BACKSTAGE: Entry[] = [
   { tr: "Kaydet", en: "Save", key: "Ctrl+S", act: k("save") },
   { tr: "PDF derle", en: "Build the PDF", key: "F5", act: k("build") },
   { tr: "Şablon olarak kaydet", en: "Save as a template", key: "", act: k("save-template") },
-  { tr: "Dağıtım ve oyuncu kopyaları", en: "Casting and actors' copies", key: "F9", act: soon },
+  { tr: "Dağıtım ve oyuncu kopyaları", en: "Casting and actors' copies", key: "F9", act: k("casting") },
   { tr: "Notlu PDF kopyası", en: "A PDF copy with notes", key: "", act: soon },
   { tr: "Kapat", en: "Close", key: "Ctrl+W", act: k("close") },
 ];

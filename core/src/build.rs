@@ -377,7 +377,8 @@ pub fn open_log(play: &Path) -> anyhow::Result<()> {
 }
 
 /// The desktop's own program for the file, without waiting for it.
-fn launch(path: &Path) -> anyhow::Result<()> {
+/// Opens a file or a folder with the desktop's own program for it.
+pub fn launch(path: &Path) -> anyhow::Result<()> {
     let mut child = Command::new("xdg-open")
         .arg(path)
         .stdin(Stdio::null())

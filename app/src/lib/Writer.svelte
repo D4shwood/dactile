@@ -14,6 +14,7 @@
   import { mouse } from "./mouse";
   import HeadingForm from "./HeadingForm.svelte";
   import Cast from "./Cast.svelte";
+  import Casting from "./Casting.svelte";
   import SummaryForm from "./SummaryForm.svelte";
   import { setSummaries, summaries } from "./summaries";
   import CharacterFormView from "./CharacterForm.svelte";
@@ -65,6 +66,8 @@
   let board = $state(false);
   /// F4 and F8.
   let focused = $state(false);
+  /// F9.
+  let casting = $state(false);
   let dimmed = $state(false);
   let cards = $state<Card[]>([]);
   let backstage = $state(false);
@@ -188,8 +191,14 @@
     view.focus();
   }
 
+  /// Memorizing a role: next (the terminal app has it on F9's z).
+  function openMemo(_alias: string) {
+    say(l("Ezber modu yakında.", "Memorizing: soon."));
+  }
+
   function at(pos: number) {
     board = false;
+    casting = false;
     view.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: "start", yMargin: 60 }) });
     view.focus();
   }
@@ -603,6 +612,11 @@
       case "board":
         openBoard();
         break;
+      case "casting":
+        board = false;
+        casting = !casting;
+        if (!casting) view.focus();
+        break;
       case "cover":
         board = false;
         openCover(view);
@@ -670,6 +684,7 @@
       F6: "theme",
       F7: "page",
       F8: "dim",
+      F9: "casting",
       F12: "pdf-panel",
     };
     let id = keys[e.key];
@@ -693,6 +708,7 @@
       if (help) return void (help = "");
       if (backstage) return void (backstage = false);
       if (board) return void (board = false);
+      if (casting) return void ((casting = false), view.focus());
       if (draft !== null || pasting !== null) return void ((draft = null), (pasting = null));
     }
     if (id) {
@@ -825,7 +841,7 @@
 
   <main class="body" class:split={side !== ""}>
     <div class="left">
-      <div class="desk" class:gone={board} class:plain={!sheet} {onwheel}>
+      <div class="desk" class:gone={board || casting} class:plain={!sheet} {onwheel}>
         <div class="page" class:source class:typewriter style={`--z: ${zoom / 100}`}>
           <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
           <div
@@ -840,6 +856,16 @@
       </div>
       {#if board}
         <Board {tr} {cards} {move} open={at} close={() => (board = false)} summaries={Object.fromEntries(sums.map((s) => [s.at, s.text]))} />
+      {:else if casting}
+        <Casting
+          {tr}
+          text={() => view.state.doc.toString()}
+          readOnly={opened.read_only}
+          go={at}
+          memorize={(alias) => openMemo(alias)}
+          {say}
+          close={() => ((casting = false), view.focus())}
+        />
       {/if}
     </div>
     {#if side === "pdf"}

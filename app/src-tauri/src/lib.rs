@@ -1,6 +1,7 @@
 //! Dactile's desktop app: a Svelte front end over the `dactile` library.
 //! Each command here passes a call from the window on to `play` or `view`.
 
+pub mod casting;
 pub mod complete;
 pub mod notes;
 pub mod people;
@@ -375,6 +376,57 @@ fn scene_join(app: Shared, text: String, at: usize) -> Res<people::Made> {
 
 /// An error in the window, written where `npm run tauri dev` shows it.
 #[tauri::command]
+fn casting_roles(app: Shared, text: String) -> Res<casting::Roles> {
+    let default = app.lock().unwrap().cfg.wpm;
+    let side = sidecar(&app)?.1;
+    Ok(casting::roles(&text, &side, casting::wpm(&side, default)))
+}
+
+#[tauri::command]
+fn casting_edit(app: Shared, edit: casting::Edit) -> Res<()> {
+    let (path, mut side) = sidecar(&app)?;
+    casting::edit(&mut side, edit)?;
+    side.save(&path).map_err(err)
+}
+
+#[tauri::command]
+fn casting_csv(app: Shared, text: String) -> Res<String> {
+    let (path, side) = sidecar(&app)?;
+    let out = casting::table_csv(&text, &side, &path).map_err(err)?;
+    Ok(out.display().to_string())
+}
+
+#[tauri::command]
+async fn casting_pdf(app: Shared<'_>, text: String) -> Res<String> {
+    let (path, side) = sidecar(&app)?;
+    tauri::async_runtime::spawn_blocking(move || casting::table_pdf(&text, &side, &path))
+        .await
+        .map_err(|e| e.to_string())?
+        .map(|p| p.display().to_string())
+}
+
+#[tauri::command]
+async fn casting_copies(
+    app: Shared<'_>,
+    text: String,
+    kind: casting::Kind,
+) -> Res<(String, usize)> {
+    let default = app.lock().unwrap().cfg.wpm;
+    let (path, side) = sidecar(&app)?;
+    let wpm = casting::wpm(&side, default);
+    tauri::async_runtime::spawn_blocking(move || casting::copies(&text, &side, &path, wpm, kind))
+        .await
+        .map_err(|e| e.to_string())?
+        .map(|(dir, n)| (dir.display().to_string(), n))
+}
+
+/// A file or a folder, in the desktop's own program for it.
+#[tauri::command]
+fn launch(path: String) -> Res<()> {
+    dactile::build::launch(std::path::Path::new(&path)).map_err(err)
+}
+
+#[tauri::command]
 fn log(message: String) {
     eprintln!("[window] {message}");
 }
@@ -448,6 +500,12 @@ pub fn run() {
             pick,
             startup,
             log,
+            casting_roles,
+            casting_edit,
+            casting_csv,
+            casting_pdf,
+            casting_copies,
+            launch,
             notes_list,
             note_add,
             note_set,
