@@ -47,8 +47,36 @@ pub struct Cover {
     pub to: usize,
     pub title: String,
     pub author: String,
-    /// "SELİN — Ada'nın kızı", in the cast's order.
-    pub cast: Vec<String>,
+    /// The cast table's rows, as the PDF prints them.
+    pub cast: Vec<CastRow>,
+}
+
+/// A row of the cover's cast list.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum CastRow {
+    /// "SELİN — Ada'nın kızı".
+    Person { name: String },
+    /// A `\karaktergrubu`: its members, bracketed, and its name beside them.
+    Group { name: String, members: Vec<String> },
+}
+
+impl CastRow {
+    /// One line of text: "Köylüler (Birinci Kadın, ÇOBAN)" for a group.
+    pub fn line(&self) -> String {
+        match self {
+            CastRow::Person { name } => name.clone(),
+            CastRow::Group { name, members } if name.is_empty() => members.join(", "),
+            CastRow::Group { name, members } => format!("{name} ({})", members.join(", ")),
+        }
+    }
+}
+
+fn cast_entry(c: &cast::Character) -> String {
+    match c.desc.as_deref().filter(|d| !d.trim().is_empty()) {
+        Some(d) => format!("{} — {}", c.display_name(), d.trim()),
+        None => c.display_name().to_string(),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -358,14 +386,24 @@ pub fn view(text: &str) -> View {
         author: dactile::info::get(text, "author").unwrap_or_default(),
         cast: doc
             .cast
-            .characters
-            .iter()
-            .map(
-                |c| match c.desc.as_deref().filter(|d| !d.trim().is_empty()) {
-                    Some(d) => format!("{} — {}", c.display_name(), d.trim()),
-                    None => c.display_name().to_string(),
+            .rows()
+            .into_iter()
+            .map(|r| match r {
+                cast::Row::Character(i) => CastRow::Person {
+                    name: cast_entry(&doc.cast.characters[i]),
                 },
-            )
+                cast::Row::Group(g) => {
+                    let group = &doc.cast.groups[g];
+                    CastRow::Group {
+                        name: group.desc.trim().to_string(),
+                        members: group
+                            .members
+                            .iter()
+                            .map(|&m| cast_entry(&doc.cast.characters[m]))
+                            .collect(),
+                    }
+                }
+            })
             .collect(),
     });
     let tail = (body.end < text.len()).then(|| u.at(body.end)..u.at(text.len()));
@@ -437,6 +475,24 @@ mod tests {
         for w in v.blocks.windows(2) {
             assert!(w[0].to <= w[1].from);
         }
+    }
+
+    #[test]
+    fn the_cover_lists_the_cast_table() {
+        let v = view(PLAY);
+        let cast = &v.cover.unwrap().cast;
+        let group = cast
+            .iter()
+            .find_map(|r| match r {
+                CastRow::Group { name, members } => Some((name, members)),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(group.0, "Köylüler");
+        assert_eq!(group.1, &["Birinci Kadın", "ÇOBAN"]);
+        // Members show only in their group; `\gizlikarakter` not at all.
+        let lines: Vec<String> = cast.iter().map(CastRow::line).collect();
+        assert!(!lines.iter().any(|l| l == "ÇOBAN" || l.contains("HERKES")));
     }
 
     #[test]

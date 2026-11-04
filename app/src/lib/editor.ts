@@ -125,9 +125,37 @@ class CoverCard extends WidgetType {
     a.textContent = this.c.author;
     const list = document.createElement("ul");
     list.className = "cm-cover-cast";
-    for (const p of this.c.cast) {
+    for (const r of this.c.cast) {
       const li = document.createElement("li");
-      li.textContent = p;
+      if (r.kind === "person") {
+        li.textContent = r.name;
+      } else {
+        // The members, a brace as tall as they are, and the group's name.
+        li.className = "cm-cover-group";
+        const members = document.createElement("div");
+        members.className = "cm-cover-members";
+        for (const m of r.members) {
+          const n = document.createElement("div");
+          n.textContent = m;
+          members.append(n);
+        }
+        const brace = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        brace.setAttribute("class", "cm-cover-brace");
+        brace.setAttribute("viewBox", "0 0 10 100");
+        brace.setAttribute("preserveAspectRatio", "none");
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", "M1 1 Q5 1 5 8 L5 42 Q5 50 9 50 Q5 50 5 58 L5 92 Q5 99 1 99");
+        path.setAttribute("vector-effect", "non-scaling-stroke");
+        brace.append(path);
+        const name = document.createElement("div");
+        name.className = "cm-cover-group-name";
+        name.textContent = r.name;
+        // The brace in a box of no height of its own: it takes the members'.
+        const box = document.createElement("span");
+        box.className = "cm-cover-brace-box";
+        box.append(brace);
+        li.append(members, box, name);
+      }
       list.append(li);
     }
     const hint = document.createElement("div");
@@ -284,6 +312,17 @@ function lineStart(state: EditorState, pos: number) {
   return state.doc.sliceString(line.from, pos).trim() === "";
 }
 
+/// A backslash typed at the cursor, as the keyboard would.
+export function typeBackslash(view: EditorView) {
+  const { from, to } = view.state.selection.main;
+  view.dispatch({
+    changes: { from, to, insert: "\\" },
+    selection: { anchor: from + 1 },
+    effects: openRaw.of(from),
+    userEvent: "input.type",
+  });
+}
+
 const typing = EditorView.inputHandler.of((view, from, to, text) => {
   const b = rendered(view.state, from);
   if (!b || text.length === 0) return false;
@@ -308,17 +347,6 @@ const typing = EditorView.inputHandler.of((view, from, to, text) => {
     userEvent: "input.type",
   });
   return true;
-/// A backslash typed at the cursor, as the keyboard would.
-export function typeBackslash(view: EditorView) {
-  const { from, to } = view.state.selection.main;
-  view.dispatch({
-    changes: { from, to, insert: "\\" },
-    selection: { anchor: from + 1 },
-    effects: openRaw.of(from),
-    userEvent: "input.type",
-  });
-}
-
 });
 
 function escapePasted(s: string, dialogue: boolean) {

@@ -155,7 +155,7 @@ pub fn preview(path: &Path) -> anyhow::Result<Preview> {
     Ok(Preview {
         title: doc.title(&text).unwrap_or(cover.title),
         author: cover.author,
-        cast: cover.cast,
+        cast: cover.cast.iter().map(view::CastRow::line).collect(),
         acts,
     })
 }

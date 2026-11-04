@@ -1367,6 +1367,34 @@
     font-size: 0.9em;
     line-height: 1.6;
   }
+  .page :global(.cm-cover-group) {
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
+    gap: 0.4em;
+    margin: 0.3em 0;
+  }
+  .page :global(.cm-cover-members) {
+    text-align: left;
+  }
+  .page :global(.cm-cover-brace-box) {
+    position: relative;
+    width: 0.6em;
+    flex: none;
+  }
+  .page :global(.cm-cover-brace) {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.2;
+  }
+  .page :global(.cm-cover-group-name) {
+    align-self: center;
+    padding-left: 0.4em;
+  }
   .page :global(.cm-cover-hint) {
     margin-top: 1em;
     font: 11px var(--sans);

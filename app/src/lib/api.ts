@@ -77,12 +77,16 @@ export interface Person {
   name: string;
 }
 
+export type CastRow =
+  | { kind: "person"; name: string }
+  | { kind: "group"; name: string; members: string[] };
+
 export interface Cover {
   from: number;
   to: number;
   title: string;
   author: string;
-  cast: string[];
+  cast: CastRow[];
 }
 
 export interface View {
@@ -182,12 +186,12 @@ export const api = {
     invoke<{ at: number; title: string; text: string }>("summary_here", { text, at }),
   summarySet: (text: string, at: number, summary: string) =>
     invoke<Change | null>("summary_set", { text, at, summary }),
+  sceneSplit: (text: string, at: number) => invoke<Made>("scene_split", { text, at }),
+  sceneJoin: (text: string, at: number) => invoke<Made>("scene_join", { text, at }),
   fields: (text: string) => invoke<{ places: string[]; times: string[] }>("fields", { text }),
 };
 
 /// A scene's summary, under its heading (from `at` to the line's `end`).
-  sceneSplit: (text: string, at: number) => invoke<Made>("scene_split", { text, at }),
-  sceneJoin: (text: string, at: number) => invoke<Made>("scene_join", { text, at }),
 export interface Summary {
   at: number;
   end: number;
@@ -228,13 +232,13 @@ export interface Made {
 export interface Item {
   key: string;
   label: string;
-}
-
-export type Checked =
-  | { kind: "loading" }
   group: "scene" | "character" | "command" | "macro";
   action: "insert" | "scene" | "act" | "character";
   text: string;
   cursor: number;
+}
+
+export type Checked =
+  | { kind: "loading" }
   | { kind: "missing"; why: string }
   | { kind: "words"; ranges: [number, number][] };
