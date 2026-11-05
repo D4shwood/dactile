@@ -30,6 +30,8 @@ pub struct Person {
     pub merged_into: Option<usize>,
     /// The name as it was found, whatever it was corrected to.
     pub found: String,
+    /// On the book's cast page.
+    pub listed: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -65,6 +67,8 @@ pub struct Draft {
     pub people: Vec<Person>,
     pub items: Vec<Item>,
     pub asides: Vec<Aside>,
+    /// Those the cast page has under its list.
+    pub others: String,
     pub lang: Lang,
     /// What was read, and what each of its paragraphs is taken for.
     pub source: Source,
@@ -132,6 +136,10 @@ fn is_ordinal(w: &str) -> bool {
     ORDINALS_TR.contains(&w) || ORDINALS_EN.contains(&w) || is_number(w)
 }
 
+fn misread_number(w: &str) -> bool {
+    w.ends_with(['.', ':']) && w.chars().count() <= 3
+}
+
 fn level_word(w: &str) -> Option<Level> {
     match w.trim_end_matches(['.', ':', ',']) {
         "PERDE" | "ACT" | "BÖLÜM" | "KISIM" => Some(Level::Act),
@@ -175,6 +183,11 @@ pub(super) fn heading(text: &str) -> Option<(Level, String)> {
         [a, b, ..] if level_word(a).is_some() && is_number(b) => (level_word(a)?, 2),
         [a] if level_word(a).is_some() && a.chars().all(|c| !c.is_lowercase()) => {
             (level_word(a)?, 1)
+        }
+        // A number OCR read as something else: `S. Sahne`, `t . Sahne`.
+        [a, b] if misread_number(a) && level_word(b).is_some() => (level_word(b)?, 2),
+        [a, p, b] if a.chars().count() <= 2 && p == "." && level_word(b).is_some() => {
+            (level_word(b)?, 3)
         }
         _ => return None,
     };
@@ -424,7 +437,7 @@ struct Shaper {
 }
 
 impl Shaper {
-    /// OCR breaks names up: `ANTO NIO` is `ANTONIO`.
+    /// OCR breaks names up: `ANTO NIO` is `BERKANT`.
     fn known(&self, name: &str) -> Option<usize> {
         self.index.get(&key(name).replace(' ', "")).copied()
     }
@@ -464,6 +477,7 @@ impl Shaper {
             not_character: false,
             merged_into: None,
             found: k.clone(),
+            listed: false,
         });
         self.index.insert(k.replace(' ', ""), self.people.len() - 1);
         self.people.len() - 1
@@ -472,6 +486,7 @@ impl Shaper {
     fn listed(&mut self, name: &str, desc: Option<String>) {
         let i = self.person(name);
         let p = &mut self.people[i];
+        p.listed = true;
         if name.chars().any(char::is_lowercase) {
             p.full = Some(name.trim().to_string());
         }
@@ -518,13 +533,21 @@ pub fn shape(src: &Source, lang: Lang) -> Draft {
 /// The play out of the paragraphs labelled so.
 fn shape_as(src: &Source, lang: Lang, labels: Vec<Page>) -> Draft {
     let book = labels.iter().any(|&p| p != Page::Play);
-    let paras: Vec<Para> = src
+    let mut paras: Vec<Para> = src
         .paras
         .iter()
         .zip(&labels)
         .filter(|(_, l)| **l == Page::Play)
         .map(|(p, _)| p.clone())
         .collect();
+    let notes: Vec<&Para> = src
+        .paras
+        .iter()
+        .zip(&labels)
+        .filter(|(_, l)| **l == Page::Footnotes)
+        .map(|(p, _)| p)
+        .collect();
+    let placed = pages::attach_notes(&mut paras, &notes);
     let paras = &paras;
     // Names before a colon or alone, counted; names in bold count as sure.
     let mut seen: HashMap<String, usize> = HashMap::new();
@@ -547,6 +570,7 @@ fn shape_as(src: &Source, lang: Lang, labels: Vec<Page>) -> Draft {
     let mut items: Vec<Item> = Vec::new();
     let mut front: Vec<&Para> = Vec::new();
     let mut asides: Vec<Aside> = Vec::new();
+    let mut others: Vec<String> = Vec::new();
     for part in &pages::parts(&labels) {
         let list = &src.paras[part.range.clone()];
         let mut left: Vec<Vec<Run>> = Vec::new();
@@ -554,6 +578,8 @@ fn shape_as(src: &Source, lang: Lang, labels: Vec<Page>) -> Draft {
             let t = p.text();
             match part.page {
                 Page::Cover if !part.after => front.push(p),
+                Page::Others => others.push(t.split_whitespace().collect::<Vec<_>>().join(" ")),
+                Page::Footnotes if placed.iter().any(|q| std::ptr::eq(*q, p)) => {}
                 Page::Cast if is_cast_heading(&t) => {}
                 Page::Cast => {
                     for line in t.lines().map(str::trim) {
@@ -718,7 +744,11 @@ fn shape_as(src: &Source, lang: Lang, labels: Vec<Page>) -> Draft {
             let p = &mut sh.people[*who];
             p.lines += 1;
             if p.sample.is_empty() {
-                let s: String = said.iter().map(|r| r.text.as_str()).collect();
+                let s: String = said
+                    .iter()
+                    .filter(|r| !r.note)
+                    .map(|r| r.text.as_str())
+                    .collect();
                 p.sample = s.replace('\n', " ").chars().take(70).collect();
             }
         }
@@ -747,12 +777,14 @@ fn shape_as(src: &Source, lang: Lang, labels: Vec<Page>) -> Draft {
         people: sh.people,
         items: items_all,
         asides,
+        others: others.join(" "),
         lang,
         source: src.clone(),
         labels,
         found: Default::default(),
     };
     d.found = (d.title.clone(), d.author.clone());
+    d.join_spellings();
     d.give_aliases();
     d
 }
@@ -763,7 +795,7 @@ fn note_run(note: Option<String>) -> Vec<Run> {
             vec![Run {
                 text: format!("({n})"),
                 italic: true,
-                bold: false,
+                ..Run::default()
             }]
         })
         .unwrap_or_default()
@@ -843,6 +875,45 @@ fn odd_title(t: &str) -> bool {
         || l.ends_with(".docx")
         || l == "untitled"
         || l == "adsız"
+}
+
+/// A name as OCR may have it: no spaces, Turkish letters as Latin ones.
+pub(super) fn fold(name: &str) -> String {
+    upper_tr(name)
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .map(|c| match c {
+            'İ' => 'I',
+            'Ş' => 'S',
+            'Ğ' => 'G',
+            'Ç' => 'C',
+            'Ö' => 'O',
+            'Ü' => 'U',
+            c => c,
+        })
+        .collect()
+}
+
+/// Two folded names a letter apart, two if they are long.
+pub(super) fn like_name(a: &str, b: &str) -> bool {
+    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    let len = a.len().min(b.len());
+    let room = match len {
+        0..=4 => 0,
+        5..=8 => 1,
+        _ => 2,
+    };
+    super::pdf::distance(&a, &b) <= room
+}
+
+/// The name a person goes by is part of what the cast page calls them.
+fn part_of(listed: &str, said: &str) -> bool {
+    let (l, s) = (fold(listed), fold(said));
+    let first = |t: &str| t.split(' ').next().map(fold).unwrap_or_default();
+    s.len() >= 3
+        && (first(listed) == first(said)
+            || l.ends_with(&s)
+            || listed.split(' ').any(|w| fold(w).starts_with(&s)))
 }
 
 // ------------------------------------------------------------------ the draft
@@ -941,6 +1012,48 @@ impl Draft {
             .sum()
     }
 
+    /// Who speaks under a spelling of someone on the cast page is that
+    /// person: `KORAYNG` for `KORAYNO`, `AĞA` for `KÖYÜN AĞASI`, `TEMEL`
+    /// for `YAŞLI TEMEL`. Only where it can be no one else; the preview
+    /// shows it, and can part them.
+    fn join_spellings(&mut self) {
+        for s in 0..self.people.len() {
+            if self.people[s].listed
+                || self.people[s].lines == 0
+                || self.people[s].merged_into.is_some()
+            {
+                continue;
+            }
+            let name = fold(&self.people[s].name);
+            let spaced = key(&self.people[s].name);
+            let same: Vec<usize> = (0..self.people.len())
+                .filter(|&l| {
+                    let p = &self.people[l];
+                    p.listed
+                        && p.merged_into.is_none()
+                        && (like_name(&fold(&p.name), &name)
+                            || p.lines == 0 && part_of(&key(&p.name), &spaced))
+                })
+                .collect();
+            if let [l] = same[..] {
+                if self.people[l].lines < self.people[s].lines {
+                    self.people[l].name = self.people[s].name.clone();
+                }
+                self.merge(s, l);
+            }
+        }
+        // The cast page's own misreading isn't a full name.
+        for p in &mut self.people {
+            let name = fold(&p.name);
+            if p.full
+                .as_ref()
+                .is_some_and(|f| fold(f) != name && like_name(&fold(f), &name))
+            {
+                p.full = None;
+            }
+        }
+    }
+
     /// Paragraphs `from` to `to` taken for `page`, and the play read again.
     pub fn mark(&mut self, from: usize, to: usize, page: Page) {
         let end = (to + 1).min(self.labels.len());
@@ -997,8 +1110,8 @@ impl Draft {
             }
         }
         for p in &old {
-            if let (Some(i), Some(into)) = (at(&d, &p.found), p.merged_into) {
-                d.people[i].merged_into = at(&d, &old[into].found);
+            if let Some(i) = at(&d, &p.found) {
+                d.people[i].merged_into = p.merged_into.and_then(|into| at(&d, &old[into].found));
             }
         }
         for i in 0..d.people.len() {
@@ -1090,6 +1203,12 @@ impl Draft {
                 )),
                 None => decls.push_str(&format!("\\karakter[{desc}]{{{script}}}{{{}}}\n", p.alias)),
             }
+        }
+        if !self.others.is_empty() {
+            decls.push_str(&format!(
+                "\\digerkisiler{{{}}}\n",
+                escape_pasted(&self.others, false)
+            ));
         }
         let (act, scene) = match self.lang {
             Lang::Tr => ("perde", "sahne"),
@@ -1198,7 +1317,9 @@ fn heading_line(word: &str, rest: &str) -> String {
 fn inline(runs: &[Run], dialogue: bool) -> String {
     let mut out = String::new();
     for r in runs {
-        if r.italic && dialogue {
+        if r.note {
+            out.push_str(&format!("\\dipnot{{{}}}", escape_pasted(&r.text, false)));
+        } else if r.italic && dialogue {
             let t = r.text.trim();
             let inner = t
                 .strip_prefix('(')

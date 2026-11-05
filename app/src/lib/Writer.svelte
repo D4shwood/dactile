@@ -49,6 +49,7 @@
   /// What stands beside the page.
   let side = $state<"" | "pdf" | "notes" | "cast">("");
   let castRows = $state<CastEntry[]>([]);
+  let castOthers = $state("");
   let sums = $state<Summary[]>([]);
   /// Alt+E: the scene being summed up.
   let summaryForm = $state<{ at: number; title: string; text: string } | null>(null);
@@ -255,6 +256,7 @@
 
   async function refreshCast() {
     castRows = await api.cast(view.state.doc.toString(), byLines);
+    castOthers = await api.castOthers(view.state.doc.toString());
   }
 
   async function openCast(on = side !== "cast") {
@@ -922,6 +924,8 @@
       <Cast
         {tr}
         rows={castRows}
+        others={castOthers}
+        setOthers={(w) => castCall(() => api.castOthersSet(view.state.doc.toString(), w))}
         bind:byLines
         add={() => newCharacter()}
         edit={editCharacter}

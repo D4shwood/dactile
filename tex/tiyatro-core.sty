@@ -127,7 +127,13 @@
       { \__tiy_declare:nnnnnn { group } {#1} {#2} { } {#3} {#4} }
   }
 
+% Those the list doesn't name, under it: "soldiers, musicians".
+\tl_new:N \g__tiy_others_tl
+\NewDocumentCommand \digerkisiler { +m } { \tl_gset:Nn \g__tiy_others_tl {#1} }
+
 \NewCommandCopy \chargroup \karaktergrubu
+\NewCommandCopy \othercast \digerkisiler
+\NewCommandCopy \dipnot \footnote
 \NewCommandCopy \gcharacter \gkarakter
 
 \NewDocumentCommand \setinlinename { m m }
@@ -873,6 +879,17 @@
             \castlistoptions
           }
         \seq_map_inline:Nn \g__tiy_cast_seq { \__tiy_cast_row:nn ##1 }
+        \end { list }
+      }
+    \tl_if_empty:NF \g__tiy_others_tl
+      {
+        \skip_vertical:n { \aftercasttitleskip }
+        \begin { list } { }
+          {
+            \setlength \leftmargin { \castpageleftmargin }
+            \setlength \rightmargin { \castpagerightmargin }
+          }
+        \item \tl_use:N \g__tiy_others_tl
         \end { list }
       }
   }

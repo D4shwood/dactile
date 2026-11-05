@@ -23,6 +23,8 @@ pub struct Run {
     pub text: String,
     pub italic: bool,
     pub bold: bool,
+    /// A footnote where it is marked, not part of the words.
+    pub note: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -50,14 +52,18 @@ impl Para {
     }
 
     pub fn text(&self) -> String {
-        self.runs.iter().map(|r| r.text.as_str()).collect()
+        self.runs
+            .iter()
+            .filter(|r| !r.note)
+            .map(|r| r.text.as_str())
+            .collect()
     }
 
     /// Every letter in it in italics (and there are some).
     pub fn all_italic(&self) -> bool {
         let mut any = false;
         for r in &self.runs {
-            if r.text.chars().any(char::is_alphanumeric) {
+            if !r.note && r.text.chars().any(char::is_alphanumeric) {
                 if !r.italic {
                     return false;
                 }

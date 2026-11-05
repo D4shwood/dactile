@@ -343,6 +343,16 @@ fn character_merge(text: String, from: String, into: String) -> Res<people::Made
 }
 
 #[tauri::command]
+fn cast_others(text: String) -> String {
+    people::others(&text)
+}
+
+#[tauri::command]
+fn cast_others_set(text: String, words: String) -> Option<people::Made> {
+    people::set_others(&text, &words)
+}
+
+#[tauri::command]
 fn character_shift(text: String, alias: String, up: bool) -> Option<people::Made> {
     people::shift(&text, &alias, up)
 }
@@ -738,6 +748,8 @@ pub fn run() {
             character_edit,
             character_remove,
             character_merge,
+            cast_others,
+            cast_others_set,
             character_shift,
             summaries,
             summary_here,

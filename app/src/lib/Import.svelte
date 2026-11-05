@@ -55,6 +55,7 @@
     ["preface", "Önsöz", "Preface"],
     ["author", "Yazar", "Author"],
     ["cast", "Kişiler", "Cast"],
+    ["others", "Diğer kişiler", "Others in the cast"],
     ["notes", "Notlar", "Notes"],
     ["back", "Kitabın sonu", "End of book"],
     ["footnotes", "Dipnotlar", "Footnotes"],

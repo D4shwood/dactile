@@ -460,6 +460,8 @@ fn is_known_command(name: &str) -> bool {
         "input",
         "include",
         "setinlinename",
+        "digerkisiler",
+        "othercast",
         "karakter",
         "gizlikarakter",
         "karaktergrubu",
@@ -578,7 +580,15 @@ pub fn inline(text: &str, range: Range<usize>, cast: &Cast, in_dialogue: bool) -
                 } else if let Some(arg) = (name == "ic"
                     || matches!(
                         name,
-                        "ru" | "en" | "de" | "fr" | "el" | "textit" | "emph" | "textbf"
+                        "ru" | "en"
+                            | "de"
+                            | "fr"
+                            | "el"
+                            | "textit"
+                            | "emph"
+                            | "textbf"
+                            | "dipnot"
+                            | "footnote"
                     ))
                 .then(|| tex::group(text, end))
                 .flatten()

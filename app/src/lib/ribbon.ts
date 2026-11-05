@@ -84,6 +84,7 @@ export const TABS: Tab[] = [
         b("Sahne yönergesi", "Stage direction", "⌖", "", ins("\\stagedir{‸}")),
         b("Replik içi", "Inside a line", "❨", "((", ins("\\ic{‸}", false)),
         b("Es", "Pause", "⋯", "", ins("\\beat‸")),
+        b("Dipnot", "Footnote", "†", "", ins("\\dipnot{‸}", false)),
       ]),
       g("Bölüm", "Sections", [
         b("Önsöz", "Preface", "¶", "#önsöz", ins("#önsöz\n\n‸")),

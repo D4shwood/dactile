@@ -9,7 +9,7 @@
 use super::shape::{
     Level, NOT_NAMES, cast_entry, heading, is_cast_heading, key, name_alone, speech_head,
 };
-use super::{Para, Source};
+use super::{Para, Run, Source};
 use crate::cast::upper_tr;
 use std::collections::HashMap;
 use std::ops::Range;
@@ -24,13 +24,15 @@ pub enum Page {
     Notes,
     Author,
     Cast,
+    /// Those under the cast list with no names: "soldiers, musicians".
+    Others,
     Back,
     Footnotes,
     Other,
 }
 
 impl Page {
-    pub const ALL: [Page; 11] = [
+    pub const ALL: [Page; 12] = [
         Page::Play,
         Page::Cover,
         Page::Imprint,
@@ -39,6 +41,7 @@ impl Page {
         Page::Notes,
         Page::Author,
         Page::Cast,
+        Page::Others,
         Page::Back,
         Page::Footnotes,
         Page::Other,
@@ -54,6 +57,7 @@ impl Page {
             Page::Notes => "notes",
             Page::Author => "author",
             Page::Cast => "cast",
+            Page::Others => "others",
             Page::Back => "back",
             Page::Footnotes => "footnotes",
             Page::Other => "other",
@@ -501,6 +505,11 @@ fn classify(
         let prose = t.split_whitespace().count() > SHORT;
         let page = match state {
             Page::Contents if contents_line(t) => Page::Contents,
+            // Under the list, those it doesn't name.
+            Page::Cast if others_line(t, count) => {
+                state = Page::Other;
+                Page::Others
+            }
             Page::Cast if cast_line(t, count) => Page::Cast,
             // Past the list, past the contents, and past the cover at the
             // first paragraph that isn't a line.
@@ -532,6 +541,20 @@ fn first_line(t: &str) -> &str {
 }
 
 /// An entry of a cast list that isn't someone who staged the play.
+/// "Köylüler, çobanlar, konuklar.": a sentence of people no one calls by
+/// name, the first of them not speaking.
+fn others_line(t: &str, count: &HashMap<&str, usize>) -> bool {
+    let Some((first, _)) = t.split_once(',') else {
+        return false;
+    };
+    let k = key(first);
+    t.trim_end().ends_with('.')
+        && first.chars().any(char::is_lowercase)
+        && !imprint(t)
+        && t.split_whitespace().count() <= 40
+        && !count.contains_key(k.as_str())
+}
+
 fn cast_line(t: &str, count: &HashMap<&str, usize>) -> bool {
     cast_entry(first_line(t)).is_some_and(|(name, _)| {
         let k = key(&name);
@@ -558,4 +581,72 @@ fn with_opening(texts: &[String], pages: &[Page], start: usize) -> usize {
         at -= 1;
     }
     at
+}
+
+/// The marks in a run: where each starts and ends, `* *` being one.
+fn marks(text: &str) -> Vec<Range<usize>> {
+    let sign = |c: char| c == '*' || c == '•';
+    let mut out: Vec<Range<usize>> = Vec::new();
+    for (i, c) in text.char_indices().filter(|&(_, c)| sign(c)) {
+        match out.last_mut() {
+            Some(m) if text[m.end..i].trim().is_empty() => m.end = i + c.len_utf8(),
+            _ => out.push(i..i + c.len_utf8()),
+        }
+    }
+    out
+}
+
+/// Each page's notes put where its text marks them, in order; those over,
+/// at the end of the page's last paragraph. What was placed.
+pub(super) fn attach_notes<'a>(paras: &mut [Para], notes: &[&'a Para]) -> Vec<&'a Para> {
+    let mut placed = Vec::new();
+    let mut at = 0;
+    while at < notes.len() {
+        let page = notes[at].page;
+        let end = (at..notes.len())
+            .find(|&j| notes[j].page != page)
+            .unwrap_or(notes.len());
+        let here: Vec<usize> = (0..paras.len())
+            .filter(|&i| page.is_some() && paras[i].page == page)
+            .collect();
+        let mut left = notes[at..end].iter();
+        for &i in &here {
+            let mut runs = Vec::new();
+            for r in std::mem::take(&mut paras[i].runs) {
+                let mut from = 0;
+                for m in marks(&r.text) {
+                    let Some(note) = left.next() else { break };
+                    runs.push(Run {
+                        text: r.text[from..m.start].trim_end().to_string(),
+                        ..r.clone()
+                    });
+                    runs.push(Run {
+                        text: note.text(),
+                        note: true,
+                        ..Run::default()
+                    });
+                    placed.push(*note);
+                    from = m.end;
+                }
+                runs.push(Run {
+                    text: r.text[from..].to_string(),
+                    ..r.clone()
+                });
+            }
+            runs.retain(|r| !r.text.is_empty());
+            paras[i].runs = runs;
+        }
+        if let Some(&last) = here.last() {
+            for note in left {
+                paras[last].runs.push(Run {
+                    text: note.text(),
+                    note: true,
+                    ..Run::default()
+                });
+                placed.push(*note);
+            }
+        }
+        at = end;
+    }
+    placed
 }

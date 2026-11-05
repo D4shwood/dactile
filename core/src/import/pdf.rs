@@ -24,7 +24,7 @@ pub fn read(path: &Path, bytes: &[u8]) -> Result<Source> {
         .into_iter()
         .filter(|l| !page_number(l))
         .collect();
-    let lines = name_columns(&strip_numbers(&lines));
+    let lines = names_put_right(&name_columns(&strip_numbers(&lines)));
     let mut paras = Vec::new();
     let mut feet = Vec::new();
     for (page, group) in lines.split(|l| l == PAGE_END).enumerate() {
@@ -81,7 +81,7 @@ fn in_rust(bytes: &[u8]) -> Result<String> {
 const PAGE_END: &str = "\u{c}";
 
 /// The edit distance of two short lines.
-fn distance(a: &[char], b: &[char]) -> usize {
+pub(super) fn distance(a: &[char], b: &[char]) -> usize {
     let mut row: Vec<usize> = (0..=b.len()).collect();
     for (i, x) in a.iter().enumerate() {
         let mut diag = row[0];
@@ -309,10 +309,12 @@ fn roman(mut n: usize) -> String {
 /// Where a page's footnotes start: a line of marks alone (OCR's `*`), in
 /// the page's lower part.
 fn notes_at(group: &[String]) -> usize {
+    // OCR reads the mark as `*`, `•`, `,,` or `"'`.
     let mark = |l: &String| {
         let t = l.trim();
         !t.is_empty()
-            && t.chars().any(|c| "*•".contains(c) || c == '"')
+            && t.chars().count() <= 12
+            && t.chars().any(|c| "*•\"',".contains(c))
             && t.chars().filter(|c| c.is_alphanumeric()).count() <= 1
     };
     let lead = |l: &String| l.trim_start().starts_with(['*', '•']);
@@ -334,6 +336,53 @@ fn notes_of(lines: &[String]) -> Vec<String> {
         })
         .collect()
 }
+
+/// A name on its line that OCR got a letter wrong in (`BERfANT`), put as
+/// the same name is spelled far more often.
+fn names_put_right(lines: &[String]) -> Vec<String> {
+    use super::shape::{fold, like_name};
+    // Mostly capitals, a few letters, no sentence.
+    let name_like = |t: &str| {
+        let letters: Vec<char> = t.chars().filter(|c| c.is_alphabetic()).collect();
+        let caps = letters.iter().filter(|c| c.is_uppercase()).count();
+        (3..=24).contains(&letters.len())
+            && caps * 10 >= letters.len() * 6
+            && t.split_whitespace().count() <= 3
+            && !t.ends_with(['.', ',', ';', '?', '!', ':'])
+    };
+    let mut count: std::collections::HashMap<String, (String, usize)> = Default::default();
+    for l in lines {
+        let t = l.trim();
+        if name_like(t) {
+            count.entry(fold(t)).or_insert_with(|| (t.to_string(), 0)).1 += 1;
+        }
+    }
+    let often: Vec<(&String, &(String, usize))> =
+        count.iter().filter(|(_, (_, n))| *n >= OFTEN).collect();
+    lines
+        .iter()
+        .map(|l| {
+            let t = l.trim();
+            if !name_like(t) {
+                return l.clone();
+            }
+            let k = fold(t);
+            let n = count.get(&k).map_or(0, |c| c.1);
+            let better: Vec<&String> = often
+                .iter()
+                .filter(|(o, (_, m))| **o != k && *m > n && like_name(o, &k))
+                .map(|(_, (name, _))| name)
+                .collect();
+            match better[..] {
+                [name] => name.clone(),
+                _ => l.clone(),
+            }
+        })
+        .collect()
+}
+
+/// As many times as a name on its line is said to be sure of its spelling.
+const OFTEN: usize = 4;
 
 /// A line with a number and nothing else: a page's.
 fn page_number(l: &str) -> bool {
@@ -405,6 +454,9 @@ fn name_columns(lines: &[String]) -> Vec<String> {
         .iter()
         .map(|l| {
             let t = l.trim_start();
+            if super::shape::heading(t).is_some() {
+                return l.clone();
+            }
             if let Some(gap) = t.find("  ") {
                 let (name, rest) = (&t[..gap], t[gap..].trim_start());
                 if !rest.is_empty() && crate::writing::is_caps_name(name) {
@@ -460,6 +512,19 @@ mod tests {
         let all = lines.join("\n");
         assert!(!all.contains("Deniz") && !all.contains("Masa"), "{all}");
         assert!(all.contains("SELİN") && !all.contains("VIII"), "{all}");
+    }
+
+    #[test]
+    fn a_name_misread_once() {
+        let mut lines: Vec<String> = ["BERKANT", "  Bir.", "SELİN", "  İki."]
+            .repeat(4)
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        lines.extend(["BERfANT".to_string(), "  Üç.".to_string()]);
+        let out = names_put_right(&lines);
+        assert_eq!(out[16], "BERKANT");
+        assert_eq!(out[17], "  Üç.");
     }
 
     #[test]

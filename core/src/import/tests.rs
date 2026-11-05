@@ -321,6 +321,8 @@ OZAN — değirmenci
 
 HABERCİ — yolcu
 
+Köylüler, çobanlar, konuklar.
+
 Yöneten: Can Er
 
 Dekor: Ada Gül
@@ -380,7 +382,12 @@ fn a_book_around_a_play() {
     for want in [Imprint, Contents, Author, Preface, Back] {
         assert!(pages.contains(&want), "{want:?} not in {pages:?}");
     }
+    assert_eq!(d.others, "Köylüler, çobanlar, konuklar.");
     let tex = d.tex();
+    assert!(
+        tex.contains("\\digerkisiler{Köylüler, çobanlar, konuklar.}"),
+        "{tex}"
+    );
     for gone in [
         "2408",
         "ISBN",
@@ -440,4 +447,33 @@ fn a_part_named_for_a_job_still_speaks() {
     let text = "YAZAR: Bir.\n\nEDİTÖR: İki.\n\nYAZAR: Üç.\n\nEDİTÖR: Dört.\n\nYAZAR: Beş.\n\nEDİTÖR: Altı.\n";
     let d = shape::shape(&plain::read(text, false), Lang::Tr);
     assert_eq!(d.counts().lines, 6, "{:#?}", d.items);
+}
+
+#[test]
+fn spellings_of_the_cast_page() {
+    let text = "KİŞİLER\n\nKÖYÜN AĞASI\n\nKORAYNO — bir dost\n\nYAŞLI TEMEL — baba\n\nI. PERDE\n\nAĞA: Bir.\n\nKORAYNG: İki.\n\nTEMEL: Üç.\n\nAĞA: Dört.\n\nKORAYNG: Beş.\n\nTEMEL: Altı.\n\nAĞA: Yedi.\n\nKORAYNG: Sekiz.\n";
+    let d = shape::shape(&plain::read(text, false), Lang::Tr);
+    let cast: Vec<&str> = d
+        .cast()
+        .into_iter()
+        .map(|i| d.people[i].name.as_str())
+        .collect();
+    assert_eq!(cast, ["AĞA", "KORAYNG", "TEMEL"], "{:#?}", d.people);
+    assert_eq!(d.lines_of(d.cast()[0]), 3);
+}
+
+#[test]
+fn notes_go_where_they_are_marked() {
+    let on = |t: &str, foot: bool| Para {
+        page: Some(3),
+        foot,
+        ..Para::plain(t)
+    };
+    let mut paras = vec![on("Soytarı* gibi", false), on("Ve kalanı.", false)];
+    let (a, b) = (on("Biri.", true), on("Öbürü.", true));
+    let placed = pages::attach_notes(&mut paras, &[&a, &b]);
+    assert_eq!(placed.len(), 2);
+    assert_eq!(paras[0].text(), "Soytarı gibi");
+    assert!(paras[0].runs[1].note && paras[0].runs[1].text == "Biri.");
+    assert!(paras[1].runs.last().unwrap().note);
 }

@@ -237,7 +237,10 @@ written `NAME: …`, `NAME — …`, `NAME. …` or with the name on a line of i
 own above them. A paragraph in parentheses, or all in italics, is a
 direction, and inside a line `(laughing)` or words in italics are an inline
 one. In a PDF the running heads, page numbers and margin line numbers go,
-and lines the page broke are joined; short ones stay as in a poem.
+and lines the page broke are joined; short ones stay as in a poem. A name
+OCR misread is put as the book spells it most, a speaker's spelling is joined
+to the name it comes from on the cast page, those the cast page lists without
+names go under the list, and a footnote goes where the page marks it.
 
 Before the play is written a preview lists the names found, with how many
 lines each has and the first of them: `e` changes a name, `a` its alias, `m`
@@ -300,7 +303,9 @@ ticking it is yours. Nothing changes the play by itself.
 
 - characters with aliases: `\karakter`, groups (`\karaktergrubu`), characters
   left out of the cast table (`\gizlikarakter`), and the name used inside a
-  line (`\setinlinename`)
+  line (`\setinlinename`), and those the cast page doesn't name, under the
+  list (`\digerkisiler{Köylüler, müzisyenler.}`, or `\othercast`)
+- footnotes in lines and directions: `\dipnot{…}`, or `\footnote`
 - a line of dialogue runs on over the source lines under it, each one a line
   of its own in print, up to a blank line or a line that starts with a
   command or a `#`; the name is in a column of its own, and a `%` at the end

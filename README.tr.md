@@ -300,6 +300,8 @@ Sınıf [tex/](tex/) klasöründe; Dactile onu kendi içinde taşır.
   - `\karakter`
   - gruplar (`\karaktergrubu`)
   - kişiler tablosuna girmeyenler (`\gizlikarakter`)
+  - kişiler sayfasında adı geçmeyenler, listenin altında (`\digerkisiler{Köylüler, müzisyenler.}`)
+  - replik ve yönergelerde dipnot: `\dipnot{…}`
   - replik içinde geçen ad (`\setinlinename`)
 - **Replik** altındaki satırlara da sürer; her kaynak satır baskıda kendi
   satırında durur. Boş bir satır ya da komutla veya `#` ile başlayan bir

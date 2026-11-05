@@ -185,7 +185,12 @@ fn runs(e: &Element, styles: &Styles, pstyle: &Style, out: &mut Vec<Run>) {
                         _ => {}
                     }
                 }
-                out.push(Run { text, italic, bold });
+                out.push(Run {
+                    text,
+                    italic,
+                    bold,
+                    note: false,
+                });
             }
             "w:del" | "w:pPr" | "w:rPr" | "w:moveFrom" => {}
             _ => runs(k, styles, pstyle, out),

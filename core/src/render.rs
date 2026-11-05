@@ -947,6 +947,7 @@ impl Builder<'_> {
                 Inline::Wrap { name, inner } => {
                     let (open, close, style) = match name.as_str() {
                         "textit" | "emph" | "textbf" => ('‹', '›', Style::Direction),
+                        "dipnot" | "footnote" => ('[', ']', Style::Faint),
                         _ => ('«', '»', base),
                     };
                     out.push(Glyph::deco(open, Style::Faint, Some(p.span.start)));

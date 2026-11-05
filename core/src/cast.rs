@@ -767,7 +767,7 @@ const RESERVED: &[&str] = &[
     "right", "middle", "else", "ifx", "ifnum", "ifdim", "loop", "repeat", "value", "index",
     "mark", "input", "string", "number", "meaning", "edef", "gdef", "xdef", "global", "long",
     "outer", "dag", "ddag", "copyright", "pounds", "LaTeX", "TeX", "today", "and", "thanks",
-    "part", "chapter", "section", "paragraph", "footnote", "centering", "noindent", "indent",
+    "part", "chapter", "section", "paragraph", "footnote", "dipnot", "centering", "noindent", "indent",
     "vspace", "hspace", "smallskip", "medskip", "bigskip", "clearpage", "newpage", "pagebreak",
     "linebreak", "nobreak", "protect", "fbox", "mbox", "parbox", "rule", "strut", "phantom",
     "lq", "rq", "ldots", "dots", "cdot", "times", "div", "neq", "leq", "geq", "sim", "approx",

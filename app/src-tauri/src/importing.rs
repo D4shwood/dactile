@@ -65,7 +65,15 @@ pub fn read(path: &Path, lang: Lang) -> Result<Draft, String> {
 }
 
 fn joined(runs: &[Run]) -> String {
-    runs.iter().map(|r| r.text.as_str()).collect()
+    runs.iter()
+        .map(|r| {
+            if r.note {
+                format!(" [*{}]", r.text)
+            } else {
+                r.text.clone()
+            }
+        })
+        .collect()
 }
 
 fn lines(d: &Draft) -> Vec<Line> {

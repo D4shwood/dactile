@@ -179,6 +179,7 @@ fn runs(e: &Element, styles: &Styles, style: &Run, out: &mut Vec<Run>) {
                         text: String::new(),
                         italic: st.italic.unwrap_or(style.italic),
                         bold: st.bold.unwrap_or(style.bold),
+                        note: false,
                     };
                     runs(k, styles, &inner, out);
                 }

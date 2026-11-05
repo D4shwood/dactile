@@ -179,6 +179,9 @@ export const api = {
   characterEdit: (text: string, old: string, form: CharacterForm) =>
     invoke<Made>("character_edit", { text, old, form }),
   characterRemove: (text: string, alias: string) => invoke<Made>("character_remove", { text, alias }),
+  castOthers: (text: string) => invoke<string>("cast_others", { text }),
+  castOthersSet: (text: string, words: string) =>
+    invoke<Made | null>("cast_others_set", { text, words }),
   characterMerge: (text: string, from: string, into: string) =>
     invoke<Made>("character_merge", { text, from, into }),
   characterShift: (text: string, alias: string, up: boolean) =>

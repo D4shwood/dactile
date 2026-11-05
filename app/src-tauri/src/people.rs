@@ -301,6 +301,47 @@ pub fn merge(text: &str, from: &str, into: &str) -> Result<Made, String> {
     })
 }
 
+/// Where the preamble says who the list doesn't name, and how.
+fn others_at(text: &str) -> Option<tex::Arg<'_>> {
+    let pre = dactile::source::split(text).preamble;
+    ["\\digerkisiler", "\\othercast"].iter().find_map(|c| {
+        let at = text[pre.clone()].find(c)? + pre.start;
+        tex::group(text, at + c.len())
+    })
+}
+
+/// Those under the cast list, as they read.
+pub fn others(text: &str) -> String {
+    others_at(text).map_or(String::new(), |a| tex::unescape_text(a.inner))
+}
+
+/// Those under the cast list put as `words`; none, and the line goes.
+pub fn set_others(text: &str, words: &str) -> Option<Made> {
+    let words = words.split_whitespace().collect::<Vec<_>>().join(" ");
+    if words == others(text) {
+        return None;
+    }
+    let esc = dactile::buffer::escape_pasted(&words, false);
+    let edit = match others_at(text) {
+        Some(a) if words.is_empty() => {
+            let from = text[..a.span.start].rfind('\\').unwrap_or(a.span.start);
+            let end = a.span.end + usize::from(text[a.span.end..].starts_with('\n'));
+            Edit::new(from..end, "")
+        }
+        Some(a) => Edit::new(a.inner_span, esc),
+        None => {
+            let at = dactile::source::split(text).preamble.end;
+            Edit::new(at..at, format!("\\digerkisiler{{{esc}}}\n"))
+        }
+    };
+    let t = tex::apply(text, &[edit]);
+    Some(Made {
+        change: diff(text, &t),
+        cursor: None,
+        message: lang::l("Diğer kişiler yazıldı.", "Others written.").into(),
+    })
+}
+
 /// A row of the table (a character, or a group by `#g`) a place up or down.
 pub fn shift(text: &str, alias: &str, up: bool) -> Option<Made> {
     let cast = Cast::of_play(text);
@@ -395,5 +436,24 @@ mod tests {
         let t = apply(PLAY, &m.change);
         assert!(!t.contains("{ih}"));
         assert!(Cast::of_play(&t).get("ih").is_none());
+    }
+
+    #[test]
+    fn others_under_the_list() {
+        let t = "\\documentclass{tiyatro}\n\\begin{document}\nX\n\\end{document}\n";
+        let set = |t: &str, w: &str| {
+            let m = set_others(t, w).unwrap();
+            let c = m.change;
+            format!("{}{}{}", &t[..c.from], c.insert, &t[c.to..])
+        };
+        let one = set(t, "Koylu & coban");
+        assert!(
+            one.contains("\\digerkisiler{Koylu \\& coban}\n\\begin{document}"),
+            "{one}"
+        );
+        assert_eq!(others(&one), "Koylu & coban");
+        assert!(set_others(&one, "Koylu & coban").is_none());
+        assert!(set(&one, "Konuklar").contains("\\digerkisiler{Konuklar}"));
+        assert_eq!(set(&one, ""), t);
     }
 }

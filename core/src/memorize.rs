@@ -32,6 +32,7 @@ pub(crate) fn plain(text: &str, range: Range<usize>, cast: &Cast) -> String {
                 out.push_str(&plain(text, inner, cast));
                 out.push(')');
             }
+            Inline::Wrap { name, .. } if name == "dipnot" || name == "footnote" => {}
             Inline::Under { inner } | Inline::Wrap { inner, .. } => {
                 out.push_str(&plain(text, inner, cast))
             }

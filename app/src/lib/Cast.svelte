@@ -6,6 +6,8 @@
   let {
     tr,
     rows,
+    others,
+    setOthers,
     byLines = $bindable(),
     add,
     edit,
@@ -17,6 +19,9 @@
   }: {
     tr: boolean;
     rows: CastEntry[];
+    /// Those under the list, who have no names.
+    others: string;
+    setOthers: (words: string) => void;
     byLines: boolean;
     add: () => void;
     edit: (r: CastEntry) => void;
@@ -143,6 +148,15 @@
       {/if}
     {/each}
   </div>
+  <label class="others">
+    {l("Diğer kişiler", "Others")}
+    <textarea
+      rows="2"
+      value={others}
+      placeholder={l("Köylüler, müzisyenler…", "Villagers, musicians…")}
+      onchange={(e) => setOthers(e.currentTarget.value)}
+    ></textarea>
+  </label>
   <p class="foot">{l(`${total} replik · çift tık düzenler`, `${total} lines · double-click edits`)}</p>
 </aside>
 
@@ -180,6 +194,24 @@
     margin: 0;
     padding: 6px 10px;
     border-top: 1px solid var(--chrome-line);
+  }
+  .others {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 6px 10px;
+    border-top: 1px solid var(--chrome-line);
+    color: var(--chrome-muted);
+    font-size: 12px;
+  }
+  .others textarea {
+    resize: vertical;
+    font: inherit;
+    color: var(--chrome-fg);
+    background: transparent;
+    border: 1px solid var(--chrome-line);
+    border-radius: 4px;
+    padding: 4px 6px;
   }
   .filter {
     display: flex;

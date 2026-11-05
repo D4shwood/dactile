@@ -152,7 +152,12 @@ fn import(file: &std::path::Path, out: Option<PathBuf>) -> Result<()> {
     }
     for i in draft.cast() {
         let p = &draft.people[i];
-        println!("  \\{:<8} {:<24} {} replik", p.alias, p.name, p.lines);
+        println!(
+            "  \\{:<8} {:<24} {} replik",
+            p.alias,
+            p.name,
+            draft.lines_of(i)
+        );
     }
     Ok(())
 }

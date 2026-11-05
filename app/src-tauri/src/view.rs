@@ -180,6 +180,12 @@ impl Out<'_> {
                     self.style(inner.clone(), "under");
                     self.chip(inner.end..p.span.end, "hide", "");
                 }
+                Inline::Wrap { name, inner } if name == "dipnot" || name == "footnote" => {
+                    self.chip(p.span.start..inner.start, "dir", "[*");
+                    self.style(inner.clone(), "wrap");
+                    self.inline(inner.clone(), dialogue);
+                    self.chip(inner.end..p.span.end, "dir", "]");
+                }
                 Inline::Wrap { name, inner } => {
                     let cls = match name.as_str() {
                         "textit" | "emph" => "em",

@@ -3,7 +3,7 @@
 # the director's notes left out), a new play with nobody in it yet, and checks
 # the scene casts the class wrote, the rerun warning when they were stale, and
 # a run with the casts seeded as Dactile does, comments on # headings,
-# entrances and exits, and actor copies.
+# entrances and exits, actor copies, and a play with others and footnotes.
 # Run from anywhere: tex/test/run.sh
 set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -17,7 +17,11 @@ printf '\\PassOptionsToClass{nonotes}{tiyatro}\\input{ornek-oyun}\n' > nonotes.t
 # What `dactile new` writes: no characters yet, # headings.
 printf '\\documentclass{tiyatro}\n\\title{Yeni}\n\\begin{document}\n\\maketitle\n\\kisiler\n\n#perde Bir\n\n#sahne İç — Gece\n\n\\action{Işıklar.}\n\n\\end{document}\n' > empty.tex
 
-for doc in ornek-oyun final nonotes empty; do
+# Those the list doesn't name, under it; a footnote in a line and in a
+# direction.
+printf '\\documentclass{tiyatro}\n\\title{Yeni}\n\\karakter[Bir kız]{SELİN}{se}\n\\digerkisiler{Köylüler, çobanlar.}\n\\begin{document}\n\\maketitle\n\\kisiler\n\n#perde Bir\n\n#sahne İç\n\n\\action{Işıklar\\dipnot{Sahne notu.}}\n\n\\se Buyurun\\dipnot{Eski bir söz.} efendim.\n\n\\end{document}\n' > others.tex
+
+for doc in ornek-oyun final nonotes empty others; do
     # Twice: the scene casts come from the first run's .aux file.
     for run in 1 2; do
         if ! xelatex -interaction=nonstopmode -halt-on-error "$doc.tex" > "$doc.out" 2>&1; then
@@ -28,6 +32,12 @@ for doc in ornek-oyun final nonotes empty; do
     done
     echo "ok: $doc.pdf"
 done
+
+pdftotext -layout others.pdf others.txt
+grep -q 'Köylüler, çobanlar\.' others.txt || { echo "FAIL: others missing"; cat others.txt; exit 1; }
+grep -q 'Eski bir söz\.' others.txt || { echo "FAIL: footnote in a line missing"; cat others.txt; exit 1; }
+grep -q 'Sahne notu\.' others.txt || { echo "FAIL: footnote in a direction missing"; cat others.txt; exit 1; }
+echo "ok: others and footnotes"
 
 expect() {
     grep -qxF "$1" ornek-oyun.aux || { echo "FAIL: .aux lacks $1"; cat ornek-oyun.aux; exit 1; }

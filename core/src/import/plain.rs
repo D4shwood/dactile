@@ -100,6 +100,7 @@ fn inline(s: &str) -> Vec<Run> {
                 text: std::mem::take(text),
                 italic,
                 bold,
+                note: false,
             });
         }
     };
