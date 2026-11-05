@@ -5,7 +5,6 @@
 use super::{Format, Para, Source, plain};
 use anyhow::{Result, bail};
 use std::path::Path;
-use std::process::Command;
 
 pub fn read(path: &Path, bytes: &[u8]) -> Result<Source> {
     let text = match pdftotext(path) {
@@ -38,7 +37,7 @@ pub fn read(path: &Path, bytes: &[u8]) -> Result<Source> {
 }
 
 fn pdftotext(path: &Path) -> Option<String> {
-    let out = Command::new("pdftotext")
+    let out = crate::build::outside("pdftotext")
         .args(["-layout", "-enc", "UTF-8"])
         .arg(path)
         .arg("-")

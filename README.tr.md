@@ -2,8 +2,8 @@
 
 [English](README.md)
 
-Tiyatro oyunu yazmak için bir terminal uygulaması. Oyunu **tiyatro** XeLaTeX
-sınıfının sözdizimiyle yazarsın; makrolar yazarken canlanır: `\se Amca`
+Tiyatro oyunu yazmak için bir masaüstü uygulaması; terminal sürümünün adı
+Dactile Light. Oyunu **tiyatro** XeLaTeX sınıfının sözdizimiyle yazarsın; makrolar yazarken canlanır: `\se Amca`
 anında `SELİN   Amca` olur, `\sahne` yer ve zaman sorup numaralı bir sahne
 açar, sahnede görünen karakterler kendiliğinden sahne başlığının altında
 toplanır.
@@ -34,26 +34,35 @@ Tüm özellikler için: [examples/ornek-oyun.tex](examples/ornek-oyun.tex).
 
 ## Kurulum
 
-Linux'ta [Releases](https://github.com/D4shwood/dactile/releases) sayfasından:
+Linux'ta, [Releases](https://github.com/D4shwood/dactile/releases) sayfasından:
 
 ```sh
-tar xzf dactile-*-x86_64-linux.tar.gz
-cd dactile-*-x86_64-linux
-./dactile install
+chmod +x Dactile-*-x86_64.AppImage
+./Dactile-*-x86_64.AppImage
 ```
 
-`dactile install` `dactile` komutunu `~/.local/bin`'e koyar, menüye bir girdi
-ekler ve tiyatro sınıfını TeX ağacına (`~/texmf`) kopyalar; oyunlar her
-klasörden derlenir. `dactile uninstall` üçünü de kaldırır; oyunların ve
-ayarların kalır.
+Arch'ta AUR'daki `dactile-bin`, `dactile` komutunu, bir menü girdisini ve
+Dactile Light'ı kurar.
 
-Kaynaktan: `cargo install --path tui`, ardından `dactile install`.
+Kaynaktan kurmak WebKitGTK ve Node.js ister: `app/` içinde `npm install`,
+ardından `npm run tauri dev`.
 
-**Masaüstü uygulaması** (yapım aşamasında, `app/` içinde): aynı oyunlar,
-büyütülebilen bir sayfada; Word'deki gibi bir şerit, sayfanın yanında PDF ve
-sahnelerin sürüklendiği bir pano. WebKitGTK ve Node.js ister; `app/`
-içinde `npm install`, ardından `npm run tauri dev`. Terminal sürümü Dactile
-Light olarak kalıyor.
+**Dactile Light**, aynı yazıcının terminal sürümüdür:
+
+```sh
+tar xzf dactile-light-*-x86_64-linux.tar.gz
+cd dactile-light-*-x86_64-linux
+./dactile-light install
+```
+
+`dactile-light install`, `dactile-light` komutunu `~/.local/bin`'e koyar,
+menüye bir girdi ekler ve tiyatro sınıfını TeX ağacına (`~/texmf`) kopyalar;
+böylece oyunlar her klasörden derlenir. `dactile-light uninstall` üçünü de
+kaldırır; oyunların ve ayarların kalır. Kaynaktan:
+`cargo install --path tui`, ardından `dactile-light install`.
+
+0.3'ten önce terminal uygulaması `dactile` komutuydu: `dactile uninstall`
+onu kaldırır.
 
 - **Yazım denetimi** için Türkçe bir Hunspell sözlüğü (`tr_TR.aff` ve
   `tr_TR.dic`) `~/.local/share/hunspell` ya da `/usr/share/hunspell` içinde
@@ -64,11 +73,14 @@ Light olarak kalıyor.
 
 ## Kullanım
 
+Bu sayfa Dactile Light'ın tuşlarını ve ekranlarını anlatır; masaüstü uygulaması
+aynı oyunları ve araçları bir sayfa üstünde, şerit ve fareyle sunar.
+
 ```sh
-dactile                   # ana ekran: oyunların, yeni oyun, ayarlar
-dactile oyun.tex          # doğrudan bir oyuna
-dactile new "Kar Masalı"  # oyunlar klasöründe yeni bir oyun
-dactile import oyun.docx  # bir belgeden oyun (bkz. İçe aktarma)
+dactile-light                   # ana ekran: oyunların, yeni oyun, ayarlar
+dactile-light oyun.tex          # doğrudan bir oyuna
+dactile-light new "Kar Masalı"  # oyunlar klasöründe yeni bir oyun
+dactile-light import oyun.docx  # bir belgeden oyun (bkz. İçe aktarma)
 ```
 
 İlk açılışta dil (Türkçe ya da İngilizce), oyunların duracağı klasör, adın ve
@@ -230,7 +242,7 @@ Oyun yazılmadan önce bir önizleme bulunan adları, kaçar replikleri ve ilk
 replikleriyle listeler: `e` adı, `a` kısaltmayı değiştirir, `m` aynı kişi
 olan iki adı birleştirir (ve yeniden ayırır), `x` hiç karakter olmayanı
 (`NOT: …`) işaretler, onun satırları metin olarak kalır; `t` başlık ve yazar.
-⏎ oyunu oyunlar klasörüne yazar ve açar. `dactile import DOSYA` aynısını
+⏎ oyunu oyunlar klasörüne yazar ve açar. `dactile-light import DOSYA` aynısını
 komut satırından, adları geldiği gibi alarak yapar. Taranmış bir PDF, sayfa
 resimleri, önce OCR'dan geçmeli.
 

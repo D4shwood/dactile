@@ -1,4 +1,4 @@
-//! `dactile install` / `dactile uninstall`: the command, a menu entry, and the
+//! `dactile-light install` / `dactile-light uninstall`: the command, a menu entry, and the
 //! tiyatro class where XeLaTeX finds it, so plays compile from any folder.
 
 use anyhow::{Context, Result};
@@ -11,13 +11,13 @@ fn home() -> PathBuf {
 }
 
 fn bin() -> PathBuf {
-    home().join(".local/bin/dactile")
+    home().join(".local/bin/dactile-light")
 }
 
 fn desktop() -> PathBuf {
     dirs::data_dir()
         .unwrap_or_else(|| home().join(".local/share"))
-        .join("applications/dactile.desktop")
+        .join("applications/dactile-light.desktop")
 }
 
 /// The user's own TeX tree (TEXMFHOME), usually ~/texmf.
@@ -53,7 +53,7 @@ pub fn install() -> Result<Vec<String>> {
     fs::write(
         &entry,
         format!(
-            "[Desktop Entry]\nType=Application\nName=Dactile\nGenericName=Stage play writer\n\
+            "[Desktop Entry]\nType=Application\nName=Dactile Light\nGenericName=Stage play writer\n\
              Comment=Write plays for the tiyatro XeLaTeX class\nExec={}\nTerminal=true\n\
              Icon=accessories-text-editor\nCategories=Office;WordProcessor;\n",
             exec_arg(&target.to_string_lossy())

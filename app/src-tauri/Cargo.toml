@@ -6,11 +6,11 @@ edition.workspace = true
 repository.workspace = true
 license.workspace = true
 
-# `dactile-desktop` until the app is released and takes the `dactile`
-# command from Dactile Light.
 [[bin]]
-name = "dactile-desktop"
+name = "dactile"
 path = "src/main.rs"
+# The library it uses has the same name.
+doc = false
 
 [lib]
 name = "dactile_app"

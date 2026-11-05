@@ -2,8 +2,8 @@
 
 [Türkçe](README.tr.md)
 
-A terminal app for writing stage plays. You write the play in the syntax of the
-**tiyatro** XeLaTeX class, and the macros come alive as you type: `\se Amca`
+A desktop app for writing stage plays, with a terminal twin, Dactile Light. You
+write the play in the syntax of the **tiyatro** XeLaTeX class, and the macros come alive as you type: `\se Amca`
 turns into `SELİN   Amca` on the spot, `\sahne` asks for a place and a time
 and opens a numbered scene, and the characters who appear in a scene gather
 under its heading by themselves.
@@ -37,22 +37,32 @@ See [examples/ornek-oyun.tex](examples/ornek-oyun.tex) for every feature.
 On Linux, from [Releases](https://github.com/D4shwood/dactile/releases):
 
 ```sh
-tar xzf dactile-*-x86_64-linux.tar.gz
-cd dactile-*-x86_64-linux
-./dactile install
+chmod +x Dactile-*-x86_64.AppImage
+./Dactile-*-x86_64.AppImage
 ```
 
-`dactile install` puts the `dactile` command in `~/.local/bin`, adds a menu
-entry, and copies the tiyatro class into your TeX tree (`~/texmf`), so plays
-compile from any folder. `dactile uninstall` removes all three; your plays
-and settings stay.
+On Arch, the AUR's `dactile-bin` gives the `dactile` command, a menu entry
+and Dactile Light.
 
-From source: `cargo install --path tui`, then `dactile install`.
+From source, it needs WebKitGTK and Node.js: in `app/`, `npm install`, then
+`npm run tauri dev`.
 
-**The desktop app** (in progress, in `app/`): the same plays on a page you
-can zoom, a word processor's ribbon, the PDF beside the page, and a board to
-drag scenes on. It needs WebKitGTK and Node.js; from `app/`, `npm install`
-then `npm run tauri dev`. The terminal app stays as Dactile Light.
+**Dactile Light** is the same writer in a terminal:
+
+```sh
+tar xzf dactile-light-*-x86_64-linux.tar.gz
+cd dactile-light-*-x86_64-linux
+./dactile-light install
+```
+
+`dactile-light install` puts the `dactile-light` command in `~/.local/bin`,
+adds a menu entry, and copies the tiyatro class into your TeX tree
+(`~/texmf`), so plays compile from any folder. `dactile-light uninstall`
+removes all three; your plays and settings stay. From source:
+`cargo install --path tui`, then `dactile-light install`.
+
+Before 0.3 the terminal app was the `dactile` command: `dactile uninstall`
+removes that one.
 
 - **Spell checking** needs a Turkish Hunspell dictionary (`tr_TR.aff` and
   `tr_TR.dic`) in `~/.local/share/hunspell` or `/usr/share/hunspell`; on
@@ -62,11 +72,14 @@ then `npm run tauri dev`. The terminal app stays as Dactile Light.
 
 ## Using it
 
+This page describes Dactile Light's keys and screens; the desktop app has the
+same plays and tools on a page, with a ribbon and the mouse.
+
 ```sh
-dactile                   # the home screen: your plays, a new one, settings
-dactile oyun.tex          # straight into a play
-dactile new "Kar Masalı"  # a new play in your plays folder
-dactile import oyun.docx  # a play made of a document (see Importing)
+dactile-light                   # the home screen: your plays, a new one, settings
+dactile-light oyun.tex          # straight into a play
+dactile-light new "Kar Masalı"  # a new play in your plays folder
+dactile-light import oyun.docx  # a play made of a document (see Importing)
 ```
 
 The first run asks for the language (Turkish or English), the folder your
@@ -231,7 +244,7 @@ lines each has and the first of them: `e` changes a name, `a` its alias, `m`
 merges two that are the same person (and splits them again), `x` marks one
 that is not a character at all (`NOT: …`), whose lines stay as text, and `t`
 the title and author. ⏎ writes the play to your plays folder and opens it.
-`dactile import FILE` does the same from the command line, taking the names
+`dactile-light import FILE` does the same from the command line, taking the names
 as they come. A scanned PDF, pictures of pages, needs OCR first.
 
 ### Notes

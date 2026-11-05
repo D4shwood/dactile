@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from "svelte";
+  import { getVersion } from "@tauri-apps/api/app";
   import { EditorState } from "@codemirror/state";
   import { EditorView } from "@codemirror/view";
   import { redo, selectAll, undo } from "@codemirror/commands";
@@ -36,6 +37,7 @@
   let host: HTMLDivElement;
   let view: EditorView;
   let ribbon: Ribbon | undefined = $state();
+  let version = $state("");
   let dirty = $state(false);
   // Taken once: from here on the writer keeps them, and saves them.
   const first = untrack(() => settings);
@@ -848,6 +850,7 @@
       }),
     });
     refresh(true);
+    void getVersion().then((v) => (version = v));
     // For trying the app out from a script (DACTILE_DEV_EVAL).
     if (import.meta.env.DEV) (window as any).__dactile = { view, key, run, move, openBoard, build, setZoom };
     // To the first line of dialogue, past the cover.
@@ -1114,8 +1117,8 @@
           </table>
         {:else}
           <h2>Dactile</h2>
-          <p>{l("Masaüstü uygulaması, ilk kilometre taşı. Terminal sürümü: Dactile Light.", "The desktop app, first milestone. The terminal one: Dactile Light.")}</p>
-          <p class="muted">0.2.0-beta.6 · GPL-3.0-or-later</p>
+          <p>{l("Tiyatro oyunu yazmak için masaüstü uygulaması. Terminal sürümü: Dactile Light.", "A desktop app for writing stage plays. The terminal one: Dactile Light.")}</p>
+          <p class="muted">{version} · GPL-3.0-or-later</p>
         {/if}
       </div>
     </div>

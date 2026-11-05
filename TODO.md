@@ -130,7 +130,6 @@ Each milestone ends with a demo and a beta, published once approved.
    - Renaming a character in plain text too ("Selin'in" → "Selma'nın",
      suffixes by vowel harmony), and its inline name (`\setinlinename`).
    - A GIF for the README, a short guide.
-   - An AUR package (`dactile-bin`) from the release workflow.
 
 ## The desktop app
 
@@ -146,11 +145,13 @@ The main app from here on (`app/`: Tauri 2, Svelte 5, CodeMirror 6, on
 - Notes beside the page (Ctrl+N; Alt+N on the selection; a pasted reply
   or a file as notes; “wrong” → right applied in one undo); F7 the sheet
   or the text across the window. The app's mark: a serif D, as Poet's P.
-- **B.** The greyed buttons: cast and characters, spelling,
-  search, summaries, split and join, casting, memorize.
-- **C.** Import, drafts and copies, the trash; a play's settings.
-- **D.** An AppImage and an AUR package; the `dactile` command goes to the
-  app, Dactile Light becomes `dactile-light`. Then Windows and macOS.
+- **B.** — done: the greyed buttons (cast and characters, spelling, search,
+  summaries, split and join, casting, memorize), but for the PDF with notes.
+- **C.** — done: import, drafts and copies, the trash; a play's settings.
+- **D.** An AppImage and an AUR package (`packaging/aur`); the `dactile`
+  command goes to the app, Dactile Light becomes `dactile-light`. Then
+  Windows and macOS.
+- The PDF with notes (greyed on the ribbon); the role view (Shift+F8).
 
 ## 1.x
 

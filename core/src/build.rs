@@ -167,7 +167,7 @@ pub fn build(play: &Path) -> Result<Built, Failed> {
 /// One XeLaTeX run of `name` in `dir`, with TEXINPUTS `path`: its log, or
 /// what stopped it.
 fn xelatex(dir: &Path, name: &Path, path: &str, log_path: &Path) -> Result<String, Failed> {
-    let mut child = Command::new("xelatex")
+    let mut child = outside("xelatex")
         .args([
             "-interaction=nonstopmode",
             "-halt-on-error",
@@ -379,7 +379,7 @@ pub fn open_log(play: &Path) -> anyhow::Result<()> {
 /// The desktop's own program for the file, without waiting for it.
 /// Opens a file or a folder with the desktop's own program for it.
 pub fn launch(path: &Path) -> anyhow::Result<()> {
-    let mut child = Command::new("xdg-open")
+    let mut child = outside("xdg-open")
         .arg(path)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -389,9 +389,57 @@ pub fn launch(path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// A program of the system's. An AppImage's start script points the
+/// libraries, Perl, Python and GTK at what is inside it, for the app alone:
+/// XeLaTeX or a PDF viewer would load those instead of their own. So a child
+/// gets the environment as it was.
+pub fn outside(program: &str) -> Command {
+    let mut c = Command::new(program);
+    if let Some(dir) = std::env::var("APPDIR").ok().filter(|d| !d.is_empty()) {
+        c.env_remove("GTK_THEME");
+        for (name, value) in std::env::vars_os() {
+            match without(&value.to_string_lossy(), &dir) {
+                None => {}
+                Some(v) if v.is_empty() => {
+                    c.env_remove(name);
+                }
+                Some(v) => {
+                    c.env(name, v);
+                }
+            }
+        }
+    }
+    c
+}
+
+/// A variable's value with the paths inside `dir` gone, if it had any.
+fn without(value: &str, dir: &str) -> Option<String> {
+    value.contains(dir).then(|| {
+        value
+            .split(':')
+            .filter(|p| !p.contains(dir))
+            .collect::<Vec<_>>()
+            .join(":")
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn appimage_paths_stay_inside() {
+        let d = "/tmp/.mount_DactilX";
+        assert_eq!(
+            without("/tmp/.mount_DactilX/usr/bin/:/usr/bin:/bin", d).as_deref(),
+            Some("/usr/bin:/bin")
+        );
+        assert_eq!(
+            without("/tmp/.mount_DactilX//usr/lib/gtk-3.0", d).as_deref(),
+            Some("")
+        );
+        assert_eq!(without("/usr/bin", d), None);
+    }
 
     const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 

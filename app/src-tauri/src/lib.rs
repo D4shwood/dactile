@@ -153,7 +153,7 @@ async fn build(app: Shared<'_>) -> Res<BuildResult> {
         .map_err(|e| e.to_string())
 }
 
-/// The play named on the command line (`dactile-desktop oyun.tex`), once.
+/// The play named on the command line (`dactile oyun.tex`), once.
 #[tauri::command]
 fn startup(app: Shared) -> Option<String> {
     let mut a = app.lock().unwrap();
@@ -161,11 +161,15 @@ fn startup(app: Shared) -> Option<String> {
         return None;
     }
     a.started = true;
+    // An AppImage runs from inside itself, and says where it was started.
+    let here = std::env::var_os("OWD")
+        .map(PathBuf::from)
+        .unwrap_or_default();
     std::env::args_os()
         .skip(1)
         .map(PathBuf::from)
         .find(|p| p.extension().is_some_and(|e| e == "tex"))
-        .and_then(|p| p.canonicalize().ok())
+        .and_then(|p| here.join(p).canonicalize().ok())
         .map(|p| p.display().to_string())
 }
 

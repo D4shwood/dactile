@@ -21,7 +21,7 @@ struct Cli {
 enum Cmd {
     /// Starts a new play in the plays folder and opens it.
     New { title: String },
-    /// Puts `dactile` in ~/.local/bin, adds a menu entry, and the tiyatro
+    /// Puts `dactile-light` in ~/.local/bin, adds a menu entry, and the tiyatro
     /// class where XeLaTeX finds it.
     Install,
     /// Removes what `install` added (plays and settings stay).
