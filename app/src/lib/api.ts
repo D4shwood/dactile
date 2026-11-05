@@ -277,6 +277,7 @@ export interface Shown {
   title: string;
   author: string;
   people: { name: string; alias: string; lines: number; sample: string; not_character: boolean; merged: string | null }[];
+  asides: { label: string; paragraphs: number; text: string; keep: boolean }[];
   lines: number;
   directions: number;
   acts: number;
@@ -291,7 +292,8 @@ export type ImportEdit =
   | { kind: "person"; i: number; name: string; alias: string }
   | { kind: "merge"; from: number; into: number }
   | { kind: "unmerge"; i: number }
-  | { kind: "not-character"; i: number };
+  | { kind: "not-character"; i: number }
+  | { kind: "aside"; i: number };
 
 export interface FormStart {
   title: string;

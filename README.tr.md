@@ -246,6 +246,12 @@ olan iki adı birleştirir (ve yeniden ayırır), `x` hiç karakter olmayanı
 komut satırından, adları geldiği gibi alarak yapar. Taranmış bir PDF, sayfa
 resimleri, önce OCR'dan geçmeli.
 
+Kitaptan gelen bir oyunun çevresinde yayınevinin eklediği sayfalar olur: kapak,
+künye, içindekiler, önsöz, yazar tanıtımı. Oyun, kişilerin birbirine cevap
+verdiği yerden bulunur ve yalnızca o bölüm konuşmacı için okunur; masaüstü
+uygulamasının önizlemesi öteki sayfaları listeler, işaretlenen düz metin olarak
+oyuna girer. Önsöz ve notlar oyunun kendi bölümleri olarak kalır.
+
 ### Notlar
 
 Oyun üstüne herkesin notu (bir AI'ın okuması, atölye, bir okur, kendin)

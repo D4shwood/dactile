@@ -146,6 +146,10 @@ fn import(file: &std::path::Path, out: Option<PathBuf>) -> Result<()> {
         "{} replik, {} yönerge, {} perde, {} sahne, {} düz paragraf",
         c.lines, c.directions, c.acts, c.scenes, c.plain
     );
+    let out = draft.asides.iter().filter(|a| !a.keep).count();
+    if out > 0 {
+        println!("{out} kitap sayfası oyunun dışında bırakıldı");
+    }
     for i in draft.cast() {
         let p = &draft.people[i];
         println!("  \\{:<8} {:<24} {} replik", p.alias, p.name, p.lines);

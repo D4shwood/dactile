@@ -5,6 +5,7 @@
 //! wait in a `Draft` to be checked (renamed, merged, or not a character
 //! after all) before the play is written out.
 
+use super::pages::{self, Page};
 use super::{Para, Run, Source};
 use crate::buffer::escape_pasted;
 use crate::cast::{Cast, upper_tr};
@@ -45,12 +46,24 @@ pub enum Item {
     Plain(Vec<Run>),
 }
 
+/// A page of the book the play came in: not read for who speaks, and left
+/// out of the play unless `keep`.
+#[derive(Debug, Clone)]
+pub struct Aside {
+    pub page: Page,
+    pub paras: Vec<Vec<Run>>,
+    pub keep: bool,
+    /// After the play, not before it.
+    pub after: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct Draft {
     pub title: String,
     pub author: String,
     pub people: Vec<Person>,
     pub items: Vec<Item>,
+    pub asides: Vec<Aside>,
     pub lang: Lang,
 }
 
@@ -67,7 +80,7 @@ pub struct Counts {
 // ------------------------------------------------------------------ headings
 
 #[derive(Clone, Copy, PartialEq)]
-enum Level {
+pub(super) enum Level {
     Act,
     Scene,
     Preface,
@@ -123,7 +136,7 @@ fn level_word(w: &str) -> Option<Level> {
 
 /// `BİRİNCİ PERDE`, `Perde 2: Kar`, `II. Sahne — Ahır`, `ACT ONE`, and
 /// `#sahne Ahır`: the level and what follows it (a title, a place).
-fn heading(text: &str) -> Option<(Level, String)> {
+pub(super) fn heading(text: &str) -> Option<(Level, String)> {
     let t = text.trim();
     if let Some((word, _, rest)) = crate::lex::hash_line(t) {
         use crate::lex::{Heading, Section};
@@ -183,13 +196,18 @@ fn act_title(t: &str) -> bool {
 }
 
 /// The line that starts a cast list.
-fn is_cast_heading(text: &str) -> bool {
+pub(super) fn is_cast_heading(text: &str) -> bool {
     let t = upper_tr(text.trim().trim_end_matches([':', '.']));
     matches!(
         t.as_str(),
         "KİŞİLER"
+            | "OYUN KİŞİLERİ"
             | "OYUNUN KİŞİLERİ"
             | "OYUNDAKİ KİŞİLER"
+            | "OYUN ŞAHISLARI"
+            | "OYUNUN ŞAHISLARI"
+            | "OYUN KADROSU"
+            | "ROLLER"
             | "KARAKTERLER"
             | "OYUNCULAR"
             | "ŞAHIS KADROSU"
@@ -244,7 +262,7 @@ fn separators(t: &str) -> Vec<(usize, usize, bool)> {
 }
 
 /// `NAME: words` and the like: the name, a note, and where the words start.
-fn speech_head(t: &str) -> Option<(String, Option<String>, usize, bool)> {
+pub(super) fn speech_head(t: &str) -> Option<(String, Option<String>, usize, bool)> {
     for (at, after, caps_only) in separators(t) {
         let Some((name, note)) = split_name(&t[..at]) else {
             continue;
@@ -258,7 +276,7 @@ fn speech_head(t: &str) -> Option<(String, Option<String>, usize, bool)> {
 }
 
 /// A name alone on its paragraph, in capitals (a note may follow it).
-fn name_alone(t: &str) -> Option<(String, Option<String>)> {
+pub(super) fn name_alone(t: &str) -> Option<(String, Option<String>)> {
     if t.contains('\n') {
         return None;
     }
@@ -267,7 +285,7 @@ fn name_alone(t: &str) -> Option<(String, Option<String>)> {
 }
 
 /// Words in capitals on a line of their own that are no one.
-const NOT_NAMES: [&str; 14] = [
+pub(super) const NOT_NAMES: [&str; 14] = [
     "SON",
     "SONSÖZ",
     "KARANLIK",
@@ -284,7 +302,7 @@ const NOT_NAMES: [&str; 14] = [
     "FİNİS",
 ];
 
-fn key(name: &str) -> String {
+pub(super) fn key(name: &str) -> String {
     upper_tr(name)
         .split_whitespace()
         .collect::<Vec<_>>()
@@ -448,20 +466,25 @@ impl Shaper {
 
 /// A cast list's entry: `SELİN — köy öğretmeni`, `Ozan Usta, değirmenci`,
 /// `İHTİYAR (yaşlı bir yolcu)`, or a name alone.
-fn cast_entry(t: &str) -> Option<(String, Option<String>)> {
+pub(super) fn cast_entry(t: &str) -> Option<(String, Option<String>)> {
     if t.contains('\n') || t.split_whitespace().count() > 25 {
+        return None;
+    }
+    // "Oyun köyde geçer." is a sentence, not a name.
+    if t.ends_with('.') && t.chars().any(char::is_lowercase) && split_name(t).is_some() {
         return None;
     }
     if let Some((name, note)) = split_name(t) {
         return Some((name, note.filter(|n| !n.is_empty())));
     }
+    // A name, and its actor over dots.
     let cut = t
         .char_indices()
-        .find(|&(_, c)| ",:—–(".contains(c) || c == '-')
+        .find(|&(i, c)| ",:—–(…".contains(c) || c == '-' || t[i..].starts_with(".."))
         .map(|(i, _)| i)?;
     let (name, _) = split_name(&t[..cut])?;
     let desc = t[cut..]
-        .trim_start_matches(|c: char| c.is_whitespace() || ",:—–-(".contains(c))
+        .trim_start_matches(|c: char| c.is_whitespace() || ",:—–-(.…".contains(c))
         .trim_end_matches(')')
         .trim();
     Some((name, (!desc.is_empty()).then(|| desc.to_string())))
@@ -470,7 +493,9 @@ fn cast_entry(t: &str) -> Option<(String, Option<String>)> {
 /// The paragraphs a draft is made of: who speaks is sure only once all of
 /// them are counted (a name written once before a colon may be a word).
 pub fn shape(src: &Source, lang: Lang) -> Draft {
-    let paras = &src.paras;
+    let layout = pages::find(&src.paras);
+    let book = !layout.parts.is_empty() || layout.play.start > 0;
+    let paras = &src.paras[layout.play.clone()];
     // Names before a colon or alone, counted; names in bold count as sure.
     let mut seen: HashMap<String, usize> = HashMap::new();
     let mut alone = 0;
@@ -491,7 +516,39 @@ pub fn shape(src: &Source, lang: Lang) -> Draft {
     };
     let mut items: Vec<Item> = Vec::new();
     let mut front: Vec<&Para> = Vec::new();
-    let mut started = false;
+    let mut asides: Vec<Aside> = Vec::new();
+    for part in &layout.parts {
+        let list = &src.paras[part.range.clone()];
+        let mut left: Vec<Vec<Run>> = Vec::new();
+        for p in list {
+            let t = p.text();
+            match part.page {
+                Page::Cover if !part.after => front.push(p),
+                Page::Cast if is_cast_heading(&t) => {}
+                Page::Cast => {
+                    for line in t.lines().map(str::trim) {
+                        match cast_entry(line).filter(|(n, _)| !pages::book_word(n)) {
+                            Some((name, desc)) => sh.listed(&name, desc),
+                            None => left.push(Para::plain(line).runs),
+                        }
+                    }
+                }
+                _ => left.push(p.runs.clone()),
+            }
+        }
+        match asides.last_mut() {
+            _ if left.is_empty() => {}
+            Some(a) if a.page == part.page && a.after == part.after => a.paras.append(&mut left),
+            _ => asides.push(Aside {
+                page: part.page,
+                paras: left,
+                // The play's own sections; a book's other pages aren't.
+                keep: matches!(part.page, Page::Preface | Page::Notes),
+                after: part.after,
+            }),
+        }
+    }
+    let mut started = book;
     let mut in_list = false;
     let mut i = 0;
     while i < paras.len() {
@@ -539,11 +596,12 @@ pub fn shape(src: &Source, lang: Lang) -> Draft {
         // NAME: words.
         if let Some((name, note, after, _)) = speech_head(t) {
             let k = key(&name);
+            let often = seen.get(&k).is_some_and(|&n| n >= 3);
             let sure = is_caps_name(&name)
                 || sh.index.contains_key(&k)
                 || bold_name(&p.runs, t.find(&name).map_or(0, |s| s + name.len()))
-                || seen.get(&k).is_some_and(|&n| n >= 3);
-            if sure {
+                || often;
+            if sure && (often || !pages::book_word(&k)) {
                 started = true;
                 let lead = p.text().len() - p.text().trim_start().len();
                 let mut said = note_run(note);
@@ -565,7 +623,12 @@ pub fn shape(src: &Source, lang: Lang) -> Draft {
                 heading(&nt).is_none() && name_alone(&nt).is_none() && !is_cast_heading(&nt)
             });
             let often = seen.get(&k).is_some_and(|&n| n >= 2) || alone_style;
-            if next_ok && !NOT_NAMES.contains(&k.as_str()) && (often || sh.index.contains_key(&k)) {
+            let job = pages::book_word(&k) && !seen.get(&k).is_some_and(|&n| n >= 3);
+            if next_ok
+                && !job
+                && !NOT_NAMES.contains(&k.as_str())
+                && (often || sh.index.contains_key(&k))
+            {
                 started = true;
                 let mut said = note_run(note);
                 let mut raw = p.runs.clone();
@@ -633,16 +696,30 @@ pub fn shape(src: &Source, lang: Lang) -> Draft {
         }
     }
     let (title, author, rest) = front_matter(src, &front);
-    let mut items_all: Vec<Item> = rest
-        .into_iter()
-        .map(|p| Item::Plain(p.runs.clone()))
-        .collect();
+    let rest: Vec<Vec<Run>> = rest.into_iter().map(|p| p.runs.clone()).collect();
+    let mut items_all: Vec<Item> = Vec::new();
+    if book {
+        if !rest.is_empty() {
+            asides.insert(
+                0,
+                Aside {
+                    page: Page::Cover,
+                    paras: rest,
+                    keep: false,
+                    after: false,
+                },
+            );
+        }
+    } else {
+        items_all.extend(rest.into_iter().map(Item::Plain));
+    }
     items_all.extend(items);
     let mut d = Draft {
         title,
         author,
         people: sh.people,
         items: items_all,
+        asides,
         lang,
     };
     d.give_aliases();
@@ -665,7 +742,11 @@ fn note_run(note: Option<String>) -> Vec<Run> {
 /// play starts (`Yazan: …`, `by …`), and what is left of those lines.
 fn front_matter<'a>(src: &Source, front: &[&'a Para]) -> (String, String, Vec<&'a Para>) {
     let mut rest: Vec<&Para> = front.to_vec();
-    let short = |p: &Para| p.text().split_whitespace().count() <= 12 && !p.text().contains('\n');
+    let short = |p: &Para| {
+        p.text().split_whitespace().count() <= 12
+            && !p.text().contains('\n')
+            && !pages::imprint(&p.text())
+    };
     let mut title = None;
     if let Some(i) = rest.iter().position(|p| p.title) {
         title = Some(rest.remove(i).text());
@@ -677,8 +758,8 @@ fn front_matter<'a>(src: &Source, front: &[&'a Para]) -> (String, String, Vec<&'
         {
             rest.remove(i);
         }
-    } else if rest.first().is_some_and(|p| short(p)) {
-        title = Some(rest.remove(0).text());
+    } else if let Some(i) = rest.iter().position(|p| short(p)) {
+        title = Some(rest.remove(i).text());
     }
     let mut author = None;
     for (i, p) in rest.iter().enumerate() {
@@ -704,13 +785,16 @@ fn front_matter<'a>(src: &Source, front: &[&'a Para]) -> (String, String, Vec<&'
         }
     }
     if author.is_none()
-        && let Some(p) = rest.first()
-        && p.text().split_whitespace().count() <= 4
-        && !p.text().trim_end().ends_with(['.', '!', '?', ':'])
+        && let Some(i) = rest.iter().position(|p| short(p))
+        && rest[i].text().split_whitespace().count() <= 4
+        && !rest[i].text().trim_end().ends_with(['.', '!', '?', ':'])
     {
-        author = Some(rest.remove(0).text());
+        author = Some(rest.remove(i).text());
     }
     let author = author.or_else(|| src.author.clone()).unwrap_or_default();
+    // A book says them on its cover and again on its title page.
+    let said = [key(title.as_deref().unwrap_or("")), key(author.as_str())];
+    rest.retain(|p| !said.contains(&key(&p.text())));
     (
         title.unwrap_or_default().trim().to_string(),
         author.trim().to_string(),
@@ -824,9 +908,37 @@ impl Draft {
             .sum()
     }
 
+    /// The play as it will be written: the asides kept, around its items.
+    pub fn all_items(&self) -> Vec<Item> {
+        let side = |after: bool| {
+            self.asides
+                .iter()
+                .filter(move |a| a.keep && a.after == after)
+                .flat_map(|a| {
+                    let head = match a.page {
+                        Page::Preface => Some(Item::Preface),
+                        Page::Notes => Some(Item::Notes),
+                        _ => None,
+                    };
+                    // Its title is said by the section.
+                    let skip = usize::from(head.is_some() && a.paras.len() > 1);
+                    head.into_iter().chain(
+                        a.paras
+                            .iter()
+                            .skip(skip)
+                            .map(|runs| Item::Plain(runs.clone())),
+                    )
+                })
+        };
+        side(false)
+            .chain(self.items.iter().cloned())
+            .chain(side(true))
+            .collect()
+    }
+
     pub fn counts(&self) -> Counts {
         let mut c = Counts::default();
-        for it in &self.items {
+        for it in &self.all_items() {
             match it {
                 Item::Act(_) => c.acts += 1,
                 Item::Preface | Item::Notes => {}
@@ -867,21 +979,21 @@ impl Draft {
             Lang::En => ("act", "scene"),
         };
         let mut body = String::new();
-        if !self.items.iter().any(|i| matches!(i, Item::Scene(_))) {
-            let first = self
-                .items
+        let items = self.all_items();
+        if !items.iter().any(|i| matches!(i, Item::Scene(_))) {
+            let first = items
                 .iter()
-                .position(|i| !matches!(i, Item::Plain(_)))
-                .unwrap_or(self.items.len());
-            for it in &self.items[..first] {
+                .position(|i| !matches!(i, Item::Plain(_) | Item::Preface | Item::Notes))
+                .unwrap_or(items.len());
+            for it in &items[..first] {
                 self.item_tex(it, act, scene, &mut body);
             }
             body.push_str(&format!("#{scene}\n\n"));
-            for it in &self.items[first..] {
+            for it in &items[first..] {
                 self.item_tex(it, act, scene, &mut body);
             }
         } else {
-            for it in &self.items {
+            for it in &items {
                 self.item_tex(it, act, scene, &mut body);
             }
         }

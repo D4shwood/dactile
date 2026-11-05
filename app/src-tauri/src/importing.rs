@@ -4,6 +4,7 @@
 
 use dactile::config::Config;
 use dactile::import::Run;
+use dactile::import::pages::Page;
 use dactile::import::shape::{Counts, Draft, Item, shape};
 use dactile::lang::{self, Lang};
 use dactile::{cast, file, library};
@@ -12,6 +13,8 @@ use std::path::{Path, PathBuf};
 
 /// As many of the play's lines as the preview shows.
 const SHOWN: usize = 400;
+/// As many characters of a book's page as the preview shows.
+const ASIDE: usize = 1500;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Person {
@@ -32,12 +35,23 @@ pub struct Line {
     pub text: String,
 }
 
+/// A page of the book, kept apart from the play.
+#[derive(Debug, Clone, Serialize)]
+pub struct Aside {
+    pub label: String,
+    pub paragraphs: usize,
+    /// As much of it as there is to judge by.
+    pub text: String,
+    pub keep: bool,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Shown {
     pub file: String,
     pub title: String,
     pub author: String,
     pub people: Vec<Person>,
+    pub asides: Vec<Aside>,
     pub lines: usize,
     pub directions: usize,
     pub acts: usize,
@@ -60,7 +74,7 @@ fn joined(runs: &[Run]) -> String {
 
 fn lines(d: &Draft) -> Vec<Line> {
     let line = |kind, who, text| Line { kind, who, text };
-    d.items
+    d.all_items()
         .iter()
         .map(|it| match it {
             Item::Act(t) => line("act", None, t.clone()),
@@ -79,6 +93,20 @@ fn lines(d: &Draft) -> Vec<Line> {
             Item::Plain(r) => line("plain", None, joined(r)),
         })
         .collect()
+}
+
+fn page_label(page: Page) -> &'static str {
+    match page {
+        Page::Cover => lang::l("Kapak", "Cover"),
+        Page::Imprint => lang::l("Künye", "Imprint"),
+        Page::Contents => lang::l("İçindekiler", "Contents"),
+        Page::Preface => lang::l("Önsöz", "Preface"),
+        Page::Notes => lang::l("Notlar", "Notes"),
+        Page::Author => lang::l("Yazar tanıtımı", "About the author"),
+        Page::Cast => lang::l("Kişiler sayfası", "Cast page"),
+        Page::Back => lang::l("Kitabın sonu", "End of the book"),
+        Page::Other => lang::l("Diğer sayfalar", "Other pages"),
+    }
 }
 
 pub fn shown(file: &Path, d: &Draft) -> Shown {
@@ -113,6 +141,24 @@ pub fn shown(file: &Path, d: &Draft) -> Shown {
                 merged: p.merged_into.map(|_| d.people[d.owner(i)].name.clone()),
             })
             .collect(),
+        asides: d
+            .asides
+            .iter()
+            .map(|a| Aside {
+                label: page_label(a.page).into(),
+                paragraphs: a.paras.len(),
+                text: a
+                    .paras
+                    .iter()
+                    .map(|r| joined(r))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+                    .chars()
+                    .take(ASIDE)
+                    .collect(),
+                keep: a.keep,
+            })
+            .collect(),
         lines: said,
         directions,
         acts,
@@ -145,6 +191,10 @@ pub enum Edit {
     },
     /// Caught as a name, but isn't one; again, it is.
     NotCharacter {
+        i: usize,
+    },
+    /// A page of the book into the play; again, out of it.
+    Aside {
         i: usize,
     },
 }
@@ -183,6 +233,10 @@ pub fn edit(d: &mut Draft, e: Edit) -> Result<(), String> {
         Edit::NotCharacter { i } => {
             known(i)?;
             d.people[i].not_character = !d.people[i].not_character;
+        }
+        Edit::Aside { i } => {
+            let a = d.asides.get_mut(i).ok_or("no such page")?;
+            a.keep = !a.keep;
         }
     }
     Ok(())

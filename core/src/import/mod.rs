@@ -4,6 +4,7 @@
 
 mod docx;
 mod odt;
+pub mod pages;
 mod pdf;
 mod plain;
 pub mod shape;

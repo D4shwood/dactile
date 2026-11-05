@@ -258,3 +258,175 @@ fn people_get_aliases_of_their_own() {
     assert_ne!(aliases[0], aliases[1]);
     assert!(d.alias_problem(0, aliases[1]).is_some());
 }
+
+/// A made-up book: everything a publisher puts around a play.
+const BOOK: &str = "\
+ÖRNEK YAYINLARI
+
+Genel Yayın: 2408
+
+Tiyatro Dizisi: 17
+
+KAR MASALI
+
+Deniz Örnek
+
+Çeviren: Mert Kaya
+
+EDİTÖR: Lale Tan
+
+KAPAK TASARIMI: Ece Su
+
+ISBN: 978-605-000-00-0
+
+BASKI: Yıldız Matbaası
+
+Sertifika No: 12345
+
+Tel: 0212 000 00 00
+
+Tel: 0212 000 00 01
+
+Tel: 0212 000 00 02
+
+www.ornekyayinlari.example
+
+İÇİNDEKİLER
+
+Yazar Hakkında ........ 5
+
+Önsöz ........ 7
+
+Birinci Perde ........ 11
+
+İkinci Perde ........ 30
+
+YAZAR HAKKINDA
+
+Deniz Örnek bir kış günü küçük bir kasabada doğdu ve ilk oyununu okul yıllarında yazdı, sonra uzun yıllar gezici topluluklarla çalıştı.
+
+ÖDÜLLER: Üç kez ödül aldı.
+
+ÖNSÖZ
+
+Bu oyun bir değirmenin hikâyesidir ve seyirciden sabır ister; kar yağdıkça sahne daralır, kişiler birbirine yaklaşır, söz azalır.
+
+SELİN: bu oyunda bir öğretmendir, ama önce bir yeğendir.
+
+OYUNUN KİŞİLERİ
+
+SELİN — köy öğretmeni
+
+OZAN — değirmenci
+
+HABERCİ — yolcu
+
+Yöneten: Can Er
+
+Dekor: Ada Gül
+
+Oyun bir köyde geçer.
+
+BİRİNCİ PERDE
+
+Birinci Sahne: Değirmen — Akşam
+
+(Selin içeri girer.)
+
+SELİN: Amca, taş yine mi durdu?
+
+OZAN: Durdu kızım.
+
+SELİN: Kar mı?
+
+OZAN: Kar.
+
+HABERCİ: Yol kapandı.
+
+SELİN: Biz de kaldık.
+
+OZAN: Kalırız.
+
+İKİNCİ PERDE
+
+SELİN: Sabah oldu.
+
+OZAN: Oldu.
+
+PERDE KAPANIR
+
+AYNI YAZARIN DİĞER KİTAPLARI
+
+Kış Oyunları: Deniz Örnek
+
+Yol Hikâyeleri: Deniz Örnek
+";
+
+#[test]
+fn a_book_around_a_play() {
+    let d = shape::shape(&plain::read(BOOK, false), Lang::Tr);
+    assert_eq!(
+        (d.title.as_str(), d.author.as_str()),
+        ("KAR MASALI", "Deniz Örnek")
+    );
+    let names: Vec<&str> = d.people.iter().map(|p| p.name.as_str()).collect();
+    assert_eq!(names, ["SELİN", "OZAN", "HABERCİ"]);
+    assert_eq!(d.people[0].desc.as_deref(), Some("köy öğretmeni"));
+    let c = d.counts();
+    assert_eq!((c.acts, c.scenes), (2, 1), "{:#?}", d.items);
+    assert_eq!(c.lines, 9);
+    let pages: Vec<(pages::Page, bool)> = d.asides.iter().map(|a| (a.page, a.keep)).collect();
+    use pages::Page::*;
+    for want in [
+        (Imprint, false),
+        (Contents, false),
+        (Author, false),
+        (Preface, true),
+        (Back, false),
+    ] {
+        assert!(pages.contains(&want), "{want:?} not in {pages:?}");
+    }
+    let tex = d.tex();
+    for gone in [
+        "2408",
+        "ISBN",
+        "Lale",
+        "Yıldız",
+        "ödül",
+        "Kış Oyunları",
+        "Can Er",
+    ] {
+        assert!(!tex.contains(gone), "{gone:?} in:\n{tex}");
+    }
+    assert!(tex.contains("#önsöz\n\nBu oyun bir değirmenin"), "{tex}");
+    assert!(tex.contains("Oyun bir köyde geçer."), "{tex}");
+    assert!(tex.contains("PERDE KAPANIR"), "{tex}");
+}
+
+#[test]
+fn an_aside_comes_back_into_the_play() {
+    let mut d = shape::shape(&plain::read(BOOK, false), Lang::Tr);
+    let i = d
+        .asides
+        .iter()
+        .position(|a| a.page == pages::Page::Back)
+        .unwrap();
+    d.asides[i].keep = true;
+    assert!(d.tex().contains("Kış Oyunları"));
+}
+
+#[test]
+fn a_cast_page_with_no_title() {
+    let text = "Kar\n\nÖrnek Yazar\n\nSELİN — öğretmen\n\nOZAN — değirmenci\n\nSELİN: Bir.\n\nOZAN: İki.\n\nSELİN: Üç.\n\nOZAN: Dört.\n";
+    let d = shape::shape(&plain::read(text, false), Lang::Tr);
+    assert_eq!(d.people.len(), 2);
+    assert_eq!(d.people[1].desc.as_deref(), Some("değirmenci"));
+    assert_eq!(d.counts().lines, 4);
+}
+
+#[test]
+fn a_part_named_for_a_job_still_speaks() {
+    let text = "YAZAR: Bir.\n\nEDİTÖR: İki.\n\nYAZAR: Üç.\n\nEDİTÖR: Dört.\n\nYAZAR: Beş.\n\nEDİTÖR: Altı.\n";
+    let d = shape::shape(&plain::read(text, false), Lang::Tr);
+    assert_eq!(d.counts().lines, 6, "{:#?}", d.items);
+}

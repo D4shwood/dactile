@@ -128,6 +128,20 @@
           </tbody>
         </table>
       {/if}
+      {#if s.asides.length}
+        <h3>{l("Kitabın sayfaları", "The book's pages")}</h3>
+        <p class="muted">{l("Bunlar oyun olarak okunmadı. İşaretli olanlar düz metin olarak oyuna girer.", "These weren't read as the play. Those ticked go into it as plain text.")}</p>
+        {#each s.asides as a, i (i)}
+          <details class="aside">
+            <summary>
+              <input type="checkbox" checked={a.keep} aria-label={l("Oyuna al", "Take into the play")} onclick={(e) => e.stopPropagation()} onchange={() => edit({ kind: "aside", i })} />
+              {a.label}
+              <span class="muted">{l(`${a.paragraphs} paragraf`, `${a.paragraphs} paragraphs`)}</span>
+            </summary>
+            <p>{a.text}</p>
+          </details>
+        {/each}
+      {/if}
     </div>
     <div class="play">
       <div class="column">
@@ -172,6 +186,26 @@
   .muted {
     color: var(--chrome-muted);
     font-size: 13px;
+  }
+  h3 {
+    margin: 18px 0 2px;
+    font: 600 14px var(--serif);
+    color: var(--claret);
+  }
+  .aside {
+    padding: 3px 0;
+    border-top: 1px solid var(--chrome-line);
+    font-size: 13px;
+  }
+  .aside summary {
+    cursor: pointer;
+  }
+  .aside p {
+    margin: 6px 0 8px 22px;
+    max-height: 180px;
+    overflow: auto;
+    white-space: pre-wrap;
+    color: var(--chrome-muted);
   }
   .error {
     padding: 6px 16px;

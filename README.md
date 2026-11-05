@@ -247,6 +247,12 @@ the title and author. ⏎ writes the play to your plays folder and opens it.
 `dactile-light import FILE` does the same from the command line, taking the names
 as they come. A scanned PDF, pictures of pages, needs OCR first.
 
+A play in a book comes with what a publisher puts around it: the cover, the
+imprint, the contents, a foreword, the author's life. The play is found by
+where people answer each other, and only that part is read for who speaks;
+the desktop app's preview lists the other pages, and a tick takes one in as
+plain text. A foreword and notes stay, as the play's own sections.
+
 ### Notes
 
 Notes on the play from anyone — an AI's review, a workshop, a reader, your
