@@ -484,7 +484,9 @@ export function extensions(hooks: Hooks): Extension {
       { key: "Tab", run: nextSpeaker },
       { key: "Backspace", run: (v) => againstChip(v, true) },
       { key: "Delete", run: (v) => againstChip(v, false) },
-      ...searchKeymap,
+      // F3 is the typewriter here, not CodeMirror's find-next (which opens
+      // the search panel when there is nothing to find).
+      ...searchKeymap.filter((b) => b.key !== "F3"),
       ...historyKeymap,
       ...defaultKeymap,
       indentWithTab,
