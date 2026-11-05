@@ -32,6 +32,8 @@ pub fn read(text: &str, markdown: bool) -> Source {
         paras,
         title: None,
         author: None,
+        pages: Vec::new(),
+        body_page: None,
     }
 }
 
@@ -169,7 +171,12 @@ pub(super) fn unwrap(lines: &[String], soft: bool) -> Vec<String> {
             t
         };
         match cur.as_mut() {
-            Some(p) if !shape::starts_item(t) && !shape::is_heading(p) && (soft || wrapped) => {
+            Some(p)
+                if !shape::starts_item(t)
+                    && !shape::is_heading(p)
+                    && shape::name_alone(p).is_none()
+                    && (soft || wrapped) =>
+            {
                 let join = if soft {
                     !prev_hard
                 } else {

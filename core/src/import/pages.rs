@@ -3,18 +3,20 @@
 //! is dialogue, though `Editör: …` looks like it, so the play's start and
 //! end are found first, by where people answer each other, and only that
 //! part is read for who speaks. The rest waits in `Aside`s, to be shown in
-//! the preview and taken in if it was the play after all.
+//! the preview. There every paragraph's label can be changed, and the play
+//! read again.
 
-use super::Para;
 use super::shape::{
     Level, NOT_NAMES, cast_entry, heading, is_cast_heading, key, name_alone, speech_head,
 };
+use super::{Para, Source};
 use crate::cast::upper_tr;
 use std::collections::HashMap;
 use std::ops::Range;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Page {
+    Play,
     Cover,
     Imprint,
     Contents,
@@ -23,10 +25,52 @@ pub enum Page {
     Author,
     Cast,
     Back,
+    Footnotes,
     Other,
 }
 
-/// Paragraphs in a row that a person says the same thing about.
+impl Page {
+    pub const ALL: [Page; 11] = [
+        Page::Play,
+        Page::Cover,
+        Page::Imprint,
+        Page::Contents,
+        Page::Preface,
+        Page::Notes,
+        Page::Author,
+        Page::Cast,
+        Page::Back,
+        Page::Footnotes,
+        Page::Other,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Page::Play => "play",
+            Page::Cover => "cover",
+            Page::Imprint => "imprint",
+            Page::Contents => "contents",
+            Page::Preface => "preface",
+            Page::Notes => "notes",
+            Page::Author => "author",
+            Page::Cast => "cast",
+            Page::Back => "back",
+            Page::Footnotes => "footnotes",
+            Page::Other => "other",
+        }
+    }
+
+    pub fn named(name: &str) -> Option<Page> {
+        Page::ALL.into_iter().find(|p| p.name() == name)
+    }
+
+    /// Written into the play: the play's own sections.
+    pub fn kept(self) -> bool {
+        matches!(self, Page::Preface | Page::Notes)
+    }
+}
+
+/// Paragraphs in a row of one page of the book.
 #[derive(Debug)]
 pub(super) struct Part {
     pub page: Page,
@@ -35,10 +79,22 @@ pub(super) struct Part {
     pub after: bool,
 }
 
-#[derive(Debug)]
-pub(super) struct Layout {
-    pub play: Range<usize>,
-    pub parts: Vec<Part>,
+/// The labels' runs, the play's left out.
+pub(super) fn parts(labels: &[Page]) -> Vec<Part> {
+    let last = labels.iter().rposition(|&p| p == Page::Play);
+    let mut out: Vec<Part> = Vec::new();
+    for (i, &page) in labels.iter().enumerate() {
+        match out.last_mut() {
+            _ if page == Page::Play => {}
+            Some(p) if p.page == page && p.range.end == i => p.range.end = i + 1,
+            _ => out.push(Part {
+                page,
+                range: i..i + 1,
+                after: last.is_some_and(|l| i > l),
+            }),
+        }
+    }
+    out
 }
 
 /// Paragraphs to look ahead in for people answering each other.
@@ -47,6 +103,8 @@ const WINDOW: usize = 25;
 const BACK: usize = 12;
 /// Untitled paragraphs just before the first line that set the scene.
 const OPENING: usize = 3;
+/// Paragraphs of another label too few to be a part.
+const SPECK: usize = 2;
 /// As long as a line of an imprint or a title gets.
 const SHORT: usize = 14;
 
@@ -145,7 +203,7 @@ pub(super) fn imprint(t: &str) -> bool {
 }
 
 /// The title of a page of the book.
-fn page_title(t: &str) -> Option<Page> {
+pub(super) fn page_title(t: &str) -> Option<Page> {
     let whole = t.trim();
     let t = first_line(whole);
     // A PDF's title may have the page's next short lines under it.
@@ -275,13 +333,52 @@ fn list_line(t: &str, name_next: bool) -> bool {
     cast_entry(t).is_some() && !t.ends_with(['.', '?', '!', '…'])
 }
 
-/// Where the play is in the paragraphs. A document with no people to be
-/// sure of is all play, as it was given.
-pub(super) fn find(paras: &[Para]) -> Layout {
-    let all = Layout {
-        play: 0..paras.len(),
-        parts: Vec::new(),
-    };
+/// What every paragraph is. The footnotes come last, by themselves. A
+/// document with no people to be sure of is all play, as it was given.
+pub fn labels(src: &Source) -> Vec<Page> {
+    let n = src
+        .paras
+        .iter()
+        .position(|p| p.foot)
+        .unwrap_or(src.paras.len());
+    let paras = &src.paras[..n];
+    let from = src
+        .body_page
+        .and_then(|b| paras.iter().position(|p| p.page.is_some_and(|at| at >= b)));
+    let mut out = find(paras, from);
+    smooth(&mut out);
+    out.resize(src.paras.len(), Page::Footnotes);
+    out
+}
+
+/// A line or two that looked otherwise in the middle of a page: `Tel:` in
+/// a letter, a publisher's name in an essay. Parts stay few to go through.
+fn smooth(labels: &mut [Page]) {
+    let weak = |p: Page| matches!(p, Page::Imprint | Page::Other | Page::Cast);
+    let mut i = 0;
+    while i < labels.len() {
+        let end = (i..labels.len())
+            .find(|&j| labels[j] != labels[i])
+            .unwrap_or(labels.len());
+        if i > 0
+            && end < labels.len()
+            && end - i <= SPECK
+            && labels[i - 1] == labels[end]
+            && weak(labels[i])
+            && weak(labels[end])
+        {
+            let around = labels[end];
+            labels[i..end].fill(around);
+            i = 0;
+            continue;
+        }
+        i = end;
+    }
+}
+
+/// `from`: where a book's numbering says the text starts.
+fn find(paras: &[Para], from: Option<usize>) -> Vec<Page> {
+    let all = vec![Page::Play; paras.len()];
     let texts: Vec<String> = paras.iter().map(|p| p.text().trim().to_string()).collect();
     let mut names: Vec<Option<String>> = texts.iter().map(|t| spoken(t)).collect();
     for i in listed(&texts) {
@@ -320,7 +417,7 @@ pub(super) fn find(paras: &[Para]) -> Layout {
             && answered(i)
             && !list_line(&texts[i], names.get(i + 1).is_some_and(Option::is_some))
     };
-    let Some(first) = (0..paras.len()).find(|&i| opens(i)) else {
+    let Some(first) = (from.unwrap_or(0)..paras.len()).find(|&i| opens(i)) else {
         return all;
     };
     let last = (first..paras.len())
@@ -328,10 +425,15 @@ pub(super) fn find(paras: &[Para]) -> Layout {
         .find(|&i| speaker(i).is_some())
         .unwrap_or(first);
 
-    let start = opening_heading(&texts, first);
-    let mut pages = front_pages(&texts, start, &count);
-    let start = with_opening(&texts, &pages, start);
-    pages.truncate(start);
+    let mut start = opening_heading(&texts, first);
+    if let Some(at) = from.filter(|&at| first - at <= WINDOW) {
+        start = at;
+    }
+    let mut pages = classify(&texts, 0..start, Page::Cover, &count);
+    if from.is_none() {
+        start = with_opening(&texts, &pages, start);
+        pages.truncate(start);
+    }
 
     // After the last line: words that end the play, or a page of the book.
     let mut end = paras.len();
@@ -354,14 +456,9 @@ pub(super) fn find(paras: &[Para]) -> Layout {
             break;
         }
     }
-    let back = classify(&texts, end..paras.len(), Page::Back, &count);
-
-    let mut parts = runs(&pages, 0, false);
-    parts.extend(runs(&back, end, true));
-    Layout {
-        play: start..end,
-        parts,
-    }
+    pages.resize(end, Page::Play);
+    pages.extend(classify(&texts, end..paras.len(), Page::Back, &count));
+    pages
 }
 
 /// The act and scene over the first line, a few paragraphs up.
@@ -384,10 +481,6 @@ fn opening_heading(texts: &[String], first: usize) -> usize {
         }
     }
     start
-}
-
-fn front_pages(texts: &[String], start: usize, count: &HashMap<&str, usize>) -> Vec<Page> {
-    classify(texts, 0..start, Page::Cover, count)
 }
 
 /// What each paragraph of `range` is, going on from `from`.
@@ -465,20 +558,4 @@ fn with_opening(texts: &[String], pages: &[Page], start: usize) -> usize {
         at -= 1;
     }
     at
-}
-
-/// Paragraphs of one page in a row, as parts.
-fn runs(pages: &[Page], base: usize, after: bool) -> Vec<Part> {
-    let mut out: Vec<Part> = Vec::new();
-    for (i, &page) in pages.iter().enumerate() {
-        match out.last_mut() {
-            Some(p) if p.page == page => p.range.end = base + i + 1,
-            _ => out.push(Part {
-                page,
-                range: base + i..base + i + 1,
-                after,
-            }),
-        }
-    }
-    out
 }

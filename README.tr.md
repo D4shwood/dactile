@@ -249,8 +249,10 @@ resimleri, önce OCR'dan geçmeli.
 Kitaptan gelen bir oyunun çevresinde yayınevinin eklediği sayfalar olur: kapak,
 künye, içindekiler, önsöz, yazar tanıtımı. Oyun, kişilerin birbirine cevap
 verdiği yerden bulunur ve yalnızca o bölüm konuşmacı için okunur; masaüstü
-uygulamasının önizlemesi öteki sayfaları listeler, işaretlenen düz metin olarak
-oyuna girer. Önsöz ve notlar oyunun kendi bölümleri olarak kalır.
+uygulamasının önizlemesinde bütün belge görünür: bir paragrafa ya da bölüme
+tıkla (Shift ile toplu seç, F3 sonrakine geçer), işaretle ya da oyunun orada
+başladığını veya bittiğini söyle. PDF'te Romen rakamlarından sonra gelen 1.
+sayfa oyunun başı sayılır. Önsöz ve notlar oyunun kendi bölümleri olarak kalır.
 
 ### Notlar
 

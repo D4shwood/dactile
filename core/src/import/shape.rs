@@ -28,6 +28,8 @@ pub struct Person {
     pub not_character: bool,
     /// The same person under another name (index into `people`).
     pub merged_into: Option<usize>,
+    /// The name as it was found, whatever it was corrected to.
+    pub found: String,
 }
 
 #[derive(Debug, Clone)]
@@ -47,12 +49,11 @@ pub enum Item {
 }
 
 /// A page of the book the play came in: not read for who speaks, and left
-/// out of the play unless `keep`.
+/// out of the play but for a foreword and notes.
 #[derive(Debug, Clone)]
 pub struct Aside {
     pub page: Page,
     pub paras: Vec<Vec<Run>>,
-    pub keep: bool,
     /// After the play, not before it.
     pub after: bool,
 }
@@ -65,6 +66,11 @@ pub struct Draft {
     pub items: Vec<Item>,
     pub asides: Vec<Aside>,
     pub lang: Lang,
+    /// What was read, and what each of its paragraphs is taken for.
+    pub source: Source,
+    pub labels: Vec<Page>,
+    /// The title and author as found, to tell them from corrections.
+    found: (String, String),
 }
 
 /// What a draft holds, for the preview.
@@ -418,9 +424,19 @@ struct Shaper {
 }
 
 impl Shaper {
+    /// OCR breaks names up: `ANTO NIO` is `ANTONIO`.
+    fn known(&self, name: &str) -> Option<usize> {
+        self.index.get(&key(name).replace(' ', "")).copied()
+    }
+
     fn person(&mut self, name: &str) -> usize {
         let k = key(name);
-        if let Some(&i) = self.index.get(&k) {
+        if let Some(i) = self.known(name) {
+            // The spelling in one piece, once it comes.
+            let p = &mut self.people[i];
+            if k.matches(' ').count() < p.name.matches(' ').count() && p.full.is_none() {
+                p.name = upper_tr(name.trim());
+            }
             return i;
         }
         // "OZAN" for "Ozan Usta" of a cast list: the first word, if only one
@@ -435,7 +451,7 @@ impl Shaper {
         if let [i] = first[..] {
             // Their lines' name is the one over them.
             self.people[i].name = upper_tr(name.trim());
-            self.index.insert(k, i);
+            self.index.insert(k.replace(' ', ""), i);
             return i;
         }
         self.people.push(Person {
@@ -447,8 +463,9 @@ impl Shaper {
             sample: String::new(),
             not_character: false,
             merged_into: None,
+            found: k.clone(),
         });
-        self.index.insert(k, self.people.len() - 1);
+        self.index.insert(k.replace(' ', ""), self.people.len() - 1);
         self.people.len() - 1
     }
 
@@ -480,7 +497,9 @@ pub(super) fn cast_entry(t: &str) -> Option<(String, Option<String>)> {
     // A name, and its actor over dots.
     let cut = t
         .char_indices()
-        .find(|&(i, c)| ",:—–(…".contains(c) || c == '-' || t[i..].starts_with(".."))
+        .find(|&(i, c)| {
+            ",:—–(…".contains(c) || c == '-' || t[i..].starts_with("..") || t[i..].starts_with("  ")
+        })
         .map(|(i, _)| i)?;
     let (name, _) = split_name(&t[..cut])?;
     let desc = t[cut..]
@@ -493,9 +512,20 @@ pub(super) fn cast_entry(t: &str) -> Option<(String, Option<String>)> {
 /// The paragraphs a draft is made of: who speaks is sure only once all of
 /// them are counted (a name written once before a colon may be a word).
 pub fn shape(src: &Source, lang: Lang) -> Draft {
-    let layout = pages::find(&src.paras);
-    let book = !layout.parts.is_empty() || layout.play.start > 0;
-    let paras = &src.paras[layout.play.clone()];
+    shape_as(src, lang, pages::labels(src))
+}
+
+/// The play out of the paragraphs labelled so.
+fn shape_as(src: &Source, lang: Lang, labels: Vec<Page>) -> Draft {
+    let book = labels.iter().any(|&p| p != Page::Play);
+    let paras: Vec<Para> = src
+        .paras
+        .iter()
+        .zip(&labels)
+        .filter(|(_, l)| **l == Page::Play)
+        .map(|(p, _)| p.clone())
+        .collect();
+    let paras = &paras;
     // Names before a colon or alone, counted; names in bold count as sure.
     let mut seen: HashMap<String, usize> = HashMap::new();
     let mut alone = 0;
@@ -517,7 +547,7 @@ pub fn shape(src: &Source, lang: Lang) -> Draft {
     let mut items: Vec<Item> = Vec::new();
     let mut front: Vec<&Para> = Vec::new();
     let mut asides: Vec<Aside> = Vec::new();
-    for part in &layout.parts {
+    for part in &pages::parts(&labels) {
         let list = &src.paras[part.range.clone()];
         let mut left: Vec<Vec<Run>> = Vec::new();
         for p in list {
@@ -542,8 +572,6 @@ pub fn shape(src: &Source, lang: Lang) -> Draft {
             _ => asides.push(Aside {
                 page: part.page,
                 paras: left,
-                // The play's own sections; a book's other pages aren't.
-                keep: matches!(part.page, Page::Preface | Page::Notes),
                 after: part.after,
             }),
         }
@@ -598,7 +626,7 @@ pub fn shape(src: &Source, lang: Lang) -> Draft {
             let k = key(&name);
             let often = seen.get(&k).is_some_and(|&n| n >= 3);
             let sure = is_caps_name(&name)
-                || sh.index.contains_key(&k)
+                || sh.known(&name).is_some()
                 || bold_name(&p.runs, t.find(&name).map_or(0, |s| s + name.len()))
                 || often;
             if sure && (often || !pages::book_word(&k)) {
@@ -627,7 +655,7 @@ pub fn shape(src: &Source, lang: Lang) -> Draft {
             if next_ok
                 && !job
                 && !NOT_NAMES.contains(&k.as_str())
-                && (often || sh.index.contains_key(&k))
+                && (often || sh.known(&name).is_some())
             {
                 started = true;
                 let mut said = note_run(note);
@@ -705,7 +733,6 @@ pub fn shape(src: &Source, lang: Lang) -> Draft {
                 Aside {
                     page: Page::Cover,
                     paras: rest,
-                    keep: false,
                     after: false,
                 },
             );
@@ -721,7 +748,11 @@ pub fn shape(src: &Source, lang: Lang) -> Draft {
         items: items_all,
         asides,
         lang,
+        source: src.clone(),
+        labels,
+        found: Default::default(),
     };
+    d.found = (d.title.clone(), d.author.clone());
     d.give_aliases();
     d
 }
@@ -784,7 +815,9 @@ fn front_matter<'a>(src: &Source, front: &[&'a Para]) -> (String, String, Vec<&'
             break;
         }
     }
+    let named = src.format == super::Format::Pdf && src.author.is_some();
     if author.is_none()
+        && !named
         && let Some(i) = rest.iter().position(|p| short(p))
         && rest[i].text().split_whitespace().count() <= 4
         && !rest[i].text().trim_end().ends_with(['.', '!', '?', ':'])
@@ -908,12 +941,92 @@ impl Draft {
             .sum()
     }
 
+    /// Paragraphs `from` to `to` taken for `page`, and the play read again.
+    pub fn mark(&mut self, from: usize, to: usize, page: Page) {
+        let end = (to + 1).min(self.labels.len());
+        if let Some(part) = self.labels.get_mut(from..end) {
+            part.fill(page);
+            self.reread();
+        }
+    }
+
+    /// The play starts at paragraph `i`, and ends where it did.
+    pub fn play_from(&mut self, i: usize) {
+        let end = self.labels.iter().rposition(|&p| p == Page::Play);
+        let end = end.filter(|&e| e >= i).unwrap_or(self.last_text());
+        self.only_play(i, end);
+    }
+
+    /// The play ends at paragraph `i`, and starts where it did.
+    pub fn play_to(&mut self, i: usize) {
+        let start = self.labels.iter().position(|&p| p == Page::Play);
+        self.only_play(start.filter(|&s| s <= i).unwrap_or(0), i);
+    }
+
+    /// The last paragraph that isn't a footnote.
+    fn last_text(&self) -> usize {
+        let n = self.labels.iter().position(|&p| p == Page::Footnotes);
+        n.unwrap_or(self.labels.len()).saturating_sub(1)
+    }
+
+    fn only_play(&mut self, from: usize, to: usize) {
+        for (i, l) in self.labels.iter_mut().enumerate() {
+            if (from..=to).contains(&i) {
+                *l = Page::Play;
+            } else if *l == Page::Play {
+                *l = if i < from { Page::Other } else { Page::Back };
+            }
+        }
+        self.reread();
+    }
+
+    /// The play read again by the labels, the corrections kept: the title,
+    /// the names and aliases, who was merged and who isn't a character.
+    fn reread(&mut self) {
+        let mut d = shape_as(&self.source, self.lang, std::mem::take(&mut self.labels));
+        let old = std::mem::take(&mut self.people);
+        let at = |d: &Draft, found: &str| d.people.iter().position(|p| p.found == found);
+        for p in &old {
+            if let Some(i) = at(&d, &p.found) {
+                let n = &mut d.people[i];
+                n.name = p.name.clone();
+                n.not_character = p.not_character;
+                if p.alias != n.alias {
+                    n.alias = p.alias.clone();
+                }
+            }
+        }
+        for p in &old {
+            if let (Some(i), Some(into)) = (at(&d, &p.found), p.merged_into) {
+                d.people[i].merged_into = at(&d, &old[into].found);
+            }
+        }
+        for i in 0..d.people.len() {
+            let alias = d.people[i].alias.clone();
+            if d.alias_problem(i, &alias).is_some() {
+                let others: String = (0..d.people.len())
+                    .filter(|&j| j != i)
+                    .map(|j| format!("\\karakter{{X}}{{{}}}\n", d.people[j].alias))
+                    .collect();
+                d.people[i].alias =
+                    Cast::parse(&others, 0..others.len()).suggest_alias(&d.people[i].name);
+            }
+        }
+        if self.title != self.found.0 {
+            d.title = std::mem::take(&mut self.title);
+        }
+        if self.author != self.found.1 {
+            d.author = std::mem::take(&mut self.author);
+        }
+        *self = d;
+    }
+
     /// The play as it will be written: the asides kept, around its items.
     pub fn all_items(&self) -> Vec<Item> {
         let side = |after: bool| {
             self.asides
                 .iter()
-                .filter(move |a| a.keep && a.after == after)
+                .filter(move |a| a.page.kept() && a.after == after)
                 .flat_map(|a| {
                     let head = match a.page {
                         Page::Preface => Some(Item::Preface),
@@ -921,7 +1034,11 @@ impl Draft {
                         _ => None,
                     };
                     // Its title is said by the section.
-                    let skip = usize::from(head.is_some() && a.paras.len() > 1);
+                    let titled = a.paras.first().is_some_and(|runs| {
+                        let t: String = runs.iter().map(|r| r.text.as_str()).collect();
+                        pages::page_title(&t).is_some()
+                    });
+                    let skip = usize::from(titled);
                     head.into_iter().chain(
                         a.paras
                             .iter()

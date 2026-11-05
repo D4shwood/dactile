@@ -13,8 +13,6 @@ use std::path::{Path, PathBuf};
 
 /// As many of the play's lines as the preview shows.
 const SHOWN: usize = 400;
-/// As many characters of a book's page as the preview shows.
-const ASIDE: usize = 1500;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Person {
@@ -35,14 +33,11 @@ pub struct Line {
     pub text: String,
 }
 
-/// A page of the book, kept apart from the play.
+/// A paragraph of the document, and the page printed on it.
 #[derive(Debug, Clone, Serialize)]
-pub struct Aside {
-    pub label: String,
-    pub paragraphs: usize,
-    /// As much of it as there is to judge by.
+pub struct Para {
     pub text: String,
-    pub keep: bool,
+    pub page: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -51,7 +46,8 @@ pub struct Shown {
     pub title: String,
     pub author: String,
     pub people: Vec<Person>,
-    pub asides: Vec<Aside>,
+    /// What each of the document's paragraphs is taken for.
+    pub labels: Vec<&'static str>,
     pub lines: usize,
     pub directions: usize,
     pub acts: usize,
@@ -95,18 +91,16 @@ fn lines(d: &Draft) -> Vec<Line> {
         .collect()
 }
 
-fn page_label(page: Page) -> &'static str {
-    match page {
-        Page::Cover => lang::l("Kapak", "Cover"),
-        Page::Imprint => lang::l("Künye", "Imprint"),
-        Page::Contents => lang::l("İçindekiler", "Contents"),
-        Page::Preface => lang::l("Önsöz", "Preface"),
-        Page::Notes => lang::l("Notlar", "Notes"),
-        Page::Author => lang::l("Yazar tanıtımı", "About the author"),
-        Page::Cast => lang::l("Kişiler sayfası", "Cast page"),
-        Page::Back => lang::l("Kitabın sonu", "End of the book"),
-        Page::Other => lang::l("Diğer sayfalar", "Other pages"),
-    }
+/// The whole document, for the preview to mark up.
+pub fn document(d: &Draft) -> Vec<Para> {
+    d.source
+        .paras
+        .iter()
+        .map(|p| Para {
+            text: p.text(),
+            page: p.page.and_then(|i| d.source.pages.get(i).cloned()),
+        })
+        .collect()
 }
 
 pub fn shown(file: &Path, d: &Draft) -> Shown {
@@ -141,24 +135,7 @@ pub fn shown(file: &Path, d: &Draft) -> Shown {
                 merged: p.merged_into.map(|_| d.people[d.owner(i)].name.clone()),
             })
             .collect(),
-        asides: d
-            .asides
-            .iter()
-            .map(|a| Aside {
-                label: page_label(a.page).into(),
-                paragraphs: a.paras.len(),
-                text: a
-                    .paras
-                    .iter()
-                    .map(|r| joined(r))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-                    .chars()
-                    .take(ASIDE)
-                    .collect(),
-                keep: a.keep,
-            })
-            .collect(),
+        labels: d.labels.iter().map(|l| l.name()).collect(),
         lines: said,
         directions,
         acts,
@@ -193,8 +170,18 @@ pub enum Edit {
     NotCharacter {
         i: usize,
     },
-    /// A page of the book into the play; again, out of it.
-    Aside {
+    /// Paragraphs `from` to `to` taken for a page of the book, or the play.
+    Mark {
+        from: usize,
+        to: usize,
+        page: String,
+    },
+    /// The play starts at this paragraph.
+    Start {
+        i: usize,
+    },
+    /// The play ends at this paragraph.
+    End {
         i: usize,
     },
 }
@@ -234,10 +221,12 @@ pub fn edit(d: &mut Draft, e: Edit) -> Result<(), String> {
             known(i)?;
             d.people[i].not_character = !d.people[i].not_character;
         }
-        Edit::Aside { i } => {
-            let a = d.asides.get_mut(i).ok_or("no such page")?;
-            a.keep = !a.keep;
+        Edit::Mark { from, to, page } => {
+            let page = Page::named(&page).ok_or("no such page")?;
+            d.mark(from, to, page);
         }
+        Edit::Start { i } => d.play_from(i),
+        Edit::End { i } => d.play_to(i),
     }
     Ok(())
 }

@@ -39,9 +39,11 @@ a Turkish Hunspell dictionary.
 **Your plays**
 - Import from .docx, .odt, PDF, Markdown or text, with a preview first: fix
   the names and aliases, merge two spellings of one person, say who is not
-  a character. A book's cover, imprint, contents, the author's life and its
-  last pages stay out of the play, and out of the cast; the preview lists
-  them, and a tick takes one in.
+  a character. A play in a book is found by itself: where people answer each
+  other, and in a PDF where page 1 follows Roman numerals. The cover, imprint,
+  contents, the author's life and footnotes stay out of the play and the cast;
+  choose paragraphs with Shift, mark them as a part, or say where the play
+  starts and ends.
 - New drafts, copies, renaming, the trash with an undo.
 - A play's settings: its pace, its dictionary, the play a draft came from.
 

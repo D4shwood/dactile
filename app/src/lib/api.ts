@@ -200,6 +200,7 @@ export const api = {
   pickImport: () => invoke<string | null>("pick_import"),
   importRead: (path: string) => invoke<Shown>("import_read", { path }),
   importEdit: (edit: ImportEdit) => invoke<Shown>("import_edit", { edit }),
+  importDoc: () => invoke<{ text: string; page: string | null }[]>("import_doc"),
   importWrite: () => invoke<string>("import_write"),
   importDrop: () => invoke<void>("import_drop"),
   forkStart: (path: string, draft: string | null, today: string) => invoke<FormStart>("fork_start", { path, draft, today }),
@@ -277,7 +278,7 @@ export interface Shown {
   title: string;
   author: string;
   people: { name: string; alias: string; lines: number; sample: string; not_character: boolean; merged: string | null }[];
-  asides: { label: string; paragraphs: number; text: string; keep: boolean }[];
+  labels: string[];
   lines: number;
   directions: number;
   acts: number;
@@ -293,7 +294,9 @@ export type ImportEdit =
   | { kind: "merge"; from: number; into: number }
   | { kind: "unmerge"; i: number }
   | { kind: "not-character"; i: number }
-  | { kind: "aside"; i: number };
+  | { kind: "mark"; from: number; to: number; page: string }
+  | { kind: "start"; i: number }
+  | { kind: "end"; i: number };
 
 export interface FormStart {
   title: string;

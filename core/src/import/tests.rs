@@ -375,15 +375,9 @@ fn a_book_around_a_play() {
     let c = d.counts();
     assert_eq!((c.acts, c.scenes), (2, 1), "{:#?}", d.items);
     assert_eq!(c.lines, 9);
-    let pages: Vec<(pages::Page, bool)> = d.asides.iter().map(|a| (a.page, a.keep)).collect();
+    let pages: Vec<pages::Page> = d.asides.iter().map(|a| a.page).collect();
     use pages::Page::*;
-    for want in [
-        (Imprint, false),
-        (Contents, false),
-        (Author, false),
-        (Preface, true),
-        (Back, false),
-    ] {
+    for want in [Imprint, Contents, Author, Preface, Back] {
         assert!(pages.contains(&want), "{want:?} not in {pages:?}");
     }
     let tex = d.tex();
@@ -404,15 +398,32 @@ fn a_book_around_a_play() {
 }
 
 #[test]
-fn an_aside_comes_back_into_the_play() {
+fn labels_changed_by_hand() {
     let mut d = shape::shape(&plain::read(BOOK, false), Lang::Tr);
-    let i = d
-        .asides
-        .iter()
-        .position(|a| a.page == pages::Page::Back)
-        .unwrap();
-    d.asides[i].keep = true;
-    assert!(d.tex().contains("Kış Oyunları"));
+    let at = |d: &shape::Draft, t: &str| {
+        d.source
+            .paras
+            .iter()
+            .position(|p| p.text().starts_with(t))
+            .unwrap()
+    };
+    // A page of the book into the play.
+    let i = at(&d, "AYNI YAZARIN");
+    d.mark(i, i + 2, pages::Page::Play);
+    assert!(d.tex().contains("Deniz Örnek"));
+    d.mark(i, i + 2, pages::Page::Back);
+    assert!(!d.tex().contains("Kış Oyunları"));
+    // Corrections last through it.
+    d.people[1].name = "OZAN USTA".into();
+    d.people[1].alias = "ou".into();
+    d.title = "Kar".into();
+    d.play_from(at(&d, "İKİNCİ PERDE"));
+    assert_eq!(d.title, "Kar");
+    assert_eq!(d.counts().acts, 1);
+    assert!(d.tex().contains("\\ou Oldu."), "{}", d.tex());
+    assert!(!d.tex().contains("Amca, taş"));
+    d.play_to(at(&d, "SELİN: Sabah"));
+    assert_eq!(d.counts().lines, 1);
 }
 
 #[test]

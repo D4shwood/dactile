@@ -146,7 +146,7 @@ fn import(file: &std::path::Path, out: Option<PathBuf>) -> Result<()> {
         "{} replik, {} yönerge, {} perde, {} sahne, {} düz paragraf",
         c.lines, c.directions, c.acts, c.scenes, c.plain
     );
-    let out = draft.asides.iter().filter(|a| !a.keep).count();
+    let out = draft.asides.iter().filter(|a| !a.page.kept()).count();
     if out > 0 {
         println!("{out} kitap sayfası oyunun dışında bırakıldı");
     }

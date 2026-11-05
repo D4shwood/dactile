@@ -1,7 +1,8 @@
 <script lang="ts">
-  // The preview of an imported document: the names found to put right, and
-  // the play as it was read, before anything is written.
-  import { untrack } from "svelte";
+  // The preview of an imported document: the names found to put right, the
+  // document's parts to mark (a book's cover, its contents, where the play
+  // starts), and the play as it was read, before anything is written.
+  import { onMount, tick, untrack } from "svelte";
   import { api, type ImportEdit, type Shown } from "./api";
 
   let {
@@ -46,11 +47,120 @@
     close();
   }
 
+  const PAGES: [string, string, string][] = [
+    ["play", "Oyun", "Play"],
+    ["cover", "Kapak", "Cover"],
+    ["imprint", "Künye", "Imprint"],
+    ["contents", "İçindekiler", "Contents"],
+    ["preface", "Önsöz", "Preface"],
+    ["author", "Yazar", "Author"],
+    ["cast", "Kişiler", "Cast"],
+    ["notes", "Notlar", "Notes"],
+    ["back", "Kitabın sonu", "End of book"],
+    ["footnotes", "Dipnotlar", "Footnotes"],
+    ["other", "Diğer", "Other"],
+  ];
+  const pageName = (p: string) => {
+    const e = PAGES.find((x) => x[0] === p);
+    return e ? l(e[1], e[2]) : p;
+  };
+
+  let doc = $state<{ text: string; page: string | null }[]>([]);
+  let tab = $state<"doc" | "play">("doc");
+  /// The paragraphs chosen: from where it was started to where it reached.
+  let sel = $state<{ a: number; b: number } | null>(null);
+  /// Marking a part goes on to the next, as replacing does in a search.
+  let onward = $state(true);
+  let pane = $state<HTMLElement>();
+  const lo = $derived(sel ? Math.min(sel.a, sel.b) : -1);
+  const hi = $derived(sel ? Math.max(sel.a, sel.b) : -1);
+
+  /// The document in runs of one label.
+  const parts = $derived.by(() => {
+    const out: { from: number; to: number; page: string }[] = [];
+    s.labels.forEach((page, i) => {
+      const last = out[out.length - 1];
+      if (last && last.page === page) last.to = i;
+      else out.push({ from: i, to: i, page });
+    });
+    return out;
+  });
+
+  function where(i: number) {
+    const from = doc[i]?.page;
+    const to = doc.slice(i).find((p) => p.page)?.page;
+    return from ?? to ?? null;
+  }
+
+  function pagesOf(p: { from: number; to: number }) {
+    const a = where(p.from);
+    const b = doc[p.to]?.page;
+    if (!a) return "";
+    return a === b || !b ? l(`s. ${a}`, `p. ${a}`) : l(`s. ${a}–${b}`, `pp. ${a}–${b}`);
+  }
+
+  async function show(i: number) {
+    tab = "doc";
+    await tick();
+    pane?.querySelector(`[data-i="${i}"]`)?.scrollIntoView({ block: "center" });
+  }
+
+  function pick(i: number, e: MouseEvent) {
+    sel = e.shiftKey && sel ? { a: sel.a, b: i } : { a: i, b: i };
+  }
+
+  function pickPart(p: { from: number; to: number }, e: MouseEvent) {
+    if (e.shiftKey && sel) sel = { a: sel.a, b: p.to >= sel.a ? p.to : p.from };
+    else sel = { a: p.from, b: p.to };
+    void show(p.from);
+  }
+
+  /// The part after (or before) the chosen paragraphs.
+  function step(by: 1 | -1) {
+    const at = by > 0 ? parts.find((p) => p.from > hi) : [...parts].reverse().find((p) => p.to < Math.max(lo, 0));
+    if (!at) return;
+    sel = { a: at.from, b: at.to };
+    void show(at.from);
+  }
+
+  async function mark(page: string) {
+    if (!sel) return;
+    const end = hi;
+    await edit({ kind: "mark", from: lo, to: hi, page });
+    if (!onward) return;
+    const next = parts.find((p) => p.from > end);
+    if (next) {
+      sel = { a: next.from, b: next.to };
+      void show(next.from);
+    }
+  }
+
+  const startHere = () => sel && edit({ kind: "start", i: lo });
+  const endHere = () => sel && edit({ kind: "end", i: hi });
+
+  onMount(async () => {
+    doc = await api.importDoc();
+    const play = s.labels.indexOf("play");
+    if (play > 0) {
+      const p = parts.find((x) => x.from === play);
+      if (p) sel = { a: p.from, b: p.from };
+      void show(play);
+    }
+  });
+
+  function onkey(e: KeyboardEvent) {
+    if (e.key === "Escape") drop();
+    if (e.key === "F3") {
+      e.preventDefault();
+      step(e.shiftKey ? -1 : 1);
+    }
+  }
+
   const name = (e: Event) => (e.currentTarget as HTMLInputElement).value;
   const file = $derived(s.file.split("/").pop());
 </script>
 
-<svelte:window onkeydown={(e) => e.key === "Escape" && drop()} />
+<svelte:window onkeydown={onkey} />
 
 <div class="import">
   <div class="head">
@@ -81,6 +191,18 @@
           `${s.lines} lines · ${s.directions} directions · ${s.acts} acts · ${s.scenes} scenes`,
         )}{s.plain ? l(` · ${s.plain} düz paragraf`, ` · ${s.plain} plain paragraphs`) : ""}
       </p>
+      <h3>{l("Bölümler", "Parts")}</h3>
+      <div class="parts">
+        {#each parts as p (p.from)}
+          <button class="part {p.page}" class:on={p.from <= hi && p.to >= lo} onclick={(e) => pickPart(p, e)}>
+            <b>{pageName(p.page)}</b>
+            <span class="muted">{pagesOf(p)}</span>
+            <span class="first">{doc[p.from]?.text.split("\n")[0] ?? ""}</span>
+            <span class="muted">{p.to - p.from + 1}</span>
+          </button>
+        {/each}
+      </div>
+      <h3>{l("Kişiler", "People")}</h3>
       {#if s.people.length === 0}
         <p class="muted">{l("Hiç konuşmacı bulunamadı; metin düz paragraf olarak gelecek.", "No speakers found; the text comes in as plain paragraphs.")}</p>
       {:else}
@@ -128,33 +250,53 @@
           </tbody>
         </table>
       {/if}
-      {#if s.asides.length}
-        <h3>{l("Kitabın sayfaları", "The book's pages")}</h3>
-        <p class="muted">{l("Bunlar oyun olarak okunmadı. İşaretli olanlar düz metin olarak oyuna girer.", "These weren't read as the play. Those ticked go into it as plain text.")}</p>
-        {#each s.asides as a, i (i)}
-          <details class="aside">
-            <summary>
-              <input type="checkbox" checked={a.keep} aria-label={l("Oyuna al", "Take into the play")} onclick={(e) => e.stopPropagation()} onchange={() => edit({ kind: "aside", i })} />
-              {a.label}
-              <span class="muted">{l(`${a.paragraphs} paragraf`, `${a.paragraphs} paragraphs`)}</span>
-            </summary>
-            <p>{a.text}</p>
-          </details>
-        {/each}
-      {/if}
     </div>
-    <div class="play">
-      <div class="column">
-        {#each s.play as line, i (i)}
-          <p class={line.kind}>
-            {#if line.who}<b>{line.who}</b>{/if}
-            {line.text}
-          </p>
-        {/each}
-        {#if s.more}
-          <p class="muted">{l(`… ve ${s.more} satır daha`, `… and ${s.more} more`)}</p>
-        {/if}
+    <div class="right">
+      <div class="tabs">
+        <button class:on={tab === "doc"} onclick={() => (tab = "doc")}>{l("Belge", "Document")}</button>
+        <button class:on={tab === "play"} onclick={() => (tab = "play")}>{l("Oyun", "Play")}</button>
+        <span class="grow"></span>
+        <button title="Shift+F3" onclick={() => step(-1)}>← {l("Önceki", "Previous")}</button>
+        <button title="F3" onclick={() => step(1)}>{l("Sonraki", "Next")} →</button>
       </div>
+      {#if tab === "doc"}
+        <div class="tools">
+          {#if sel}
+            <span class="muted">{l(`${hi - lo + 1} paragraf seçili`, `${hi - lo + 1} paragraphs chosen`)}</span>
+            <button class="primary" onclick={startHere}>{l("Oyun buradan başlıyor", "The play starts here")}</button>
+            <button onclick={endHere}>{l("Oyun burada bitiyor", "The play ends here")}</button>
+            <span class="row">
+              {#each PAGES as [id, t, e] (id)}
+                <button class="tag {id}" onclick={() => mark(id)}>{l(t, e)}</button>
+              {/each}
+            </span>
+            <label class="onward"><input type="checkbox" bind:checked={onward} /> {l("İşaretleyince sonrakine geç", "Go on to the next after marking")}</label>
+          {:else}
+            <span class="muted">{l("Bir paragrafa ya da soldaki bir bölüme tıkla; Shift ile toplu seç.", "Click a paragraph or a part on the left; Shift chooses many.")}</span>
+          {/if}
+        </div>
+        <div class="doc" bind:this={pane}>
+          {#each doc as p, i (i)}
+            {#if p.page && p.page !== doc[i - 1]?.page}<div class="pageno">{l(`Sayfa ${p.page}`, `Page ${p.page}`)}</div>{/if}
+            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+            <p data-i={i} class={s.labels[i]} class:on={i >= lo && i <= hi} onclick={(e) => pick(i, e)}>{p.text}</p>
+          {/each}
+        </div>
+      {:else}
+        <div class="reading">
+          <div class="column">
+            {#each s.play as line, i (i)}
+              <p class={line.kind}>
+                {#if line.who}<b>{line.who}</b>{/if}
+                {line.text}
+              </p>
+            {/each}
+            {#if s.more}
+              <p class="muted">{l(`… ve ${s.more} satır daha`, `… and ${s.more} more`)}</p>
+            {/if}
+          </div>
+        </div>
+      {/if}
     </div>
   </div>
 </div>
@@ -188,24 +330,110 @@
     font-size: 13px;
   }
   h3 {
-    margin: 18px 0 2px;
+    margin: 16px 0 6px;
     font: 600 14px var(--serif);
     color: var(--claret);
   }
-  .aside {
-    padding: 3px 0;
-    border-top: 1px solid var(--chrome-line);
+  .parts {
+    max-height: 38vh;
+    overflow: auto;
+    border: 1px solid var(--chrome-line);
+    border-radius: 4px;
+  }
+  .part {
+    display: grid;
+    grid-template-columns: 88px 74px minmax(0, 1fr) 36px;
+    gap: 8px;
+    width: 100%;
+    padding: 4px 8px;
+    border: 0;
+    border-left: 3px solid var(--chrome-line);
+    border-radius: 0;
+    text-align: left;
     font-size: 13px;
   }
-  .aside summary {
-    cursor: pointer;
+  .part.play {
+    border-left-color: var(--claret);
   }
-  .aside p {
-    margin: 6px 0 8px 22px;
-    max-height: 180px;
+  .part.on {
+    background: var(--chrome-line);
+  }
+  .part .first {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .right {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    border-left: 1px solid var(--chrome-line);
+  }
+  .tabs,
+  .tools {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--chrome-line);
+    font-size: 13px;
+  }
+  .tabs .on {
+    color: var(--claret);
+    border-color: var(--claret);
+  }
+  .tools .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    width: 100%;
+  }
+  .tag {
+    font-size: 12px;
+    padding: 2px 7px;
+  }
+  .tag.play {
+    border-color: var(--claret);
+    color: var(--claret);
+  }
+  .onward {
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+  }
+  .doc {
+    flex: 1;
+    min-height: 0;
     overflow: auto;
+    padding: 12px 20px;
+    font: 15px/1.45 var(--serif);
+    user-select: none;
+  }
+  .doc p {
+    margin: 0 0 6px;
+    padding: 2px 8px;
+    border-left: 3px solid transparent;
     white-space: pre-wrap;
     color: var(--chrome-muted);
+    cursor: pointer;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 24px;
+  }
+  .doc p.play {
+    border-left-color: var(--claret);
+    color: var(--chrome-fg);
+  }
+  .doc p.on {
+    background: var(--chrome-line);
+    color: var(--chrome-fg);
+  }
+  .pageno {
+    margin: 10px 0 6px;
+    font: 11px var(--sans, sans-serif);
+    letter-spacing: 0.04em;
+    color: var(--chrome-muted);
+    border-bottom: 1px dashed var(--chrome-line);
   }
   .error {
     padding: 6px 16px;
@@ -217,7 +445,7 @@
     flex: 1;
     min-height: 0;
     display: grid;
-    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
   }
   .left {
     overflow: auto;
@@ -297,7 +525,7 @@
   .off .sample {
     opacity: 0.5;
   }
-  .play {
+  .reading {
     overflow: auto;
     padding: 16px 20px;
     border-left: 1px solid var(--chrome-line);

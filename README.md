@@ -250,8 +250,10 @@ as they come. A scanned PDF, pictures of pages, needs OCR first.
 A play in a book comes with what a publisher puts around it: the cover, the
 imprint, the contents, a foreword, the author's life. The play is found by
 where people answer each other, and only that part is read for who speaks;
-the desktop app's preview lists the other pages, and a tick takes one in as
-plain text. A foreword and notes stay, as the play's own sections.
+in a PDF, page 1 after Roman numerals says where it starts. In the desktop
+app's preview you see the whole document: click a paragraph or a part (Shift
+for many, F3 for the next), mark it, or say the play starts or ends there. A
+foreword and notes stay, as the play's own sections.
 
 ### Notes
 

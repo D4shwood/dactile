@@ -32,6 +32,10 @@ pub struct Para {
     pub heading: bool,
     /// In the document's title style.
     pub title: bool,
+    /// The PDF's page it is on, from 0.
+    pub page: Option<usize>,
+    /// A footnote, gathered after the text.
+    pub foot: bool,
 }
 
 impl Para {
@@ -127,6 +131,11 @@ pub struct Source {
     /// From the document's properties.
     pub title: Option<String>,
     pub author: Option<String>,
+    /// A PDF's pages by the numbers printed on them.
+    pub pages: Vec<String>,
+    /// The page a book's text starts on, where the pages before it are
+    /// numbered in Roman numerals and this one is page 1.
+    pub body_page: Option<usize>,
 }
 
 /// The extensions `read` takes.
@@ -164,6 +173,16 @@ pub fn read(path: &Path) -> Result<Source> {
     }
     if blank(&src.author) {
         src.author = None;
+    }
+    // A PDF says neither; its file often does: "Yazar - Oyun.pdf".
+    if format == Format::Pdf
+        && let Some((author, title)) = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .and_then(|s| s.split_once(" - "))
+    {
+        src.title = Some(title.trim().to_string());
+        src.author = Some(author.trim().to_string());
     }
     Ok(src)
 }

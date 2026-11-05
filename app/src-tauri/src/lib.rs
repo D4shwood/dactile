@@ -470,6 +470,13 @@ fn import_edit(app: Shared, edit: importing::Edit) -> Res<importing::Shown> {
     Ok(importing::shown(file, draft))
 }
 
+#[tauri::command]
+fn import_doc(app: Shared) -> Res<Vec<importing::Para>> {
+    let a = app.lock().unwrap();
+    let (_, draft) = a.importing.as_ref().ok_or("no import open")?;
+    Ok(importing::document(draft))
+}
+
 /// The play written: where it is, to open.
 #[tauri::command]
 fn import_write(app: Shared) -> Res<String> {
@@ -691,6 +698,7 @@ pub fn run() {
             pick_import,
             import_read,
             import_edit,
+            import_doc,
             import_write,
             import_drop,
             fork_start,
