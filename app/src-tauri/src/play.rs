@@ -30,6 +30,8 @@ pub struct PlayCard {
     /// Seconds since 1970.
     pub modified: Option<u64>,
     pub elsewhere: bool,
+    /// How many plays deep in its family: a draft of a draft is 2.
+    pub depth: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -58,7 +60,7 @@ pub struct Home {
     pub settings: Settings,
 }
 
-fn lang_of(cfg: &Config) -> Lang {
+pub fn lang_of(cfg: &Config) -> Lang {
     lang::resolve(&cfg.lang, None)
 }
 
@@ -79,9 +81,9 @@ pub fn settings(cfg: &Config) -> Settings {
 
 pub fn home(cfg: &Config) -> Home {
     lang::set(lang_of(cfg));
-    let plays = library::list(cfg)
+    let plays = library::tree(library::list(cfg))
         .into_iter()
-        .map(|p| PlayCard {
+        .map(|(p, up)| PlayCard {
             path: p.path.display().to_string(),
             title: p.title,
             author: p.author,
@@ -93,6 +95,7 @@ pub fn home(cfg: &Config) -> Home {
             draft: p.draft,
             modified: secs(p.modified),
             elsewhere: p.elsewhere,
+            depth: up.len(),
         })
         .collect();
     let templates = templates::all(lang_of(cfg))

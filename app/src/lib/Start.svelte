@@ -3,9 +3,10 @@
   // left, tiles for a new play along the top, the plays below with a
   // preview of the one picked.
   import { untrack } from "svelte";
-  import { api, type Home, type PlayCard, type Preview, type TemplateCard } from "./api";
+  import { api, type Home, type PlayCard, type Preview, type Shown, type TemplateCard } from "./api";
+  import Import from "./Import.svelte";
 
-  let { home, tr, open, reload }: { home: Home; tr: boolean; open: (path: string) => void; reload: () => void } =
+  let { home, tr, open, reload }: { home: Home; tr: boolean; open: (path: string) => void; reload: () => Promise<void> } =
     $props();
 
   type Section = "home" | "new" | "open" | "settings" | "keys";
@@ -65,6 +66,107 @@
     }
   }
 
+  // ------------------------------------------------------------ importing
+
+  let importing = $state<Shown | null>(null);
+  let reading = $state("");
+
+  async function importFile() {
+    const f = await api.pickImport();
+    if (f) await readImport(f);
+  }
+
+  async function readImport(f: string) {
+    error = "";
+    reading = f.split("/").pop() ?? f;
+    try {
+      importing = await api.importRead(f);
+    } catch (e) {
+      error = String(e);
+    }
+    reading = "";
+  }
+
+  // For trying it from a script, where no file chooser comes up.
+  if (import.meta.env.DEV) (window as unknown as { __dactileImport: typeof readImport }).__dactileImport = readImport;
+
+  // ------------------------------------- drafts, copies, names, the trash
+
+  type PlayForm = { kind: "fork" | "copy" | "rename"; title: string; draft: string; file: string; touched: boolean; error: string };
+  let form = $state<PlayForm | null>(null);
+  /// To pick once the list has it.
+  let want = $state<string | null>(null);
+  /// Delete pressed once, with the drafts that stay.
+  let arming = $state<number | null>(null);
+  let thrown = $state("");
+
+  async function startForm(kind: PlayForm["kind"]) {
+    const p = chosen!;
+    arming = null;
+    const s =
+      kind === "fork"
+        ? await api.forkStart(p.path, p.draft, new Date().toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" }))
+        : kind === "copy"
+          ? await api.copyStart(p.title)
+          : await api.renameStart(p.path);
+    form = { kind, ...s, touched: false, error: "" };
+  }
+
+  /// The file name follows the title or the draft until edited by hand.
+  async function follow() {
+    const f = form!;
+    if (f.touched || f.kind === "rename") return;
+    const file = f.kind === "fork" ? await api.forkFile(chosen!.path, f.draft) : await api.titleFile(f.title);
+    if (form === f) f.file = file;
+  }
+
+  async function submitForm() {
+    const f = form!;
+    const p = chosen!.path;
+    try {
+      const made =
+        f.kind === "rename"
+          ? await api.playRename(p, f.title, f.file)
+          : f.kind === "fork"
+            ? await api.playMake(p, null, f.draft, f.file)
+            : await api.playMake(p, f.title, null, f.file);
+      form = null;
+      // After the list: a new title under the same path is a new card.
+      await reload();
+      want = made;
+    } catch (e) {
+      f.error = String(e);
+    }
+  }
+
+  async function throwAway() {
+    const p = chosen!;
+    form = null;
+    if (arming === null) {
+      arming = await api.playDrafts(p.path);
+      return;
+    }
+    arming = null;
+    try {
+      await api.playThrow(p.path);
+      thrown = p.title;
+      await reload();
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function restore() {
+    try {
+      const back = await api.playRestore();
+      await reload();
+      want = back;
+    } catch (e) {
+      error = String(e);
+    }
+    thrown = "";
+  }
+
   async function browse() {
     const f = await api.pick();
     if (f) open(f);
@@ -78,6 +180,12 @@
   }
 
   $effect(() => {
+    const wanted = want && home.plays.find((p) => p.path === want);
+    if (wanted) {
+      want = null;
+      choose(wanted);
+    }
+    if (chosen && !home.plays.some((p) => p.path === chosen!.path)) chosen = null;
     if (!chosen && plays.length) choose(plays[0]);
   });
 
@@ -127,8 +235,13 @@
         {#if section === "home"}
           <button class="tile" onclick={browse}>
             <div class="sheet open"><span class="plus">⇲</span></div>
-            <strong>{l("Aç / içe aktar", "Open / import")}</strong>
+            <strong>{l("Aç", "Open")}</strong>
             <small>{l("bir .tex dosyası", "a .tex file")}</small>
+          </button>
+          <button class="tile" onclick={importFile}>
+            <div class="sheet open"><span class="plus">⇱</span></div>
+            <strong>{l("İçe aktar", "Import")}</strong>
+            <small>.docx .odt .pdf .md .txt</small>
           </button>
           <button class="tile" onclick={example}>
             <div class="sheet example"><span class="ex">Kar<br />Masalı</span></div>
@@ -164,8 +277,21 @@
             <input bind:value={filter} placeholder={l("Ara…", "Search…")} />
             {#if section === "open"}
               <button class="plain" onclick={browse}>{l("Başka bir dosya…", "Another file…")}</button>
+              <button class="plain" onclick={importFile}>{l("İçe aktar…", "Import…")}</button>
             {/if}
           </div>
+          {#if reading}
+            <p class="muted">{l(`${reading} okunuyor…`, `Reading ${reading}…`)}</p>
+          {/if}
+          {#if error && !making}
+            <p class="error">{error}</p>
+          {/if}
+          {#if thrown}
+            <p class="undo">
+              {l(`«${thrown}» çöp kutusunda.`, `«${thrown}» is in the trash.`)}
+              <button class="plain" onclick={restore}>{l("Geri al", "Undo")}</button>
+            </p>
+          {/if}
           {#if !plays.length}
             <p class="muted">
               {l(`${home.settings.plays_dir} içinde oyun yok. Yukarıdan yeni bir tane başlat.`, `No plays in ${home.settings.plays_dir}. Start one above.`)}
@@ -175,7 +301,8 @@
             <button
               class="row"
               class:on={chosen?.path === p.path}
-              onclick={() => choose(p)}
+              style:padding-left="{10 + p.depth * 20}px"
+              onclick={() => ((form = null), (arming = null), choose(p))}
               ondblclick={() => open(p.path)}
             >
               <span class="t">{p.title}{#if p.draft}<em> · {p.draft}</em>{/if}</span>
@@ -203,6 +330,35 @@
               {chosen.characters} {l("kişi", "characters")} · {chosen.words} {l("söz", "words")}
             </div>
             <button class="primary wide" onclick={() => open(chosen!.path)}>{l("Aç", "Open")}</button>
+            <div class="tools">
+              <button class="plain" onclick={() => startForm("fork")} title={l("Bu hâlinden yeni bir taslak; hangi oyundan geldiğini hatırlar", "A new draft from it as it is; it remembers where it came from")}>{l("Yeni taslak", "New draft")}</button>
+              <button class="plain" onclick={() => startForm("copy")}>{l("Kopya", "Copy")}</button>
+              <button class="plain" onclick={() => startForm("rename")}>{l("Adını değiştir", "Rename")}</button>
+              <button class="plain" onclick={throwAway}>{l("Çöpe at", "To the trash")}</button>
+            </div>
+            {#if arming !== null}
+              <p class="undo">
+                {l("Çöp kutusuna gitsin mi?", "To the trash?")}
+                {#if arming}{l(`Taslakları (${arming}) yerinde kalır.`, `Its drafts (${arming}) stay.`)}{/if}
+                <button class="plain" onclick={throwAway}>{l("Evet", "Yes")}</button>
+                <button class="plain" onclick={() => (arming = null)}>{l("Vazgeç", "Cancel")}</button>
+              </p>
+            {/if}
+            {#if form}
+              <form class="playform" onsubmit={(e) => (e.preventDefault(), void submitForm())}>
+                {#if form.kind === "fork"}
+                  <label>{l("Taslak no", "Draft")}<input bind:value={form.draft} oninput={follow} /></label>
+                {:else}
+                  <label>{l("Başlık", "Title")}<input bind:value={form.title} oninput={follow} /></label>
+                {/if}
+                <label>{l("Dosya", "File")}<input bind:value={form.file} oninput={() => (form!.touched = true)} /></label>
+                {#if form.error}<span class="error">{form.error}</span>{/if}
+                <div>
+                  <button class="primary">{form.kind === "rename" ? l("Değiştir", "Rename") : l("Oluştur", "Make")}</button>
+                  <button type="button" class="plain" onclick={() => (form = null)}>{l("Vazgeç", "Cancel")}</button>
+                </div>
+              </form>
+            {/if}
             <div class="path">{chosen.path}</div>
           {/if}
         </aside>
@@ -245,7 +401,44 @@
   </main>
 </div>
 
+{#if importing}
+  <Import {tr} start={importing} {open} close={() => (importing = null)} />
+{/if}
+
 <style>
+  .tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 8px;
+  }
+  .tools button {
+    font-size: 12px;
+  }
+  .undo {
+    font-size: 13px;
+    margin: 8px 0;
+  }
+  .playform {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 12px;
+  }
+  .playform label {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: var(--chrome-muted);
+  }
+  .playform input {
+    padding: 3px 6px;
+    border: 1px solid var(--chrome-line);
+    border-radius: 4px;
+    background: var(--chrome);
+    color: var(--chrome-fg);
+  }
   .start {
     display: grid;
     grid-template-columns: 210px 1fr;

@@ -182,6 +182,7 @@ export const BACKSTAGE: Entry[] = [
   { tr: "Bilgi", en: "Info", key: "", act: k("info") },
   { tr: "Kaydet", en: "Save", key: "Ctrl+S", act: k("save") },
   { tr: "PDF derle", en: "Build the PDF", key: "F5", act: k("build") },
+  { tr: "Oyun ayarları", en: "Play settings", key: "", act: k("play-settings") },
   { tr: "Şablon olarak kaydet", en: "Save as a template", key: "", act: k("save-template") },
   { tr: "Dağıtım ve oyuncu kopyaları", en: "Casting and actors' copies", key: "F9", act: k("casting") },
   { tr: "Notlu PDF kopyası", en: "A PDF copy with notes", key: "", act: soon },

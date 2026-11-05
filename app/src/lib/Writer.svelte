@@ -4,11 +4,11 @@
   import { EditorView } from "@codemirror/view";
   import { redo, selectAll, undo } from "@codemirror/commands";
   import { openSearchPanel } from "@codemirror/search";
-  import { api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Made, type Memo, type Summary, type NoteCard, type Opened, type Preview, type Settings } from "./api";
+  import { api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Made, type Memo, type Summary, type NoteCard, type Opened, type PlaySettings, type Preview, type Settings } from "./api";
   import { focus, setCards, setDim, setFocus } from "./focus";
   import { blockAt, currentView, extensions, insertSnippet, typeBackslash, openCover, pickNote, setNotes, setSource, setView } from "./editor";
   import { BACKSTAGE, type Act } from "./ribbon";
-  import { closeMenu, nextWord, showMenu, spelling } from "./spelling";
+  import { closeMenu, nextWord, recheck, showMenu, spelling } from "./spelling";
   import { completion, openMenu } from "./completion";
   import { kept } from "./session";
   import { mouse } from "./mouse";
@@ -649,6 +649,9 @@
       case "save-template":
         openBackstage("template");
         break;
+      case "play-settings":
+        void openBackstage("settings").then(openPlaySettings);
+        break;
       case "close":
         leave();
         break;
@@ -668,6 +671,29 @@
     backstage = true;
     page = p;
     info = await api.preview(opened.path).catch(() => null);
+  }
+
+  // The play's own settings, kept beside it.
+  let playSettings = $state<PlaySettings | null>(null);
+
+  async function openPlaySettings() {
+    page = "settings";
+    playSettings = await api.playSettings();
+  }
+
+  async function setWpm(wpm: number | null) {
+    try {
+      await api.playWpm(wpm);
+    } catch (e) {
+      say(String(e), true);
+    }
+    playSettings = await api.playSettings();
+  }
+
+  async function unlearn(word: string) {
+    await api.playUnlearn(word);
+    playSettings = await api.playSettings();
+    recheck(view);
   }
 
   async function saveTemplate() {
@@ -940,12 +966,14 @@
         {#each BACKSTAGE as e}
           <button
             class:on={(e.act.do === "key" && e.act.id === "info" && page === "info") ||
+              (e.act.do === "key" && e.act.id === "play-settings" && page === "settings") ||
               (e.act.do === "key" && e.act.id === "save-template" && page === "template")}
             disabled={e.act.do === "soon"}
             onclick={() => {
               if (e.act.do !== "key") return;
               if (e.act.id === "info") page = "info";
               else if (e.act.id === "save-template") page = "template";
+              else if (e.act.id === "play-settings") void openPlaySettings();
               else {
                 backstage = false;
                 key(e.act.id);
@@ -973,6 +1001,38 @@
               {#each scenes as s}<li>{s}</li>{/each}
             </ul>
           {/each}
+        {:else if page === "settings"}
+          <h1>{l("Oyun ayarları", "Play settings")}</h1>
+          <p class="muted">{l("Yalnız bu oyuna ait; oyunun yanında saklanır, PDF'e girmez.", "This play's alone; kept beside it, never printed.")}</p>
+          {#if playSettings}
+            <h3>{l("Konuşma hızı", "Pace")}</h3>
+            <p>
+              <input
+                type="number"
+                min="30"
+                max="400"
+                value={playSettings.wpm ?? playSettings.default_wpm}
+                onchange={(e) => setWpm(Number(e.currentTarget.value))}
+              />
+              {l("dakikada kelime; süreler buna göre", "words a minute; the times follow it")}
+              {#if playSettings.wpm !== null}
+                <button onclick={() => setWpm(null)}>{l(`Varsayılana dön (${playSettings?.default_wpm})`, `Back to the default (${playSettings?.default_wpm})`)}</button>
+              {/if}
+            </p>
+            {#if playSettings.parent}
+              <h3>{l("Taslağı olduğu oyun", "A draft of")}</h3>
+              <p>{playSettings.parent}</p>
+            {/if}
+            <h3>{l("Oyunun sözlüğü", "The play's dictionary")}</h3>
+            {#if playSettings.words.length === 0}
+              <p class="muted">{l("Henüz kelime yok: yazım menüsünden eklenir.", "No words yet: the spelling menu adds them.")}</p>
+            {/if}
+            <p class="words">
+              {#each playSettings.words as w (w)}
+                <button title={l("Sözlükten çıkar", "Take it out")} onclick={() => unlearn(w)}>{w} ×</button>
+              {/each}
+            </p>
+          {/if}
         {:else}
           <h1>{l("Şablon olarak kaydet", "Save as a template")}</h1>
           <p>
@@ -1498,6 +1558,11 @@
     font-family: var(--sans);
   }
 
+  .words {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
   /* ---- File: the backstage ---- */
   .backstage {
     position: fixed;

@@ -3,9 +3,11 @@
 
 pub mod casting;
 pub mod complete;
+pub mod importing;
 pub mod notes;
 pub mod people;
 pub mod play;
+pub mod plays;
 pub mod scenes;
 pub mod spell;
 pub mod summary;
@@ -31,6 +33,10 @@ struct App {
     known: spell::Known,
     /// The draft kept before the play's shape first changed.
     kept: Option<PathBuf>,
+    /// A document being imported, while its preview is open.
+    importing: Option<(PathBuf, dactile::import::shape::Draft)>,
+    /// The play last thrown away, to bring back.
+    thrown: Option<Vec<dactile::trash::Moved>>,
 }
 
 impl App {
@@ -425,6 +431,173 @@ fn memo(app: Shared, text: String, role: String, at: usize) -> Res<casting::Memo
     Ok(casting::memo(&text, &role, at, &sidecar(&app)?.1))
 }
 
+#[tauri::command]
+async fn pick_import() -> Option<String> {
+    rfd::AsyncFileDialog::new()
+        .add_filter(
+            dactile::lang::l("Oyun belgeleri", "Play documents"),
+            &dactile::import::EXTENSIONS,
+        )
+        .pick_file()
+        .await
+        .map(|f| f.path().display().to_string())
+}
+
+/// Reads a document (a PDF takes a while) and keeps the draft for the
+/// preview.
+#[tauri::command]
+async fn import_read(app: Shared<'_>, path: String) -> Res<importing::Shown> {
+    let lang = play::lang_of(&app.lock().unwrap().cfg);
+    let file = PathBuf::from(path);
+    let from = file.clone();
+    let draft = tauri::async_runtime::spawn_blocking(move || importing::read(&from, lang))
+        .await
+        .map_err(|e| e.to_string())??;
+    let shown = importing::shown(&file, &draft);
+    app.lock().unwrap().importing = Some((file, draft));
+    Ok(shown)
+}
+
+#[tauri::command]
+fn import_edit(app: Shared, edit: importing::Edit) -> Res<importing::Shown> {
+    let mut a = app.lock().unwrap();
+    let (file, draft) = a.importing.as_mut().ok_or("no import open")?;
+    importing::edit(draft, edit)?;
+    Ok(importing::shown(file, draft))
+}
+
+/// The play written: where it is, to open.
+#[tauri::command]
+fn import_write(app: Shared) -> Res<String> {
+    let mut a = app.lock().unwrap();
+    let (file, draft) = a.importing.as_ref().ok_or("no import open")?;
+    let path = importing::write(file, draft, &a.cfg).map_err(err)?;
+    a.importing = None;
+    Ok(path.display().to_string())
+}
+
+#[tauri::command]
+fn import_drop(app: Shared) {
+    app.lock().unwrap().importing = None;
+}
+
+#[tauri::command]
+fn fork_start(path: String, draft: Option<String>, today: String) -> plays::Start {
+    plays::fork_start(std::path::Path::new(&path), draft.as_deref(), &today)
+}
+
+#[tauri::command]
+fn fork_file(path: String, draft: String) -> String {
+    dactile::library::fork_name(std::path::Path::new(&path), &draft)
+}
+
+#[tauri::command]
+fn copy_start(title: String) -> plays::Start {
+    plays::copy_start(&title)
+}
+
+#[tauri::command]
+fn title_file(title: String) -> String {
+    dactile::library::file_name(&title)
+}
+
+#[tauri::command]
+fn rename_start(path: String) -> plays::Start {
+    plays::rename_start(std::path::Path::new(&path))
+}
+
+#[tauri::command]
+fn play_make(
+    app: Shared,
+    path: String,
+    title: Option<String>,
+    draft: Option<String>,
+    file: String,
+) -> Res<String> {
+    let cfg = &mut app.lock().unwrap().cfg;
+    plays::make(
+        std::path::Path::new(&path),
+        title.as_deref(),
+        draft.as_deref(),
+        &file,
+        cfg,
+    )
+    .map(|p| p.display().to_string())
+}
+
+#[tauri::command]
+fn play_rename(app: Shared, path: String, title: String, file: String) -> Res<String> {
+    let cfg = &mut app.lock().unwrap().cfg;
+    plays::rename(std::path::Path::new(&path), &title, &file, cfg).map(|p| p.display().to_string())
+}
+
+#[tauri::command]
+fn play_drafts(app: Shared, path: String) -> usize {
+    plays::drafts(std::path::Path::new(&path), &app.lock().unwrap().cfg)
+}
+
+#[tauri::command]
+fn play_throw(app: Shared, path: String) -> Res<()> {
+    let mut a = app.lock().unwrap();
+    let moved = plays::throw(std::path::Path::new(&path), &mut a.cfg)?;
+    a.thrown = Some(moved);
+    Ok(())
+}
+
+/// Brings back the play last thrown away: where it is.
+#[tauri::command]
+fn play_restore(app: Shared) -> Res<String> {
+    let mut a = app.lock().unwrap();
+    let moved = a.thrown.take().ok_or("nothing thrown away")?;
+    plays::restore(&moved, &mut a.cfg)?;
+    Ok(moved[0].from.display().to_string())
+}
+
+/// The open play's own settings.
+#[derive(serde::Serialize)]
+struct PlaySettings {
+    /// Its pace, if it has one of its own.
+    wpm: Option<u32>,
+    default_wpm: u32,
+    /// The words its spell checker accepts.
+    words: Vec<String>,
+    /// The play it is a draft of.
+    parent: Option<String>,
+}
+
+#[tauri::command]
+fn play_settings(app: Shared) -> Res<PlaySettings> {
+    let default_wpm = app.lock().unwrap().cfg.wpm;
+    let side = sidecar(&app)?.1;
+    Ok(PlaySettings {
+        wpm: side.wpm,
+        default_wpm,
+        words: side.words,
+        parent: side.parent,
+    })
+}
+
+/// Its pace: none, the default again.
+#[tauri::command]
+fn play_wpm(app: Shared, wpm: Option<u32>) -> Res<()> {
+    let (path, mut side) = sidecar(&app)?;
+    match wpm {
+        Some(wpm) => casting::edit(&mut side, casting::Edit::Wpm { wpm })?,
+        None => side.wpm = None,
+    }
+    side.save(&path).map_err(err)
+}
+
+/// A word out of the play's dictionary.
+#[tauri::command]
+fn play_unlearn(app: Shared, word: String) -> Res<()> {
+    let (path, mut side) = sidecar(&app)?;
+    side.words.retain(|w| *w != word);
+    side.save(&path).map_err(err)?;
+    app.lock().unwrap().known.set_words(&side.words);
+    Ok(())
+}
+
 /// A file or a folder, in the desktop's own program for it.
 #[tauri::command]
 fn launch(path: String) -> Res<()> {
@@ -511,6 +684,24 @@ pub fn run() {
             casting_pdf,
             casting_copies,
             memo,
+            pick_import,
+            import_read,
+            import_edit,
+            import_write,
+            import_drop,
+            fork_start,
+            fork_file,
+            copy_start,
+            title_file,
+            rename_start,
+            play_make,
+            play_rename,
+            play_drafts,
+            play_throw,
+            play_restore,
+            play_settings,
+            play_wpm,
+            play_unlearn,
             launch,
             notes_list,
             note_add,

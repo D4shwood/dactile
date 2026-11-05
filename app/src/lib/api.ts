@@ -13,6 +13,7 @@ export interface PlayCard {
   draft: string | null;
   modified: number | null;
   elsewhere: boolean;
+  depth: number;
 }
 
 export interface TemplateCard {
@@ -196,6 +197,24 @@ export const api = {
   castingPdf: (text: string) => invoke<string>("casting_pdf", { text }),
   castingCopies: (text: string, kind: CopyKind) => invoke<[string, number]>("casting_copies", { text, kind }),
   memo: (text: string, role: string, at: number) => invoke<Memo>("memo", { text, role, at }),
+  pickImport: () => invoke<string | null>("pick_import"),
+  importRead: (path: string) => invoke<Shown>("import_read", { path }),
+  importEdit: (edit: ImportEdit) => invoke<Shown>("import_edit", { edit }),
+  importWrite: () => invoke<string>("import_write"),
+  importDrop: () => invoke<void>("import_drop"),
+  forkStart: (path: string, draft: string | null, today: string) => invoke<FormStart>("fork_start", { path, draft, today }),
+  forkFile: (path: string, draft: string) => invoke<string>("fork_file", { path, draft }),
+  copyStart: (title: string) => invoke<FormStart>("copy_start", { title }),
+  titleFile: (title: string) => invoke<string>("title_file", { title }),
+  renameStart: (path: string) => invoke<FormStart>("rename_start", { path }),
+  playMake: (path: string, title: string | null, draft: string | null, file: string) => invoke<string>("play_make", { path, title, draft, file }),
+  playRename: (path: string, title: string, file: string) => invoke<string>("play_rename", { path, title, file }),
+  playDrafts: (path: string) => invoke<number>("play_drafts", { path }),
+  playThrow: (path: string) => invoke<void>("play_throw", { path }),
+  playRestore: () => invoke<string>("play_restore"),
+  playSettings: () => invoke<PlaySettings>("play_settings"),
+  playWpm: (wpm: number | null) => invoke<void>("play_wpm", { wpm }),
+  playUnlearn: (word: string) => invoke<void>("play_unlearn", { word }),
   launch: (path: string) => invoke<void>("launch", { path }),
 };
 
@@ -251,6 +270,40 @@ export interface Memo {
   who: string;
   cues: Cue[];
   at: number;
+}
+
+export interface Shown {
+  file: string;
+  title: string;
+  author: string;
+  people: { name: string; alias: string; lines: number; sample: string; not_character: boolean; merged: string | null }[];
+  lines: number;
+  directions: number;
+  acts: number;
+  scenes: number;
+  plain: number;
+  play: { kind: string; who: string | null; text: string }[];
+  more: number;
+}
+
+export type ImportEdit =
+  | { kind: "info"; title: string; author: string }
+  | { kind: "person"; i: number; name: string; alias: string }
+  | { kind: "merge"; from: number; into: number }
+  | { kind: "unmerge"; i: number }
+  | { kind: "not-character"; i: number };
+
+export interface FormStart {
+  title: string;
+  draft: string;
+  file: string;
+}
+
+export interface PlaySettings {
+  wpm: number | null;
+  default_wpm: number;
+  words: string[];
+  parent: string | null;
 }
 
 export type CopyKind = "full" | "rehearsal" | "light";
