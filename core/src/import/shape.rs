@@ -760,7 +760,7 @@ impl Draft {
     fn give_aliases(&mut self) {
         let mut decls = String::new();
         for i in 0..self.people.len() {
-            let cast = Cast::of_play(&decls);
+            let cast = Cast::parse(&decls, 0..decls.len());
             let a = cast.suggest_alias(&self.people[i].name);
             decls.push_str(&format!("\\karakter{{X}}{{{a}}}\n"));
             self.people[i].alias = a;
@@ -781,7 +781,7 @@ impl Draft {
                 "lowercase English letters only (a–z)",
             ));
         }
-        Cast::of_play(&others)
+        Cast::parse(&others, 0..others.len())
             .alias_taken(alias)
             .then_some(crate::lang::l(
                 "bu kısaltma alınmış ya da bir LaTeX komutu",

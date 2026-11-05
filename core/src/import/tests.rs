@@ -245,3 +245,16 @@ fn not_a_document() {
     assert!(read(&dir.join("oyun.rtf")).is_err());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn people_get_aliases_of_their_own() {
+    let src = plain::read(
+        "SELİN: Bir.\n\nSEDA: İki.\n\nSELİN: Üç.\n\nSEDA: Dört.\n",
+        false,
+    );
+    let d = shape::shape(&src, Lang::Tr);
+    let aliases: Vec<&str> = d.people.iter().map(|p| p.alias.as_str()).collect();
+    assert_eq!(aliases.len(), 2, "{aliases:?}");
+    assert_ne!(aliases[0], aliases[1]);
+    assert!(d.alias_problem(0, aliases[1]).is_some());
+}
