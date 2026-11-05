@@ -2,11 +2,11 @@
 //! scene/role table, the numbers (lines, words, time), and what goes out of
 //! them: the table as CSV or PDF, and a copy of the play for each actor.
 
-use crate::view::unit_at;
+use crate::view::{byte_at, unit_at};
 use dactile::casting::{self, CopyKind, Presence};
 use dactile::render::Doc;
 use dactile::sidecar::{Casting, Sidecar};
-use dactile::{build, lang, outline, timing};
+use dactile::{build, lang, memorize, outline, timing};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -301,6 +301,59 @@ pub fn copies(
     Ok((dir, all.len()))
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct Cue {
+    /// The speaker's name; none for directions and headings.
+    pub who: Option<String>,
+    pub text: String,
+    /// The first letters of its words, for a line of the role.
+    pub hint: String,
+    pub ours: bool,
+    pub heading: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Memo {
+    /// "SELİN (Deniz Kaya)", or the name alone.
+    pub who: String,
+    pub cues: Vec<Cue>,
+    /// The role's line to start from: its first at or after the cursor.
+    pub at: usize,
+}
+
+/// Learning `role` by heart from UTF-16 `at` on.
+pub fn memo(text: &str, role: &str, at: usize, side: &Sidecar) -> Memo {
+    let doc = Doc::new(text);
+    let cues = memorize::cues(text, &doc, role);
+    let here = doc.block_at(byte_at(text, at)).unwrap_or(0);
+    let ours = || (0..cues.len()).filter(|&i| cues[i].ours);
+    let start = ours()
+        .find(|&i| cues[i].block >= here)
+        .or(ours().next())
+        .unwrap_or(0);
+    Memo {
+        who: doc
+            .cast
+            .index(role)
+            .map_or(role.to_string(), |i| casting::role_name(&doc, side, i)),
+        at: start,
+        cues: cues
+            .iter()
+            .map(|c| Cue {
+                who: c.who.clone(),
+                hint: if c.ours {
+                    memorize::initials(&c.text)
+                } else {
+                    String::new()
+                },
+                text: c.text.clone(),
+                ours: c.ours,
+                heading: c.heading,
+            })
+            .collect(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -346,5 +399,18 @@ mod tests {
         assert!(edit(&mut side, Edit::Wpm { wpm: 5 }).is_err());
         edit(&mut side, Edit::Wpm { wpm: 150 }).unwrap();
         assert_eq!(wpm(&side, 130), 150);
+    }
+
+    #[test]
+    fn memorizing_starts_at_the_roles_next_line() {
+        let side = Sidecar::default();
+        let role = roles(PLAY, &side, timing::WPM).roles[0].alias.clone();
+        let first = memo(PLAY, &role, 0, &side);
+        assert!(first.cues[first.at].ours);
+        assert!(!first.cues[first.at].hint.is_empty());
+        assert_eq!(first.cues.iter().position(|c| c.ours), Some(first.at));
+        // Past the play's end: back to its first line.
+        let end = unit_at(PLAY, PLAY.len());
+        assert!(memo(PLAY, &role, end, &side).cues[first.at].ours);
     }
 }

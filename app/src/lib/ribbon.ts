@@ -135,7 +135,7 @@ export const TABS: Tab[] = [
       ]),
       g("Prova", "Rehearsal", [
         b("Dağıtım", "Casting", "☍", "F9", k("casting")),
-        b("Ezber", "Memorize", "◌", "", soon),
+        b("Ezber", "Memorize", "◌", "", k("memorize")),
       ]),
       g("Kapak", "Cover", [b("Oyun bilgisi", "Cover details", "ⓘ", "Alt+İ", k("cover"))]),
     ],

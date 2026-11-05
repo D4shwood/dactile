@@ -195,6 +195,7 @@ export const api = {
   castingCsv: (text: string) => invoke<string>("casting_csv", { text }),
   castingPdf: (text: string) => invoke<string>("casting_pdf", { text }),
   castingCopies: (text: string, kind: CopyKind) => invoke<[string, number]>("casting_copies", { text, kind }),
+  memo: (text: string, role: string, at: number) => invoke<Memo>("memo", { text, role, at }),
   launch: (path: string) => invoke<void>("launch", { path }),
 };
 
@@ -237,6 +238,20 @@ export type CastingEdit =
   | { kind: "delete" }
   | { kind: "pick"; casting: number }
   | { kind: "wpm"; wpm: number };
+
+export interface Cue {
+  who: string | null;
+  text: string;
+  hint: string;
+  ours: boolean;
+  heading: boolean;
+}
+
+export interface Memo {
+  who: string;
+  cues: Cue[];
+  at: number;
+}
 
 export type CopyKind = "full" | "rehearsal" | "light";
 

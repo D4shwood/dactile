@@ -420,6 +420,11 @@ async fn casting_copies(
         .map(|(dir, n)| (dir.display().to_string(), n))
 }
 
+#[tauri::command]
+fn memo(app: Shared, text: String, role: String, at: usize) -> Res<casting::Memo> {
+    Ok(casting::memo(&text, &role, at, &sidecar(&app)?.1))
+}
+
 /// A file or a folder, in the desktop's own program for it.
 #[tauri::command]
 fn launch(path: String) -> Res<()> {
@@ -505,6 +510,7 @@ pub fn run() {
             casting_csv,
             casting_pdf,
             casting_copies,
+            memo,
             launch,
             notes_list,
             note_add,

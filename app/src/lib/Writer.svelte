@@ -4,9 +4,9 @@
   import { EditorView } from "@codemirror/view";
   import { redo, selectAll, undo } from "@codemirror/commands";
   import { openSearchPanel } from "@codemirror/search";
-  import { api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Made, type Summary, type NoteCard, type Opened, type Preview, type Settings } from "./api";
+  import { api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Made, type Memo, type Summary, type NoteCard, type Opened, type Preview, type Settings } from "./api";
   import { focus, setCards, setDim, setFocus } from "./focus";
-  import { currentView, extensions, insertSnippet, typeBackslash, openCover, pickNote, setNotes, setSource, setView } from "./editor";
+  import { blockAt, currentView, extensions, insertSnippet, typeBackslash, openCover, pickNote, setNotes, setSource, setView } from "./editor";
   import { BACKSTAGE, type Act } from "./ribbon";
   import { closeMenu, nextWord, showMenu, spelling } from "./spelling";
   import { completion, openMenu } from "./completion";
@@ -15,6 +15,7 @@
   import HeadingForm from "./HeadingForm.svelte";
   import Cast from "./Cast.svelte";
   import Casting from "./Casting.svelte";
+  import Memorize from "./Memorize.svelte";
   import SummaryForm from "./SummaryForm.svelte";
   import { setSummaries, summaries } from "./summaries";
   import CharacterFormView from "./CharacterForm.svelte";
@@ -68,6 +69,7 @@
   let focused = $state(false);
   /// F9.
   let casting = $state(false);
+  let memo = $state<Memo | null>(null);
   let dimmed = $state(false);
   let cards = $state<Card[]>([]);
   let backstage = $state(false);
@@ -191,9 +193,18 @@
     view.focus();
   }
 
-  /// Memorizing a role: next (the terminal app has it on F9's z).
-  function openMemo(_alias: string) {
-    say(l("Ezber modu yakında.", "Memorizing: soon."));
+  /// Memorizing a role from its next line on; Esc goes back to where it
+  /// was opened from.
+  async function openMemo(alias: string) {
+    memo = await api.memo(view.state.doc.toString(), alias, view.state.selection.main.head);
+  }
+
+  /// The ribbon's button: the role of the line the cursor is on.
+  function memorizeHere() {
+    const alias = blockAt(currentView(view.state), view.state.selection.main.head)?.alias;
+    if (alias) return void openMemo(alias);
+    say(l("İmleci bir rolün satırına götür ya da F9'dan bir rol seç.", "Put the cursor on a role's line, or pick a role on F9."));
+    casting = true;
   }
 
   function at(pos: number) {
@@ -610,10 +621,15 @@
         api.set("ribbon_folded", folded);
         break;
       case "board":
+        memo = null;
         openBoard();
+        break;
+      case "memorize":
+        memorizeHere();
         break;
       case "casting":
         board = false;
+        memo = null;
         casting = !casting;
         if (!casting) view.focus();
         break;
@@ -637,7 +653,7 @@
         leave();
         break;
     }
-    if (!["commands", "find", "spelling", "search", "summary", "note-here", "notes-paste", "notes-file"].includes(id)) view.focus();
+    if (!["commands", "casting", "memorize", "find", "spelling", "search", "summary", "note-here", "notes-paste", "notes-file"].includes(id)) view.focus();
   }
 
   function run(a: Act) {
@@ -708,6 +724,7 @@
       if (help) return void (help = "");
       if (backstage) return void (backstage = false);
       if (board) return void (board = false);
+      if (memo) return void ((memo = null), casting || view.focus());
       if (casting) return void ((casting = false), view.focus());
       if (draft !== null || pasting !== null) return void ((draft = null), (pasting = null));
     }
@@ -841,7 +858,7 @@
 
   <main class="body" class:split={side !== ""}>
     <div class="left">
-      <div class="desk" class:gone={board || casting} class:plain={!sheet} {onwheel}>
+      <div class="desk" class:gone={board || casting || memo} class:plain={!sheet} {onwheel}>
         <div class="page" class:source class:typewriter style={`--z: ${zoom / 100}`}>
           <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
           <div
@@ -856,6 +873,8 @@
       </div>
       {#if board}
         <Board {tr} {cards} {move} open={at} close={() => (board = false)} summaries={Object.fromEntries(sums.map((s) => [s.at, s.text]))} />
+      {:else if memo}
+        <Memorize {tr} {memo} close={() => ((memo = null), casting || view.focus())} />
       {:else if casting}
         <Casting
           {tr}
@@ -1026,6 +1045,7 @@
               <tr><td>Alt+N</td><td>{l("seçili yere ya da kelimeye not", "a note on the selection or the word")}</td></tr>
               <tr><td>F4</td><td>{l("sahne odağı: öteki sahneler tek satır", "scene focus: the other scenes one line each")}</td></tr>
               <tr><td>F8</td><td>{l("imleçteki blok dışını soldur", "dim all but the cursor's block")}</td></tr>
+              <tr><td>F9</td><td>{l("dağıtım, sahne tablosu, sayılar, oyuncu kopyaları, ezber", "casting, the scene table, the numbers, actors' copies, memorizing")}</td></tr>
               <tr><td>F7</td><td>{l("kâğıt sayfa ya da pencere boyu metin", "a paper sheet, or the text across the window")}</td></tr>
               <tr><td>F2</td><td>{l("bütün kaynak", "all of the source")}</td></tr>
               <tr><td>F6</td><td>{l("tema", "theme")}</td></tr>
@@ -1088,7 +1108,9 @@
     max-width: calc(52em * var(--z));
     min-height: 0;
   }
-  .left > :global(.board) {
+  .left > :global(.board),
+  .left > :global(.casting),
+  .left > :global(.memo) {
     position: absolute;
     inset: 0;
   }
