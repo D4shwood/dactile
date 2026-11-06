@@ -639,6 +639,17 @@
       { { \__tiy_namefont:n {#1} \tl_use:c { g__tiy_script_#1_tl } } }
   }
 
+% A heading's line in the contents, without the heading's footnotes: they
+% can't be written to a file, and belong on the page.
+\cs_new_protected:Npn \__tiy_toc:nn #1#2
+  {
+    \group_begin:
+    \cs_set_eq:NN \dipnot \use_none:n
+    \cs_set_eq:NN \footnote \use_none:n
+    \addcontentsline { toc } {#1} {#2}
+    \group_end:
+  }
+
 \NewDocumentCommand \sahne { O{} O{} }
   {
     \__tiy_unhide:
@@ -669,8 +680,8 @@
 \cs_new_protected:Npn \__tiy_scene_title:nn #1#2
   {
     \tl_if_blank:nTF {#1}
-      { \addcontentsline { toc } { section } {#2} }
-      { \addcontentsline { toc } { section } { #2 \sceneseparator #1 } }
+      { \__tiy_toc:nn { section } {#2} }
+      { \__tiy_toc:nn { section } { #2 \sceneseparator #1 } }
     \vspace* { \beforesceneskip }
     \group_begin:
     \centering
@@ -701,8 +712,8 @@
     \clearpage
     \refstepcounter { actcounter }
     \tl_if_blank:nTF {#1}
-      { \addcontentsline { toc } { chapter } { \acttitlename \space \theact } }
-      { \addcontentsline { toc } { chapter } { \acttitlename \space \theact \actseparator #1 } }
+      { \__tiy_toc:nn { chapter } { \acttitlename \space \theact } }
+      { \__tiy_toc:nn { chapter } { \acttitlename \space \theact \actseparator #1 } }
     \vspace* { \beforeactskip }
     \group_begin:
     \dim_zero:N \parindent
@@ -739,8 +750,8 @@
     \__tiy_scene_end:
     \clearpage
     \tl_if_blank:nTF {#2}
-      { \addcontentsline { toc } { chapter } {#1} }
-      { \addcontentsline { toc } { chapter } {#2} }
+      { \__tiy_toc:nn { chapter } {#1} }
+      { \__tiy_toc:nn { chapter } {#2} }
     \vspace* { \beforecasttitleskip }
     { \centering \sectiontitlefont \tl_if_blank:nTF {#2} {#1} {#2} \par }
     \par \nobreak

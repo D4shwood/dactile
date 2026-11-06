@@ -17,9 +17,9 @@ printf '\\PassOptionsToClass{nonotes}{tiyatro}\\input{ornek-oyun}\n' > nonotes.t
 # What `dactile new` writes: no characters yet, # headings.
 printf '\\documentclass{tiyatro}\n\\title{Yeni}\n\\begin{document}\n\\maketitle\n\\kisiler\n\n#perde Bir\n\n#sahne İç — Gece\n\n\\action{Işıklar.}\n\n\\end{document}\n' > empty.tex
 
-# Those the list doesn't name, under it; a footnote in a line and in a
-# direction.
-printf '\\documentclass{tiyatro}\n\\title{Yeni}\n\\karakter[Bir kız]{SELİN}{se}\n\\digerkisiler{Köylüler, çobanlar.}\n\\begin{document}\n\\maketitle\n\\kisiler\n\n#perde Bir\n\n#sahne İç\n\n\\action{Işıklar\\dipnot{Sahne notu.}}\n\n\\se Buyurun\\dipnot{Eski bir söz.} efendim.\n\n\\end{document}\n' > others.tex
+# Those the list doesn't name, under it; a footnote in a line, in a direction
+# and in headings, not in the contents.
+printf '\\documentclass{tiyatro}\n\\title{Yeni}\n\\karakter[Bir kız]{SELİN}{se}\n\\digerkisiler{Köylüler, çobanlar.}\n\\begin{document}\n\\maketitle\n\\tableofcontents\n\\kisiler\n\n#perde Bir\\dipnot{Perde notu.}\n\n#sahne İç\\dipnot{Yer notu.}\n\n\\action{Işıklar\\dipnot{Sahne notu.}}\n\n\\se Buyurun\\dipnot{Eski bir söz.} efendim.\n\n#sahne Dış\\dipnot{}\n\n\\se Evet.\n\n\\end{document}\n' > others.tex
 
 for doc in ornek-oyun final nonotes empty others; do
     # Twice: the scene casts come from the first run's .aux file.
@@ -37,6 +37,10 @@ pdftotext -layout others.pdf others.txt
 grep -q 'Köylüler, çobanlar\.' others.txt || { echo "FAIL: others missing"; cat others.txt; exit 1; }
 grep -q 'Eski bir söz\.' others.txt || { echo "FAIL: footnote in a line missing"; cat others.txt; exit 1; }
 grep -q 'Sahne notu\.' others.txt || { echo "FAIL: footnote in a direction missing"; cat others.txt; exit 1; }
+grep -q 'Perde notu\.' others.txt || { echo "FAIL: footnote in an act's heading missing"; cat others.txt; exit 1; }
+grep -q 'Yer notu\.' others.txt || { echo "FAIL: footnote in a scene's heading missing"; cat others.txt; exit 1; }
+grep -q 'contentsline.*İç' others.toc || { echo "FAIL: heading missing from the contents"; cat others.toc; exit 1; }
+if grep -q 'notu' others.toc; then echo "FAIL: footnote in the contents"; cat others.toc; exit 1; fi
 echo "ok: others and footnotes"
 
 expect() {
