@@ -1,5 +1,6 @@
 <script lang="ts">
   // The built PDF beside the page, drawn by pdf.js.
+  import { onDestroy } from "svelte";
   import * as pdfjs from "pdfjs-dist";
   import worker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
   import { api, type BuildResult } from "./api";
@@ -26,25 +27,32 @@
 
   async function draw(path: string, n: number) {
     const bytes = new Uint8Array(await api.pdf(path));
-    const doc = await pdfjs.getDocument({ data: bytes }).promise;
-    if (n !== drawn || !pages) return;
-    const keep = pages.scrollTop;
-    const width = pages.clientWidth - 32;
-    const out: HTMLCanvasElement[] = [];
-    for (let i = 1; i <= doc.numPages; i++) {
-      const page = await doc.getPage(i);
-      const base = page.getViewport({ scale: 1 });
-      const vp = page.getViewport({ scale: (width / base.width) * scale * devicePixelRatio });
-      const c = document.createElement("canvas");
-      c.width = vp.width;
-      c.height = vp.height;
-      c.style.width = `${vp.width / devicePixelRatio}px`;
-      await page.render({ canvasContext: c.getContext("2d")!, viewport: vp }).promise;
-      out.push(c);
-    }
     if (n !== drawn) return;
-    pages.replaceChildren(...out);
-    pages.scrollTop = keep;
+    const loading = pdfjs.getDocument({ data: bytes });
+    // Each document has a worker of its own, there until it is closed.
+    try {
+      const doc = await loading.promise;
+      if (n !== drawn || !pages) return;
+      const keep = pages.scrollTop;
+      const width = pages.clientWidth - 32;
+      const out: HTMLCanvasElement[] = [];
+      for (let i = 1; i <= doc.numPages; i++) {
+        const page = await doc.getPage(i);
+        const base = page.getViewport({ scale: 1 });
+        const vp = page.getViewport({ scale: (width / base.width) * scale * devicePixelRatio });
+        const c = document.createElement("canvas");
+        c.width = vp.width;
+        c.height = vp.height;
+        c.style.width = `${vp.width / devicePixelRatio}px`;
+        await page.render({ canvasContext: c.getContext("2d")!, viewport: vp }).promise;
+        if (n !== drawn) return;
+        out.push(c);
+      }
+      pages.replaceChildren(...out);
+      pages.scrollTop = keep;
+    } finally {
+      await loading.destroy();
+    }
   }
 
   $effect(() => {
@@ -54,6 +62,9 @@
       draw(result.pdf, n);
     }
   });
+
+  // A drawing under way stops at its next page.
+  onDestroy(() => drawn++);
 </script>
 
 <aside class="pdf">
