@@ -919,7 +919,7 @@
       {/if}
     </div>
     {#if side === "pdf"}
-      <Pdf {tr} result={built} {building} close={() => (side = "")} {goto} />
+      <Pdf {tr} result={built} {building} close={() => (side = "")} {goto} {say} />
     {:else if side === "cast"}
       <Cast
         {tr}

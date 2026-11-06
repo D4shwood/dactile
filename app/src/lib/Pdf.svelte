@@ -13,12 +13,14 @@
     building,
     close,
     goto,
+    say,
   }: {
     tr: boolean;
     result: BuildResult | null;
     building: boolean;
     close: () => void;
     goto: (line: number) => void;
+    say: (text: string, warn?: boolean) => void;
   } = $props();
 
   let pages: HTMLDivElement | undefined = $state();
@@ -82,6 +84,17 @@
     <button title="−" onclick={() => (scale = Math.max(0.5, scale - 0.1))}>−</button>
     <button title="+" onclick={() => (scale = Math.min(2.5, scale + 0.1))}>+</button>
     <button title={tr ? "Kapat" : "Close"} onclick={close}>✕</button>
+    {#if result?.kind === "built" && !building}
+      {@const pdf = result.pdf}
+      <div class="out">
+        <button onclick={() => api.launch(pdf).catch((e) => say(String(e), true))}>
+          {tr ? "PDF okuyucuda aç" : "Open in PDF viewer"}
+        </button>
+        <button onclick={() => api.reveal(pdf).catch((e) => say(String(e), true))}>
+          {tr ? "Dosya gezgininde göster" : "Show in file manager"}
+        </button>
+      </div>
+    {/if}
   </div>
   {#if result?.kind === "failed"}
     <div class="error">
@@ -109,6 +122,7 @@
   }
   .head {
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
     align-items: center;
     padding: 6px 10px;
@@ -122,6 +136,17 @@
     width: 26px;
     height: 24px;
     cursor: pointer;
+  }
+  .head .out {
+    display: flex;
+    flex-wrap: wrap;
+    flex-basis: 100%;
+    gap: 6px;
+  }
+  .head .out button {
+    width: auto;
+    padding: 0 8px;
+    font-size: 12px;
   }
   .grow {
     flex: 1;

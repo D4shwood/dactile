@@ -640,6 +640,17 @@ fn launch(path: String) -> Res<()> {
     dactile::build::launch(std::path::Path::new(&path)).map_err(err)
 }
 
+/// A file selected in the desktop's file manager. It may wait for an answer
+/// over D-Bus: off the main thread.
+#[tauri::command]
+async fn reveal(path: String) -> Res<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        dactile::build::reveal(std::path::Path::new(&path)).map_err(err)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 fn log(message: String) {
     eprintln!("[window] {message}");
@@ -741,6 +752,7 @@ pub fn run() {
             play_wpm,
             play_unlearn,
             launch,
+            reveal,
             notes_list,
             note_add,
             note_set,

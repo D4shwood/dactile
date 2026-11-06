@@ -76,7 +76,7 @@ fn throw_one(path: &Path, files: &Path, infos: &Path) -> Result<Moved> {
     };
     let note = format!(
         "[Trash Info]\nPath={}\nDeletionDate={}\n",
-        encode(&from.to_string_lossy()),
+        encode(from.as_os_str().as_encoded_bytes()),
         Local::now().format("%Y-%m-%dT%H:%M:%S")
     );
     let moved = fs::write(&info, note).and_then(|_| move_file(&from, &file));
@@ -111,9 +111,9 @@ fn move_file(from: &Path, to: &Path) -> std::io::Result<()> {
 }
 
 /// A path as a URL writes it: `/a b/ç` → `/a%20b/%C3%A7`.
-fn encode(s: &str) -> String {
+pub(crate) fn encode(path: &[u8]) -> String {
     let mut out = String::new();
-    for b in s.bytes() {
+    for &b in path {
         if b.is_ascii_alphanumeric() || b"/-_.~".contains(&b) {
             out.push(b as char);
         } else {

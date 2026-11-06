@@ -225,6 +225,7 @@ export const api = {
   playWpm: (wpm: number | null) => invoke<void>("play_wpm", { wpm }),
   playUnlearn: (word: string) => invoke<void>("play_unlearn", { word }),
   launch: (path: string) => invoke<void>("launch", { path }),
+  reveal: (path: string) => invoke<void>("reveal", { path }),
 };
 
 export interface RoleRow {

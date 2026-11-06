@@ -9,7 +9,7 @@
 
 use crate::cast::Cast;
 use crate::outline::Outline;
-use crate::{class, file, lang, lex, source};
+use crate::{class, config, file, lang, lex, source, trash};
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -376,9 +376,25 @@ pub fn open_log(play: &Path) -> anyhow::Result<()> {
     launch(&log)
 }
 
+/// Why a file that was there can't be opened any more.
+fn still_there(path: &Path) -> anyhow::Result<()> {
+    if !path.exists() {
+        anyhow::bail!(
+            "{}",
+            lang::f(
+                "{} yok: taşınmış ya da silinmiş olabilir.",
+                "{} is not there: it may have moved or been deleted.",
+                &[&config::tilde(path)]
+            )
+        );
+    }
+    Ok(())
+}
+
 /// The desktop's own program for the file, without waiting for it.
 /// Opens a file or a folder with the desktop's own program for it.
 pub fn launch(path: &Path) -> anyhow::Result<()> {
+    still_there(path)?;
     let mut child = outside("xdg-open")
         .arg(path)
         .stdin(Stdio::null())
@@ -387,6 +403,43 @@ pub fn launch(path: &Path) -> anyhow::Result<()> {
         .spawn()?;
     std::thread::spawn(move || child.wait());
     Ok(())
+}
+
+/// Shows a file selected in the desktop's file manager; if none answers,
+/// opens its folder. Waits for the answer, a few seconds at worst: a window
+/// calls this off its own thread.
+pub fn reveal(path: &Path) -> anyhow::Result<()> {
+    still_there(path)?;
+    let path = std::path::absolute(path)?;
+    if show_items(&file_uri(&path)) {
+        return Ok(());
+    }
+    launch(path.parent().unwrap_or(&path))
+}
+
+/// `/a b/ç.pdf` → `file:///a%20b/%C3%A7.pdf`.
+fn file_uri(path: &Path) -> String {
+    format!(
+        "file://{}",
+        trash::encode(path.as_os_str().as_encoded_bytes())
+    )
+}
+
+/// Asks for `org.freedesktop.FileManager1.ShowItems`: whether it was done.
+/// The URI goes in as a GVariant string: encoded, it has no quote to break it.
+fn show_items(uri: &str) -> bool {
+    outside("gdbus")
+        .args(["call", "--session", "--timeout", "5"])
+        .args(["--dest", "org.freedesktop.FileManager1"])
+        .args(["--object-path", "/org/freedesktop/FileManager1"])
+        .args(["--method", "org.freedesktop.FileManager1.ShowItems"])
+        .arg(format!("['{uri}']"))
+        .arg("''")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
 }
 
 /// A program of the system's. An AppImage's start script points the
@@ -439,6 +492,27 @@ mod tests {
             Some("")
         );
         assert_eq!(without("/usr/bin", d), None);
+    }
+
+    #[test]
+    fn file_uris_are_percent_encoded() {
+        assert_eq!(
+            file_uri(Path::new("/ev/Yazı İşleri/şğüöçı oyun.pdf")),
+            "file:///ev/Yaz%C4%B1%20%C4%B0%C5%9Fleri/%C5%9F%C4%9F%C3%BC%C3%B6%C3%A7%C4%B1%20oyun.pdf"
+        );
+        // Nothing that would break the URI or the GVariant around it.
+        assert_eq!(
+            file_uri(Path::new("/a'b/100%,[x]#?.pdf")),
+            "file:///a%27b/100%25%2C%5Bx%5D%23%3F.pdf"
+        );
+        assert_eq!(file_uri(Path::new("/a-b_c.d~e")), "file:///a-b_c.d~e");
+    }
+
+    #[test]
+    fn nothing_to_show_says_so() {
+        let gone = Path::new("/nonexistent-dactile/oyun.pdf");
+        assert!(reveal(gone).is_err());
+        assert!(launch(gone).is_err());
     }
 
     const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
