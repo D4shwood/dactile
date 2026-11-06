@@ -1,5 +1,5 @@
-The first beta of Dactile 0.3, and the first with the desktop app: a play on a
-page, in the syntax of the tiyatro XeLaTeX class. Linux x86_64 only for now.
+The first beta of Dactile 0.3, and the first of Dactile with a window of its
+own: a play on a page, in the syntax of the tiyatro XeLaTeX class. Linux x86_64 only for now.
 
 ```sh
 chmod +x Dactile-*-x86_64.AppImage
@@ -11,12 +11,12 @@ a Turkish Hunspell dictionary.
 
 ## Two commands now
 
-- `dactile` is the desktop app.
-- `dactile-light` is the terminal app, Dactile Light, in its own archive.
+- `dactile` is Dactile.
+- `dactile-light` is Dactile Light, in a terminal, in its own archive.
   If you installed an earlier beta, run `dactile uninstall` first, then
   `./dactile-light install`. Your plays and settings stay.
 
-## The desktop app
+## Dactile
 
 **Writing**
 - The play on a page you can zoom, without the macros in the way: chips for
@@ -62,5 +62,5 @@ a Turkish Hunspell dictionary.
 
 ## Not yet
 
-- The PDF with notes is greyed on the desktop ribbon; Dactile Light makes it.
+- The PDF with notes is greyed on Dactile's ribbon; Dactile Light makes it.
 - The role view (Shift+F8) is in Dactile Light only.

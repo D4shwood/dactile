@@ -2,8 +2,8 @@
 
 [English](README.md)
 
-Tiyatro oyunu yazmak için bir masaüstü uygulaması; terminal sürümünün adı
-Dactile Light. Oyunu **tiyatro** XeLaTeX sınıfının sözdizimiyle yazarsın; makrolar yazarken canlanır: `\se Amca`
+Dactile, tiyatro oyunu yazmak için bir uygulama; Dactile Light aynı yazıcının
+terminal sürümü. Oyunu **tiyatro** XeLaTeX sınıfının sözdizimiyle yazarsın; makrolar yazarken canlanır: `\se Amca`
 anında `SELİN   Amca` olur, `\sahne` yer ve zaman sorup numaralı bir sahne
 açar, sahnede görünen karakterler kendiliğinden sahne başlığının altında
 toplanır.
@@ -56,12 +56,12 @@ cd dactile-light-*-x86_64-linux
 ```
 
 `dactile-light install`, `dactile-light` komutunu `~/.local/bin`'e koyar,
-menüye bir girdi ekler ve tiyatro sınıfını TeX ağacına (`~/texmf`) kopyalar;
+menüye simgesiyle bir girdi ekler ve tiyatro sınıfını TeX ağacına (`~/texmf`) kopyalar;
 böylece oyunlar her klasörden derlenir. `dactile-light uninstall` üçünü de
 kaldırır; oyunların ve ayarların kalır. Kaynaktan:
 `cargo install --path tui`, ardından `dactile-light install`.
 
-0.3'ten önce terminal uygulaması `dactile` komutuydu: `dactile uninstall`
+0.3'ten önce Dactile Light `dactile` komutuydu: `dactile uninstall`
 onu kaldırır.
 
 - **Yazım denetimi** için Türkçe bir Hunspell sözlüğü (`tr_TR.aff` ve
@@ -73,7 +73,7 @@ onu kaldırır.
 
 ## Kullanım
 
-Bu sayfa Dactile Light'ın tuşlarını ve ekranlarını anlatır; masaüstü uygulaması
+Bu sayfa Dactile Light'ın tuşlarını ve ekranlarını anlatır; Dactile
 aynı oyunları ve araçları bir sayfa üstünde, şerit ve fareyle sunar.
 
 ```sh
@@ -226,7 +226,7 @@ açar. Eski sürümler `~/.local/share/dactile/history` içine gider.
 Ana ekranda `i`, başka yerde yazılmış bir oyun için masaüstünün dosya
 seçicisini açar (olmayan yerde, SSH'te mesela, yol sorar): Word `.docx`,
 LibreOffice `.odt`, içinde metin olan bir PDF, Markdown ya da düz metin.
-Başka bir şey kurmak gerekmez: masaüstü uygulaması Tesseract'ı ve Poppler
+Başka bir şey kurmak gerekmez: Dactile Tesseract'ı ve Poppler
 araçlarını içinde taşır. Taranmış bir PDF sayfa görüntülerinden kendiliğinden
 okunur; metni kötü bir PDF için önizlemedeki "OCR ile yeniden oku" aynısını
 yapar. Tesseract ve Türkçe modeli kuruluysa `dactile-light import --ocr` da
@@ -256,8 +256,8 @@ resimleri, önce OCR'dan geçmeli.
 
 Kitaptan gelen bir oyunun çevresinde yayınevinin eklediği sayfalar olur: kapak,
 künye, içindekiler, önsöz, yazar tanıtımı. Oyun, kişilerin birbirine cevap
-verdiği yerden bulunur ve yalnızca o bölüm konuşmacı için okunur; masaüstü
-uygulamasının önizlemesinde bütün belge görünür: bir paragrafa ya da bölüme
+verdiği yerden bulunur ve yalnızca o bölüm konuşmacı için okunur;
+Dactile'ın önizlemesinde bütün belge görünür: bir paragrafa ya da bölüme
 tıkla (Shift ile toplu seç, F3 sonrakine geçer), işaretle ya da oyunun orada
 başladığını veya bittiğini söyle. PDF'te Romen rakamlarından sonra gelen 1.
 sayfa oyunun başı sayılır. Önsöz ve notlar oyunun kendi bölümleri olarak kalır.

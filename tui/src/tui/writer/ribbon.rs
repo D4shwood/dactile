@@ -1145,8 +1145,8 @@ impl Writer {
             _ => {
                 let about = match act {
                     PAct::Key(KeyCode::Char('s'), _) => lang::l(
-                        "Oyunu diske yazar. Dactile her değişiklikten sonra kendisi de kaydeder.",
-                        "Writes the play to disk. Dactile also saves after each change.",
+                        "Oyunu diske yazar. Dactile Light her değişiklikten sonra kendisi de kaydeder.",
+                        "Writes the play to disk. Dactile Light also saves after each change.",
                     ),
                     PAct::Key(KeyCode::F(5), _) => lang::l(
                         "XeLaTeX ile PDF'i derler; bitince alt satırda söyler.",

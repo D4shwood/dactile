@@ -7,7 +7,7 @@ use std::path::PathBuf;
 mod install;
 mod tui;
 
-/// Dactile — Dynamic Stagewright: write plays for the tiyatro class.
+/// Dactile Light: write plays for the tiyatro class, in a terminal.
 #[derive(Parser)]
 #[command(version)]
 struct Cli {
@@ -21,7 +21,7 @@ struct Cli {
 enum Cmd {
     /// Starts a new play in the plays folder and opens it.
     New { title: String },
-    /// Puts `dactile-light` in ~/.local/bin, adds a menu entry, and the tiyatro
+    /// Puts `dactile-light` in ~/.local/bin, adds a menu entry with its icons, and the tiyatro
     /// class where XeLaTeX finds it.
     Install,
     /// Removes what `install` added (plays and settings stay).
