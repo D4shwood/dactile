@@ -32,7 +32,7 @@ jobs:
           name=dactile-light-${VERSION}-x86_64-linux
           mkdir "$name"
           cp target/release/dactile-light README.md README.tr.md LICENSE "$name"/
-          cp -r tex examples "$name"/
+          cp -r tex examples tui/icons "$name"/
           rm -rf "$name"/tex/test
           tar czf "$name.tar.gz" "$name"
       - uses: actions/upload-artifact@v4
@@ -67,7 +67,7 @@ jobs:
           name=dactile-${VERSION}-x86_64-linux
           mkdir "$name"
           cp target/release/dactile app/linux/*.desktop LICENSE "$name"/
-          cp app/src-tauri/icons/icon.png "$name"/
+          cp -r app/src-tauri/icons "$name"/
           cp -r target/ocr "$name"/
           tar czf "$name.tar.gz" "$name"
       - uses: actions/upload-artifact@v4
