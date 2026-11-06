@@ -460,16 +460,31 @@ async fn pick_import() -> Option<String> {
 /// Reads a document (a PDF takes a while) and keeps the draft for the
 /// preview.
 #[tauri::command]
-async fn import_read(app: Shared<'_>, path: String) -> Res<importing::Shown> {
+async fn import_read(
+    app: Shared<'_>,
+    handle: tauri::AppHandle,
+    path: String,
+    ocr: bool,
+) -> Res<importing::Shown> {
+    use tauri::Emitter;
     let lang = play::lang_of(&app.lock().unwrap().cfg);
     let file = PathBuf::from(path);
     let from = file.clone();
-    let draft = tauri::async_runtime::spawn_blocking(move || importing::read(&from, lang))
-        .await
-        .map_err(|e| e.to_string())??;
+    let draft = tauri::async_runtime::spawn_blocking(move || {
+        importing::read(&from, lang, ocr, &|done, total| {
+            let _ = handle.emit("ocr", (done, total));
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())??;
     let shown = importing::shown(&file, &draft);
     app.lock().unwrap().importing = Some((file, draft));
     Ok(shown)
+}
+
+#[tauri::command]
+fn import_stop() {
+    importing::STOP.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
 #[tauri::command]
@@ -707,6 +722,7 @@ pub fn run() {
             memo,
             pick_import,
             import_read,
+            import_stop,
             import_edit,
             import_doc,
             import_write,

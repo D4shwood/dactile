@@ -1,5 +1,6 @@
 // The Rust side's commands (src-tauri/src/lib.rs), typed.
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 export interface PlayCard {
   path: string;
@@ -201,7 +202,11 @@ export const api = {
   castingCopies: (text: string, kind: CopyKind) => invoke<[string, number]>("casting_copies", { text, kind }),
   memo: (text: string, role: string, at: number) => invoke<Memo>("memo", { text, role, at }),
   pickImport: () => invoke<string | null>("pick_import"),
-  importRead: (path: string) => invoke<Shown>("import_read", { path }),
+  importRead: (path: string, ocr = false) => invoke<Shown>("import_read", { path, ocr }),
+  importStop: () => invoke<void>("import_stop"),
+  /// Pages read, of how many, while a book is read from its images.
+  onOcr: (f: (done: number, total: number) => void) =>
+    listen<[number, number]>("ocr", (e) => f(e.payload[0], e.payload[1])),
   importEdit: (edit: ImportEdit) => invoke<Shown>("import_edit", { edit }),
   importDoc: () => invoke<{ text: string; page: string | null }[]>("import_doc"),
   importWrite: () => invoke<string>("import_write"),
@@ -289,6 +294,7 @@ export interface Shown {
   plain: number;
   play: { kind: string; who: string | null; text: string }[];
   more: number;
+  ocr: boolean;
 }
 
 export type ImportEdit =

@@ -70,6 +70,8 @@
 
   let importing = $state<Shown | null>(null);
   let reading = $state("");
+  /// Pages read of how many, in a book read from its images.
+  let ocr = $state<[number, number] | null>(null);
 
   async function importFile() {
     const f = await api.pickImport();
@@ -79,12 +81,15 @@
   async function readImport(f: string) {
     error = "";
     reading = f.split("/").pop() ?? f;
+    const off = await api.onOcr((done, total) => (ocr = [done, total]));
     try {
       importing = await api.importRead(f);
     } catch (e) {
       error = String(e);
     }
+    off();
     reading = "";
+    ocr = null;
   }
 
   // For trying it from a script, where no file chooser comes up.
@@ -281,7 +286,13 @@
             {/if}
           </div>
           {#if reading}
-            <p class="muted">{l(`${reading} okunuyor…`, `Reading ${reading}…`)}</p>
+            <p class="muted">
+              {l(`${reading} okunuyor…`, `Reading ${reading}…`)}
+              {#if ocr}
+                {l(`OCR ${ocr[0]}/${ocr[1]} sayfa`, `OCR ${ocr[0]}/${ocr[1]} pages`)}
+                <button onclick={() => api.importStop()}>{l("Durdur", "Stop")}</button>
+              {/if}
+            </p>
           {/if}
           {#if error && !making}
             <p class="error">{error}</p>

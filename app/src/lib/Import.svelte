@@ -24,6 +24,24 @@
   /// Remounts the fields: a refused name goes back to what it was.
   let round = $state(0);
 
+  /// Pages read of how many, while the book is read from its images.
+  let ocr = $state<[number, number] | null>(null);
+
+  async function readAgain() {
+    ocr = [0, 0];
+    const off = await api.onOcr((done, total) => (ocr = [done, total]));
+    try {
+      s = await api.importRead(s.file, true);
+      doc = await api.importDoc();
+      error = "";
+      round++;
+    } catch (err) {
+      error = String(err);
+    }
+    off();
+    ocr = null;
+  }
+
   async function edit(e: ImportEdit) {
     try {
       s = await api.importEdit(e);
@@ -168,6 +186,15 @@
     <strong>{l("İçe aktar", "Import")}</strong>
     <span class="muted">{file}</span>
     <span class="grow"></span>
+    {#if ocr}
+      <span class="muted">{l(`OCR ${ocr[0]}/${ocr[1]} sayfa`, `OCR ${ocr[0]}/${ocr[1]} pages`)}</span>
+      <button onclick={() => api.importStop()}>{l("Durdur", "Stop")}</button>
+    {:else if s.ocr}
+      <button
+        title={l("Sayfa görüntülerini baştan okur; işaretlediğin bölümler sıfırlanır", "Reads the page images afresh; the parts you marked start over")}
+        onclick={readAgain}>{l("OCR ile yeniden oku", "Read again with OCR")}</button
+      >
+    {/if}
     <button onclick={drop}>{l("Vazgeç", "Cancel")}</button>
     <button class="primary" onclick={write}>{l("Oyunu oluştur", "Make the play")}</button>
   </div>

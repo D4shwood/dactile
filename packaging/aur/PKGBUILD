@@ -29,5 +29,7 @@ package() {
   install -Dm644 io.github.d4shwood.dactile.desktop -t "$pkgdir/usr/share/applications"
   install -Dm644 icon.png "$pkgdir/usr/share/icons/hicolor/512x512/apps/io.github.d4shwood.dactile.png"
   install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
+  install -d "$pkgdir/usr/lib/dactile"
+  cp -r ocr "$pkgdir/usr/lib/dactile/"
   install -Dm755 "../dactile-light-$_tag-x86_64-linux/dactile-light" -t "$pkgdir/usr/bin"
 }

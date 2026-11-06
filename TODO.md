@@ -153,6 +153,10 @@ The main app from here on (`app/`: Tauri 2, Svelte 5, CodeMirror 6, on
   Windows and macOS.
 - The PDF with notes (greyed on the ribbon); the role view (Shift+F8).
 
+- **OCR.** Scanned books, read by the Tesseract and models the app carries.
+  Next, if books need it: Dactile Light with its own copy, an English model
+  chosen by the play's language, tuning on texts we have corrected.
+
 ## 1.x
 
 - Scanned PDFs: a separate tool for OCR (Tesseract with Turkish), whose

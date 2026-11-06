@@ -226,8 +226,11 @@ açar. Eski sürümler `~/.local/share/dactile/history` içine gider.
 Ana ekranda `i`, başka yerde yazılmış bir oyun için masaüstünün dosya
 seçicisini açar (olmayan yerde, SSH'te mesela, yol sorar): Word `.docx`,
 LibreOffice `.odt`, içinde metin olan bir PDF, Markdown ya da düz metin.
-Başka bir şey kurmak gerekmez; `pdftotext` kuruluysa PDF daha temiz okunur
-ve Dactile onu kullanır.
+Başka bir şey kurmak gerekmez: masaüstü uygulaması Tesseract'ı ve Poppler
+araçlarını içinde taşır. Taranmış bir PDF sayfa görüntülerinden kendiliğinden
+okunur; metni kötü bir PDF için önizlemedeki "OCR ile yeniden oku" aynısını
+yapar. Tesseract ve Türkçe modeli kuruluysa `dactile-light import --ocr` da
+çalışır. Dactile Light, `pdftotext` kuruluysa PDF'i daha temiz okur.
 
 Dactile başlığı ve yazarı, açıklamalarıyla bir kişiler listesini (`KİŞİLER`,
 `CHARACTERS`), perde ve sahne başlıklarını (`BİRİNCİ PERDE`, `2. Sahne: Ahır`,

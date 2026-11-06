@@ -6,6 +6,21 @@ use super::{Format, Para, Source, plain};
 use anyhow::{Result, bail};
 use std::path::Path;
 
+/// A PDF of pictures: it needs reading from them.
+#[derive(Debug)]
+pub struct NoText;
+
+impl std::fmt::Display for NoText {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(crate::lang::l(
+            "bu PDF'te metin yok, taranmış sayfalar gibi: OCR ile okunması gerek",
+            "this PDF has no text, as if scanned: it needs OCR",
+        ))
+    }
+}
+
+impl std::error::Error for NoText {}
+
 pub fn read(path: &Path, bytes: &[u8]) -> Result<Source> {
     let text = match pdftotext(path) {
         Some(t) => t,
@@ -14,13 +29,15 @@ pub fn read(path: &Path, bytes: &[u8]) -> Result<Source> {
     let letters = text.chars().filter(|c| c.is_alphabetic()).count();
     let pages = text.matches('\u{c}').count().max(1);
     if letters < 40 * pages {
-        bail!(crate::lang::l(
-            "bu PDF'te metin yok, taranmış sayfalar gibi: önce bir OCR aracından geçmesi gerek",
-            "this PDF has no text, as if scanned: it needs OCR first"
-        ));
+        return Err(NoText.into());
     }
-    let (pages, body_page) = numbers(&text);
-    let lines: Vec<String> = page_lines(&text)
+    Ok(of_text(&text))
+}
+
+/// A book from its text, pages parted by form feeds.
+pub(super) fn of_text(text: &str) -> Source {
+    let (pages, body_page) = numbers(text);
+    let lines: Vec<String> = page_lines(text)
         .into_iter()
         .filter(|l| !page_number(l))
         .collect();
@@ -42,18 +59,18 @@ pub fn read(path: &Path, bytes: &[u8]) -> Result<Source> {
         );
     }
     paras.append(&mut feet);
-    Ok(Source {
+    Source {
         format: Format::Pdf,
         paras,
         title: None,
         author: None,
         pages,
         body_page,
-    })
+    }
 }
 
 fn pdftotext(path: &Path) -> Option<String> {
-    let out = crate::build::outside("pdftotext")
+    let out = super::ocr::poppler("pdftotext")
         .args(["-layout", "-enc", "UTF-8"])
         .arg(path)
         .arg("-")

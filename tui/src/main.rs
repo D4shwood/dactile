@@ -44,6 +44,9 @@ enum Cmd {
         /// Where to write the play.
         #[arg(long, short)]
         out: Option<PathBuf>,
+        /// Reads a PDF from its page images, not its text.
+        #[arg(long)]
+        ocr: bool,
     },
     /// Builds a play's PDF next to it, in one XeLaTeX run.
     Pdf {
@@ -87,7 +90,7 @@ fn main() -> Result<()> {
             }
             Ok(())
         }
-        Some(Cmd::Import { file, out }) => import(&file, out),
+        Some(Cmd::Import { file, out, ocr }) => import(&file, out, ocr),
         Some(Cmd::Install) => {
             for line in install::install()? {
                 println!("{line}");
@@ -119,9 +122,33 @@ fn main() -> Result<()> {
     }
 }
 
-fn import(file: &std::path::Path, out: Option<PathBuf>) -> Result<()> {
+/// The book read from its images, as far as it has got on stderr.
+fn read_ocr(file: &std::path::Path) -> Result<dactile::import::Source> {
+    let stop = std::sync::atomic::AtomicBool::new(false);
+    let progress = |done: usize, total: usize| eprint!("\rOCR {done}/{total}");
+    let src = dactile::import::read_ocr(
+        file,
+        &dactile::import::ocr::Job {
+            progress: &progress,
+            stop: &stop,
+        },
+    );
+    eprintln!();
+    src
+}
+
+fn import(file: &std::path::Path, out: Option<PathBuf>, ocr: bool) -> Result<()> {
+    use dactile::import::ocr::ready;
+    use dactile::import::pdf::NoText;
     let cfg = dactile::config::Config::load()?;
-    let src = dactile::import::read(file)?;
+    let src = if ocr {
+        read_ocr(file)?
+    } else {
+        match dactile::import::read(file) {
+            Err(e) if e.downcast_ref::<NoText>().is_some() && ready() => read_ocr(file)?,
+            other => other?,
+        }
+    };
     let draft = dactile::import::shape::shape(&src, cfg_lang(&cfg));
     let path = match out {
         Some(p) => {

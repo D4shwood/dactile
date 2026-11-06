@@ -3,9 +3,10 @@
 //! keeps them), then shaped into a play (`shape`).
 
 mod docx;
+pub mod ocr;
 mod odt;
 pub mod pages;
-mod pdf;
+pub mod pdf;
 mod plain;
 pub mod shape;
 mod xml;
@@ -148,6 +149,15 @@ pub struct Source {
 pub const EXTENSIONS: [&str; 7] = ["docx", "odt", "pdf", "md", "markdown", "txt", "text"];
 
 pub fn read(path: &Path) -> Result<Source> {
+    read_with(path, None)
+}
+
+/// A PDF read from its page images.
+pub fn read_ocr(path: &Path, job: &ocr::Job) -> Result<Source> {
+    read_with(path, Some(job))
+}
+
+fn read_with(path: &Path, job: Option<&ocr::Job>) -> Result<Source> {
     let Some(format) = Format::of(path) else {
         bail!(
             "{}: {}",
@@ -162,7 +172,10 @@ pub fn read(path: &Path) -> Result<Source> {
     let mut src = match format {
         Format::Docx => docx::read(&bytes),
         Format::Odt => odt::read(&bytes),
-        Format::Pdf => pdf::read(path, &bytes),
+        Format::Pdf => match job {
+            Some(job) => ocr::text(path, job).map(|t| pdf::of_text(&t)),
+            None => pdf::read(path, &bytes),
+        },
         Format::Markdown => Ok(plain::read(&text_of(&bytes), true)),
         Format::Text => Ok(plain::read(&text_of(&bytes), false)),
     }

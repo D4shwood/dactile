@@ -4,12 +4,15 @@
 
 use dactile::config::Config;
 use dactile::import::Run;
+use dactile::import::ocr::{self, Job};
 use dactile::import::pages::Page;
+use dactile::import::pdf::NoText;
 use dactile::import::shape::{Counts, Draft, Item, shape};
 use dactile::lang::{self, Lang};
 use dactile::{cast, file, library};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// As many of the play's lines as the preview shows.
 const SHOWN: usize = 400;
@@ -56,11 +59,40 @@ pub struct Shown {
     pub play: Vec<Line>,
     /// How many more lines the play has than `play` shows.
     pub more: usize,
+    /// A PDF that can be read again from its page images.
+    pub ocr: bool,
 }
 
-pub fn read(path: &Path, lang: Lang) -> Result<Draft, String> {
-    dactile::import::read(path)
-        .map(|src| shape(&src, lang))
+/// Stops the reading under way.
+pub static STOP: AtomicBool = AtomicBool::new(false);
+
+/// Reads a document: a PDF of pictures, or any PDF asked to be, from its
+/// page images, saying how far it has got.
+pub fn read(
+    path: &Path,
+    lang: Lang,
+    ocr: bool,
+    progress: &(dyn Fn(usize, usize) + Sync),
+) -> Result<Draft, String> {
+    STOP.store(false, Ordering::Relaxed);
+    let job = Job {
+        progress,
+        stop: &STOP,
+    };
+    let src = if ocr {
+        dactile::import::read_ocr(path, &job)
+    } else {
+        match dactile::import::read(path) {
+            Err(e) if e.downcast_ref::<NoText>().is_some() && ocr::ready() => {
+                dactile::import::read_ocr(path, &job)
+            }
+            other => other,
+        }
+    };
+    if STOP.load(Ordering::Relaxed) {
+        return Err(lang::l("Okuma durduruldu.", "The reading was stopped.").into());
+    }
+    src.map(|src| shape(&src, lang))
         .map_err(|e| format!("{e:#}"))
 }
 
@@ -151,6 +183,10 @@ pub fn shown(file: &Path, d: &Draft) -> Shown {
         plain,
         play,
         more,
+        ocr: file
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("pdf"))
+            && ocr::ready(),
     }
 }
 
@@ -267,7 +303,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let src = dir.join("oyun.txt");
         std::fs::write(&src, TEXT).unwrap();
-        let mut d = read(&src, Lang::Tr).unwrap();
+        let mut d = read(&src, Lang::Tr, false, &|_, _| {}).unwrap();
         let s = shown(&src, &d);
         let at = |n: &str| s.people.iter().position(|p| p.name == n);
         let (selin, ozan) = (at("SELİN").unwrap(), at("OZAN").unwrap());

@@ -227,8 +227,11 @@ read-only. Earlier versions go to `~/.local/share/dactile/history`.
 `i` on the home screen opens the desktop's file chooser (where there is
 none, over SSH say, it asks for a path) for a play written elsewhere: a Word
 `.docx`, a LibreOffice `.odt`, a PDF with text in it, Markdown or plain
-text. Nothing else needs installing; a PDF reads better where `pdftotext` is
-there, and Dactile uses it then.
+text. Nothing else needs installing: the desktop app carries Tesseract and
+Poppler's tools. A scanned PDF is read from its page images by itself, and
+"Read again with OCR" in the preview does so for a PDF whose text is poor;
+`dactile-light import --ocr` does the same where Tesseract with Turkish is
+installed. Dactile Light reads a PDF better where `pdftotext` is there.
 
 Dactile finds the title and author, a cast list (`KİŞİLER`, `CHARACTERS`)
 with what it says of each, act and scene headings (`BİRİNCİ PERDE`,

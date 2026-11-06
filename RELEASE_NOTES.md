@@ -45,6 +45,9 @@ a Turkish Hunspell dictionary.
   paragraphs with Shift, mark them as a part, or say where the play starts
   and ends. Misread names are put right, those under the cast list go under
   yours, and footnotes come with their lines.
+- Scanned books: the app reads a PDF from its page images with Tesseract, which
+  it carries with its models. A PDF with poor text can be read again the same
+  way.
 - The class has `\digerkisiler` for those under the cast list and `\dipnot`
   for footnotes; the cast panel and the ribbon write them.
 - New drafts, copies, renaming, the trash with an undo.

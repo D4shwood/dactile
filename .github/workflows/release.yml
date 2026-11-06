@@ -47,6 +47,7 @@ jobs:
       - run: >
           sudo apt-get update && sudo apt-get install -y
           libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+          tesseract-ocr poppler-utils
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -57,7 +58,8 @@ jobs:
       - run: npm ci
         working-directory: app
       - run: cargo test -p dactile-app
-      - run: npm run tauri build -- --bundles appimage
+      - run: packaging/ocr-bundle.sh target/ocr
+      - run: npm run tauri build -- --bundles appimage --config src-tauri/tauri.ocr.json
         working-directory: app
       - name: Package
         run: |
@@ -66,6 +68,7 @@ jobs:
           mkdir "$name"
           cp target/release/dactile app/linux/*.desktop LICENSE "$name"/
           cp app/src-tauri/icons/icon.png "$name"/
+          cp -r target/ocr "$name"/
           tar czf "$name.tar.gz" "$name"
       - uses: actions/upload-artifact@v4
         with:
