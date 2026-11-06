@@ -97,7 +97,7 @@ fn drafts_of(path: &Path, plays: &[Play]) -> Vec<PathBuf> {
 fn listed(path: &Path, cfg: &mut Config) {
     if !library::list(cfg).iter().any(|p| p.path == path) {
         cfg.opened(path);
-        let _ = cfg.save();
+        keep(cfg);
     }
 }
 
@@ -149,7 +149,7 @@ pub fn rename(from: &Path, title: &str, name: &str, cfg: &mut Config) -> Result<
         for r in cfg.recent.iter_mut().filter(|r| **r == old) {
             *r = new.to_string();
         }
-        let _ = cfg.save();
+        keep(cfg);
     }
     let text = file::read(&to).map_err(|e| format!("{e:#}"))?;
     let old = info::get(&text, "title").unwrap_or_default();
@@ -171,7 +171,7 @@ pub fn throw(path: &Path, cfg: &mut Config) -> Result<Vec<Moved>, String> {
     let moved = library::throw_away(path, &trash::bin()).map_err(|e| format!("{e:#}"))?;
     let gone = path.to_string_lossy();
     cfg.recent.retain(|r| *r != gone);
-    let _ = cfg.save();
+    keep(cfg);
     Ok(moved)
 }
 
@@ -182,6 +182,13 @@ pub fn restore(moved: &[Moved], cfg: &mut Config) -> Result<(), String> {
         listed(&m.from, cfg);
     }
     Ok(())
+}
+
+/// The settings to disk; a test's stay in the test, off the real ones.
+fn keep(cfg: &Config) {
+    if !cfg!(test) {
+        let _ = cfg.save();
+    }
 }
 
 #[cfg(test)]
