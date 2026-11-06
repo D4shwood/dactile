@@ -1,5 +1,5 @@
 # Maintainer: D4shwood <D4shwood@users.noreply.github.com>
-# The desktop app and Dactile Light, from the release's archives.
+# Dactile and Dactile Light, from the release's archives.
 pkgname=dactile-bin
 _tag=v0.3.0-beta.1
 pkgver=${_tag#v}
@@ -26,10 +26,18 @@ sha256sums=('SKIP' 'SKIP')
 package() {
   cd "dactile-$_tag-x86_64-linux"
   install -Dm755 dactile -t "$pkgdir/usr/bin"
-  install -Dm644 io.github.d4shwood.dactile.desktop -t "$pkgdir/usr/share/applications"
-  install -Dm644 icon.png "$pkgdir/usr/share/icons/hicolor/512x512/apps/io.github.d4shwood.dactile.png"
+  install -Dm644 io.github.d4shwood.dactile{,-light}.desktop -t "$pkgdir/usr/share/applications"
+  local light="../dactile-light-$_tag-x86_64-linux" hicolor="$pkgdir/usr/share/icons/hicolor" size
+  for size in 16 24 32 48 64 128 256; do
+    install -Dm644 "icons/${size}x$size.png" "$hicolor/${size}x$size/apps/io.github.d4shwood.dactile.png"
+    install -Dm644 "$light/icons/${size}x$size.png" "$hicolor/${size}x$size/apps/io.github.d4shwood.dactile-light.png"
+  done
+  install -Dm644 icons/icon.png "$hicolor/512x512/apps/io.github.d4shwood.dactile.png"
+  install -Dm644 "$light/icons/512x512.png" "$hicolor/512x512/apps/io.github.d4shwood.dactile-light.png"
+  install -Dm644 icons/logo.svg "$hicolor/scalable/apps/io.github.d4shwood.dactile.svg"
+  install -Dm644 "$light/icons/light.svg" "$hicolor/scalable/apps/io.github.d4shwood.dactile-light.svg"
   install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
   install -d "$pkgdir/usr/lib/dactile"
   cp -r ocr "$pkgdir/usr/lib/dactile/"
-  install -Dm755 "../dactile-light-$_tag-x86_64-linux/dactile-light" -t "$pkgdir/usr/bin"
+  install -Dm755 "$light/dactile-light" -t "$pkgdir/usr/bin"
 }

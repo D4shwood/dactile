@@ -1,6 +1,6 @@
 [package]
 name = "dactile-app"
-description = "Dactile: a desktop app for writing stage plays"
+description = "Dactile: an app for writing stage plays"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
