@@ -233,6 +233,11 @@ Poppler's tools. A scanned PDF is read from its page images by itself, and
 `dactile-light import --ocr` does the same where Tesseract with Turkish is
 installed. Dactile Light reads a PDF better where `pdftotext` is there.
 
+A volume of several plays is told by its contents and title pages: the preview
+says which plays it has and takes one at a time (`--play` on the command line).
+Where a PDF sets its directions in italics, they are read as directions, and
+a list of who first played the parts gives the characters without the actors.
+
 Dactile finds the title and author, a cast list (`KİŞİLER`, `CHARACTERS`)
 with what it says of each, act and scene headings (`BİRİNCİ PERDE`,
 `2. Sahne: Ahır`, `ACT ONE`), a preface and notes, and lines of dialogue

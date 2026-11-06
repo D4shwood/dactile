@@ -39,6 +39,8 @@ pub struct Para {
     pub page: Option<usize>,
     /// A footnote, gathered after the text.
     pub foot: bool,
+    /// The same speaker going on after a direction.
+    pub resumes: bool,
 }
 
 impl Para {
@@ -143,6 +145,8 @@ pub struct Source {
     /// The page a book's text starts on, where the pages before it are
     /// numbered in Roman numerals and this one is page 1.
     pub body_page: Option<usize>,
+    /// The plays of a volume of several, in order; else none.
+    pub plays: Vec<pages::Volume>,
 }
 
 /// The extensions `read` takes.
@@ -173,7 +177,7 @@ fn read_with(path: &Path, job: Option<&ocr::Job>) -> Result<Source> {
         Format::Docx => docx::read(&bytes),
         Format::Odt => odt::read(&bytes),
         Format::Pdf => match job {
-            Some(job) => ocr::text(path, job).map(|t| pdf::of_text(&t)),
+            Some(job) => ocr::text(path, job).map(|t| pdf::of_text(&t, &[])),
             None => pdf::read(path, &bytes),
         },
         Format::Markdown => Ok(plain::read(&text_of(&bytes), true)),
@@ -193,15 +197,27 @@ fn read_with(path: &Path, job: Option<&ocr::Job>) -> Result<Source> {
     if blank(&src.author) {
         src.author = None;
     }
-    // A PDF says neither; its file often does: "Yazar - Oyun.pdf".
+    src.plays = pages::volume(&src.paras);
+    // A PDF says neither; its file often does: "Yazar - Oyun.pdf", and in a
+    // volume whichever side is one of its plays is the title.
     if format == Format::Pdf
-        && let Some((author, title)) = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .and_then(|s| s.split_once(" - "))
+        && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+        && let stem = stem.replace('_', " ")
+        && let Some((author, title)) = stem.split_once(" - ")
     {
-        src.title = Some(title.trim().to_string());
-        src.author = Some(author.trim().to_string());
+        let (author, title) = (author.trim(), title.trim());
+        let names_play = |t: &str| {
+            src.plays
+                .iter()
+                .any(|p| shape::fold(&p.title) == shape::fold(t))
+        };
+        let (author, title) = if names_play(author) && !names_play(title) {
+            (title, author)
+        } else {
+            (author, title)
+        };
+        src.title = Some(title.to_string());
+        src.author = Some(author.to_string());
     }
     Ok(src)
 }

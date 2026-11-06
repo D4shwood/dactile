@@ -48,6 +48,8 @@ a Turkish Hunspell dictionary.
 - Scanned books: the app reads a PDF from its page images with Tesseract, which
   it carries with its models. A PDF with poor text can be read again the same
   way.
+- A volume of several plays offers its plays one by one, directions in
+  italics are read as directions, and a premiere's actors stay out of the cast.
 - The class has `\digerkisiler` for those under the cast list and `\dipnot`
   for footnotes; the cast panel and the ribbon write them.
 - New drafts, copies, renaming, the trash with an undo.

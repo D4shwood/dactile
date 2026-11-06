@@ -2,8 +2,9 @@
 //! layout, a name column among it), else read in Rust. Running heads and
 //! page numbers go, margin line numbers too, and wrapped lines are joined.
 
-use super::{Format, Para, Source, plain};
+use super::{Format, Para, Source, plain, shape};
 use anyhow::{Result, bail};
+use std::collections::HashSet;
 use std::path::Path;
 
 /// A PDF of pictures: it needs reading from them.
@@ -21,6 +22,11 @@ impl std::fmt::Display for NoText {
 
 impl std::error::Error for NoText {}
 
+/// A whole line in italics, marked on its way through the unwrapping: a
+/// direction, or the speech that goes on after one.
+const DIRECTION: char = '\u{e000}';
+const RESUMES: char = '\u{e001}';
+
 pub fn read(path: &Path, bytes: &[u8]) -> Result<Source> {
     let text = match pdftotext(path) {
         Some(t) => t,
@@ -31,25 +37,193 @@ pub fn read(path: &Path, bytes: &[u8]) -> Result<Source> {
     if letters < 40 * pages {
         return Err(NoText.into());
     }
-    Ok(of_text(&text))
+    Ok(of_text(&text, &italic_lines(path)))
 }
 
-/// A book from its text, pages parted by form feeds.
-pub(super) fn of_text(text: &str) -> Source {
+/// A line as `pdftotext` and `pdftohtml` both have it: they space it apart
+/// differently.
+fn line_key(t: &str) -> String {
+    t.chars().filter(|c| !c.is_whitespace()).collect()
+}
+
+/// The lines in italics on each page, by `pdftohtml`, the one tool that
+/// says; none where it isn't there.
+fn italic_lines(path: &Path) -> Vec<HashSet<String>> {
+    let out = super::ocr::poppler("pdftohtml")
+        .args(["-xml", "-i", "-stdout", "-enc", "UTF-8"])
+        .arg(path)
+        .output();
+    match out {
+        Ok(o) if o.status.success() => italics_of(&String::from_utf8_lossy(&o.stdout)),
+        _ => Vec::new(),
+    }
+}
+
+/// A line of `pdftohtml -xml`, which comes in pieces, one to each font.
+#[derive(Default)]
+struct Pieces {
+    top: i32,
+    height: i32,
+    text: String,
+    /// Small letters in italics, and in all: a direction's names aren't.
+    italic: usize,
+    small: usize,
+    /// How it starts: the end of a speech can run into a long note.
+    starts_italic: Option<bool>,
+}
+
+impl Pieces {
+    fn italic(&self) -> bool {
+        self.starts_italic == Some(true) && self.italic * 10 >= self.small * 8
+    }
+}
+
+/// From `pdftohtml -xml`.
+fn italics_of(xml: &str) -> Vec<HashSet<String>> {
+    let unescape = |t: &str| {
+        t.replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&quot;", "\"")
+            .replace("&#34;", "\"")
+            .replace("&#160;", " ")
+            .replace("&amp;", "&")
+    };
+    let number = |l: &str, name: &str| -> Option<i32> {
+        let at = l.find(name)? + name.len();
+        l[at..].split('"').next()?.parse().ok()
+    };
+    let mut pages = Vec::new();
+    let mut lines: Vec<Pieces> = Vec::new();
+    for l in xml.lines() {
+        if l.starts_with("</page>") {
+            pages.push(
+                lines
+                    .drain(..)
+                    .filter(Pieces::italic)
+                    .map(|p| line_key(&p.text))
+                    .collect(),
+            );
+            continue;
+        }
+        if !l.starts_with("<text ") {
+            continue;
+        }
+        let (Some(top), Some(height), Some(start), Some(end)) = (
+            number(l, " top=\""),
+            number(l, " height=\""),
+            l.find('>'),
+            l.rfind("</text>"),
+        ) else {
+            continue;
+        };
+        let inner = l[start + 1..end].replace("<b>", "").replace("</b>", "");
+        let italic = inner.contains("<i>");
+        let bare = unescape(&inner.replace("<i>", "").replace("</i>", ""));
+        let small = bare.chars().filter(|c| c.is_lowercase()).count();
+        // Small capitals sit a little lower on the line.
+        let same = lines
+            .last()
+            .is_some_and(|p| (p.top - top).abs() * 2 < p.height.max(height));
+        if !same {
+            lines.push(Pieces {
+                top,
+                height,
+                ..Pieces::default()
+            });
+        }
+        if let Some(p) = lines.last_mut() {
+            p.text.push_str(&bare);
+            p.small += small;
+            if small > 0 {
+                p.starts_italic.get_or_insert(italic);
+            }
+            p.italic += if italic { small } else { 0 };
+        }
+    }
+    pages
+}
+
+/// Sets the book's lines in italics apart. Few of them are only emphasis.
+fn italics_apart(lines: Vec<String>, italics: &[HashSet<String>]) -> Vec<String> {
+    let mut page = 0;
+    let mut marks = Vec::with_capacity(lines.len());
+    for l in &lines {
+        if l == PAGE_END {
+            page += 1;
+        }
+        let t = line_key(l);
+        marks.push(!t.is_empty() && italics.get(page).is_some_and(|s| s.contains(&t)));
+    }
+    let many = marks.iter().filter(|&&m| m).count();
+    if many < 10 || many * 50 < lines.len() {
+        return lines;
+    }
+    let mut out = Vec::with_capacity(lines.len() + many);
+    let mut was = false;
+    // Inside `(…)` in a speech that goes over the line: a note of that speech.
+    let mut open = 0;
+    for (l, italic) in lines.into_iter().zip(marks) {
+        let t = l.trim();
+        if t.is_empty() || l == PAGE_END {
+            out.push(l);
+            continue;
+        }
+        let direction = italic && open == 0 && !shape::starts_item(t);
+        if !direction {
+            let (a, b) = (t.matches('(').count(), t.matches(')').count());
+            open = (open + a).saturating_sub(b);
+            if shape::starts_item(t) {
+                open = a.saturating_sub(b);
+            }
+        }
+        match (direction, was) {
+            (true, false) => {
+                out.push(String::new());
+                out.push(format!("{DIRECTION}{t}"));
+            }
+            // Each line, for it not to read as a name's column.
+            (true, true) => out.push(format!("{DIRECTION}{t}")),
+            (false, true) => {
+                out.push(String::new());
+                if shape::starts_item(t) {
+                    out.push(l);
+                } else {
+                    out.push(format!("{RESUMES}{t}"));
+                }
+            }
+            _ => out.push(l),
+        }
+        was = direction;
+    }
+    out
+}
+
+/// A book from its text, pages parted by form feeds, and the lines in
+/// italics on each.
+pub(super) fn of_text(text: &str, italics: &[HashSet<String>]) -> Source {
     let (pages, body_page) = numbers(text);
     let lines: Vec<String> = page_lines(text)
         .into_iter()
         .filter(|l| !page_number(l))
         .collect();
-    let lines = names_put_right(&name_columns(&strip_numbers(&lines)));
+    let lines = italics_apart(strip_numbers(&lines), italics);
+    let lines = names_put_right(&name_columns(&lines));
     let mut paras = Vec::new();
     let mut feet = Vec::new();
     for (page, group) in lines.split(|l| l == PAGE_END).enumerate() {
         let (body, notes) = group.split_at(notes_at(group));
-        let tagged = |t: &String, foot: bool| Para {
-            page: Some(page),
-            foot,
-            ..Para::plain(t)
+        let tagged = |t: &String, foot: bool| {
+            let bare = t.replace([DIRECTION, RESUMES], "");
+            let mut p = Para {
+                page: Some(page),
+                foot,
+                resumes: t.starts_with(RESUMES),
+                ..Para::plain(&bare)
+            };
+            if t.starts_with(DIRECTION) {
+                p.runs.iter_mut().for_each(|r| r.italic = true);
+            }
+            p
         };
         paras.extend(plain::unwrap(body, false).iter().map(|p| tagged(p, false)));
         feet.extend(
@@ -66,6 +240,7 @@ pub(super) fn of_text(text: &str) -> Source {
         author: None,
         pages,
         body_page,
+        plays: Vec::new(),
     }
 }
 
@@ -443,7 +618,8 @@ fn name_columns(lines: &[String]) -> Vec<String> {
             *at += w.len() + 1;
             Some((i, w))
         }) {
-            if w.is_empty() || !w.chars().any(char::is_alphabetic) {
+            // `NAME. …` needs no column, and shape reads it as it is.
+            if w.is_empty() || !w.chars().any(char::is_alphabetic) || w.ends_with('.') {
                 return None;
             }
             // A lone capital starts a sentence ("O gün…").
@@ -529,6 +705,32 @@ mod tests {
         let all = lines.join("\n");
         assert!(!all.contains("Deniz") && !all.contains("Masa"), "{all}");
         assert!(all.contains("SELİN") && !all.contains("VIII"), "{all}");
+    }
+
+    #[test]
+    fn lines_in_italics() {
+        let xml = "<page number=\"1\">\n<text top=\"10\" left=\"1\" width=\"1\" height=\"20\" font=\"0\"><i>Selin girer</i></text>\n<text top=\"13\" left=\"1\" width=\"1\" height=\"20\" font=\"0\">.</text>\n<text top=\"40\" left=\"1\" width=\"1\" height=\"20\" font=\"0\">OZAN. Bir söz, </text>\n<text top=\"40\" left=\"1\" width=\"1\" height=\"20\" font=\"0\"><i>iki</i></text>\n</page>\n";
+        let pages = italics_of(xml);
+        assert!(pages[0].contains("Selingirer."));
+        assert_eq!(pages[0].len(), 1);
+    }
+
+    #[test]
+    fn a_direction_parts_a_speech() {
+        let mut lines: Vec<String> = vec!["OZAN. Bir.".into(); 12];
+        let mut set = HashSet::new();
+        for i in 0..12 {
+            let t = format!("Selin girer {i}.");
+            set.insert(line_key(&t));
+            lines.push(t);
+            lines.push("Ve sürer.".into());
+        }
+        let out = italics_apart(lines, &[set]);
+        assert!(
+            out.iter()
+                .any(|l| l == &format!("{DIRECTION}Selin girer 0."))
+        );
+        assert!(out.iter().any(|l| l == &format!("{RESUMES}Ve sürer.")));
     }
 
     #[test]

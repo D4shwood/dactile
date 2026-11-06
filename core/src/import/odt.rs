@@ -97,6 +97,7 @@ pub fn read(bytes: &[u8]) -> Result<Source> {
         author,
         pages: Vec::new(),
         body_page: None,
+        plays: Vec::new(),
     })
 }
 

@@ -477,3 +477,68 @@ fn notes_go_where_they_are_marked() {
     assert!(paras[0].runs[1].note && paras[0].runs[1].text == "Biri.");
     assert!(paras[1].runs.last().unwrap().note);
 }
+
+/// Two plays in a book, each with a page of its title; a book's PDF comes
+/// so, with pages.
+fn volume() -> Source {
+    let mut paras = Vec::new();
+    let mut add = |page: usize, t: String| {
+        paras.push(Para {
+            page: Some(page),
+            ..Para::plain(&t)
+        })
+    };
+    add(0, "Contents".into());
+    add(0, "Chronology\nKAR MASALI\nYOL".into());
+    add(1, "Chronology".into());
+    add(2, "1990 Born.".into());
+    add(3, "Kar Masalı".into());
+    for i in 0..30 {
+        add(4 + i / 10, format!("SELİN. Bir söz {i}."));
+    }
+    add(8, "Yol".into());
+    for i in 0..30 {
+        add(9 + i / 10, format!("OZAN. Bir söz {i}."));
+    }
+    let mut src = plain::read("", false);
+    src.format = Format::Pdf;
+    src.paras = paras;
+    src.plays = pages::volume(&src.paras);
+    src
+}
+
+#[test]
+fn a_volume_of_plays() {
+    let src = volume();
+    let titles: Vec<&str> = src.plays.iter().map(|p| p.title.as_str()).collect();
+    assert_eq!(titles, ["Kar Masalı", "Yol"]);
+    let first = shape::shape(&src, Lang::Tr);
+    assert_eq!(first.title, "Kar Masalı");
+    assert_eq!(first.counts().lines, 30);
+    let second = shape::shape_play(&src, Lang::Tr, 1);
+    let cast: Vec<&str> = second
+        .cast()
+        .into_iter()
+        .map(|i| second.people[i].name.as_str())
+        .collect();
+    assert_eq!(cast, ["OZAN"]);
+}
+
+#[test]
+fn a_speech_goes_on_after_a_direction() {
+    let mut src = plain::read(
+        "I. PERDE\n\nSELİN: Bir.\n\nOZAN: İki.\n\nOZAN: Üç.\n\nSELİN: Dört.\n\n(Girer.)\n\nVe sürer.\n",
+        false,
+    );
+    src.paras.last_mut().unwrap().resumes = true;
+    let d = shape::shape(&src, Lang::Tr);
+    assert_eq!(d.counts().lines, 5);
+    assert_eq!(d.counts().directions, 1);
+}
+
+#[test]
+fn a_note_with_a_stop_in_it() {
+    let text = "I. PERDE\n\nSELİN (bakar. Bekler). Bir.\n\nSELİN. İki.\n\nSELİN. Üç.\n";
+    let d = shape::shape(&plain::read(text, false), Lang::Tr);
+    assert_eq!(d.counts().lines, 3, "{:#?}", d.people);
+}

@@ -7,7 +7,7 @@
 //! read again.
 
 use super::shape::{
-    Level, NOT_NAMES, cast_entry, heading, is_cast_heading, key, name_alone, speech_head,
+    Level, NOT_NAMES, cast_entry, fold, heading, is_cast_heading, key, name_alone, speech_head,
 };
 use super::{Para, Run, Source};
 use crate::cast::upper_tr;
@@ -649,4 +649,129 @@ pub(super) fn attach_notes<'a>(paras: &mut [Para], notes: &[&'a Para]) -> Vec<&'
         at = end;
     }
     placed
+}
+
+/// A play of a volume of several: its title, and the first paragraph after
+/// its title page.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Volume {
+    pub title: String,
+    pub from: usize,
+}
+
+/// As many speeches as show that what follows a title page is a play.
+const SPOKEN: usize = 20;
+
+/// The plays of a book of several: pages of a title or so, the title being
+/// in the contents, each with people speaking after it.
+pub fn volume(paras: &[Para]) -> Vec<Volume> {
+    let Some(contents) = paras
+        .iter()
+        .find(|p| page_title(&p.text()) == Some(Page::Contents))
+        .and_then(|p| p.page)
+    else {
+        return Vec::new();
+    };
+    let listed: String = paras
+        .iter()
+        .filter(|p| p.page == Some(contents))
+        .map(|p| fold(&p.text()))
+        .collect();
+    let mut found: Vec<Volume> = Vec::new();
+    let mut at = 0;
+    while at < paras.len() {
+        let page = paras[at].page;
+        let end = (at..paras.len())
+            .find(|&j| paras[j].page != page)
+            .unwrap_or(paras.len());
+        let title = first_line(&paras[at].text()).trim().to_string();
+        let folded = fold(&title);
+        if page.is_some()
+            && page != Some(contents)
+            && end - at <= 2
+            && !paras[at].foot
+            && folded.chars().count() >= 3
+            && title.split_whitespace().count() <= 10
+            && listed.contains(&folded)
+        {
+            found.push(Volume { title, from: end });
+        }
+        at = end;
+    }
+    // What the contents also list, a chronology, has no one speaking.
+    let bound: Vec<usize> = found
+        .iter()
+        .skip(1)
+        .map(|v| v.from)
+        .chain([paras.len()])
+        .collect();
+    let plays: Vec<Volume> = found
+        .into_iter()
+        .zip(bound)
+        .filter(|(v, end)| {
+            paras[v.from..*end]
+                .iter()
+                .filter(|p| speech_head(&p.text()).is_some())
+                .count()
+                >= SPOKEN
+        })
+        .map(|(v, _)| v)
+        .collect();
+    if plays.len() >= 2 { plays } else { Vec::new() }
+}
+
+/// What each paragraph is with one play of a volume in view: the rest is
+/// the book's.
+pub fn labels_of_play(src: &Source, at: usize) -> Vec<Page> {
+    let from = src.plays[at].from;
+    let body = src
+        .paras
+        .iter()
+        .position(|p| p.foot)
+        .unwrap_or(src.paras.len());
+    let to = src.plays.get(at + 1).map_or(body, |next| {
+        // Back to its title page.
+        let page = src.paras[next.from - 1].page;
+        (0..next.from)
+            .rev()
+            .take_while(|&i| src.paras[i].page == page)
+            .last()
+            .unwrap_or(next.from)
+    });
+    let pages = src.paras[from].page..=src.paras[to.saturating_sub(1)].page;
+    let mut taken: Vec<usize> = (from..to).collect();
+    taken.extend((body..src.paras.len()).filter(|&i| pages.contains(&src.paras[i].page)));
+    let sub = Source {
+        paras: taken.iter().map(|&i| src.paras[i].clone()).collect(),
+        body_page: None,
+        plays: Vec::new(),
+        ..src.clone()
+    };
+    let mut out = vec![Page::Other; src.paras.len()];
+    for (i, l) in taken.into_iter().zip(labels(&sub)) {
+        out[i] = l;
+    }
+    out
+}
+
+/// A cast list with who first played the parts in a column beside it, or
+/// wrapped under it. Those are actors' names, not the people of the play.
+pub(super) fn premiere(list: &[Para]) -> bool {
+    let actor = |t: &str| {
+        let words: Vec<&str> = t.split_whitespace().collect();
+        (1..=3).contains(&words.len())
+            && words.iter().all(|w| {
+                w.chars().next().is_some_and(char::is_uppercase)
+                    && w.chars().any(char::is_lowercase)
+            })
+    };
+    let lines: Vec<String> = list
+        .iter()
+        .flat_map(|p| p.text().lines().map(str::to_string).collect::<Vec<_>>())
+        .collect();
+    let actors = lines
+        .iter()
+        .filter(|l| l.rsplit("   ").next().is_some_and(actor))
+        .count();
+    actors >= 5 && actors * 3 >= lines.len()
 }

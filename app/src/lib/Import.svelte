@@ -42,6 +42,11 @@
     ocr = null;
   }
 
+  async function pickPlay(e: Event) {
+    await edit({ kind: "play", i: Number((e.currentTarget as HTMLSelectElement).value) });
+    doc = await api.importDoc();
+  }
+
   async function edit(e: ImportEdit) {
     try {
       s = await api.importEdit(e);
@@ -185,6 +190,14 @@
   <div class="head">
     <strong>{l("İçe aktar", "Import")}</strong>
     <span class="muted">{file}</span>
+    {#if s.plays.length > 1}
+      <label class="muted">
+        {l("Bu ciltte", "In this volume")}
+        <select value={s.picked} onchange={pickPlay}>
+          {#each s.plays as p, i}<option value={i}>{p}</option>{/each}
+        </select>
+      </label>
+    {/if}
     <span class="grow"></span>
     {#if ocr}
       <span class="muted">{l(`OCR ${ocr[0]}/${ocr[1]} sayfa`, `OCR ${ocr[0]}/${ocr[1]} pages`)}</span>

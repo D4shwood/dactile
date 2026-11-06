@@ -7,7 +7,7 @@ use dactile::import::Run;
 use dactile::import::ocr::{self, Job};
 use dactile::import::pages::Page;
 use dactile::import::pdf::NoText;
-use dactile::import::shape::{Counts, Draft, Item, shape};
+use dactile::import::shape::{Counts, Draft, Item, shape, shape_play};
 use dactile::lang::{self, Lang};
 use dactile::{cast, file, library};
 use serde::{Deserialize, Serialize};
@@ -61,6 +61,9 @@ pub struct Shown {
     pub more: usize,
     /// A PDF that can be read again from its page images.
     pub ocr: bool,
+    /// The plays of a volume of several, and which this is.
+    pub plays: Vec<String>,
+    pub picked: Option<usize>,
 }
 
 /// Stops the reading under way.
@@ -183,6 +186,8 @@ pub fn shown(file: &Path, d: &Draft) -> Shown {
         plain,
         play,
         more,
+        plays: d.source.plays.iter().map(|p| p.title.clone()).collect(),
+        picked: d.play,
         ocr: file
             .extension()
             .is_some_and(|e| e.eq_ignore_ascii_case("pdf"))
@@ -194,6 +199,10 @@ pub fn shown(file: &Path, d: &Draft) -> Shown {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum Edit {
+    /// Another play of the volume.
+    Play {
+        i: usize,
+    },
     Info {
         title: String,
         author: String,
@@ -234,6 +243,12 @@ pub fn edit(d: &mut Draft, e: Edit) -> Result<(), String> {
     let n = d.people.len();
     let known = |i: usize| (i < n).then_some(()).ok_or("no such person".to_string());
     match e {
+        Edit::Play { i } => {
+            if i >= d.source.plays.len() {
+                return Err("no such play".to_string());
+            }
+            *d = shape_play(&d.source, d.lang, i);
+        }
         Edit::Info { title, author } => {
             d.title = title.trim().to_string();
             d.author = author.trim().to_string();

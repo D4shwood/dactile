@@ -8,7 +8,7 @@ dest=$1
 models=https://raw.githubusercontent.com/tesseract-ocr/tessdata_best/e12c65a915945e4c28e237a9b52bc4a8f39a0cec
 mkdir -p "$dest/bin" "$dest/lib" "$dest/tessdata"
 
-for program in tesseract pdftoppm pdftotext pdfinfo; do
+for program in tesseract pdftoppm pdftotext pdfinfo pdftohtml; do
     cp -L "$(command -v "$program")" "$dest/bin/"
     # Not glibc's own: those must be the system's.
     ldd "$dest/bin/$program" | awk '/=> \//{print $3}' |

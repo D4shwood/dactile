@@ -232,6 +232,11 @@ okunur; metni kötü bir PDF için önizlemedeki "OCR ile yeniden oku" aynısın
 yapar. Tesseract ve Türkçe modeli kuruluysa `dactile-light import --ocr` da
 çalışır. Dactile Light, `pdftotext` kuruluysa PDF'i daha temiz okur.
 
+Birkaç oyunluk bir cilt, içindekiler ve başlık sayfalarından tanınır: önizleme
+hangi oyunlar olduğunu gösterir ve birini seçtirir (komut satırında `--play`).
+PDF'te italik yazılmış yönergeler yönerge olarak okunur; ilk oynayanların
+listesinden oyuncular değil karakterler alınır.
+
 Dactile başlığı ve yazarı, açıklamalarıyla bir kişiler listesini (`KİŞİLER`,
 `CHARACTERS`), perde ve sahne başlıklarını (`BİRİNCİ PERDE`, `2. Sahne: Ahır`,
 `ACT ONE`), önsözü ve notları, `AD: …`, `AD — …`, `AD. …` diye ya da ad kendi

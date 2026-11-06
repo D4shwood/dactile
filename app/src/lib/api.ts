@@ -295,9 +295,12 @@ export interface Shown {
   play: { kind: string; who: string | null; text: string }[];
   more: number;
   ocr: boolean;
+  plays: string[];
+  picked: number | null;
 }
 
 export type ImportEdit =
+  | { kind: "play"; i: number }
   | { kind: "info"; title: string; author: string }
   | { kind: "person"; i: number; name: string; alias: string }
   | { kind: "merge"; from: number; into: number }

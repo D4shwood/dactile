@@ -69,6 +69,8 @@ pub struct Draft {
     pub asides: Vec<Aside>,
     /// Those the cast page has under its list.
     pub others: String,
+    /// Which play of a volume this is.
+    pub play: Option<usize>,
     pub lang: Lang,
     /// What was read, and what each of its paragraphs is taken for.
     pub source: Source,
@@ -142,7 +144,7 @@ fn misread_number(w: &str) -> bool {
 
 fn level_word(w: &str) -> Option<Level> {
     match w.trim_end_matches(['.', ':', ',']) {
-        "PERDE" | "ACT" | "BÖLÜM" | "KISIM" => Some(Level::Act),
+        "PERDE" | "ACT" | "PART" | "BÖLÜM" | "KISIM" => Some(Level::Act),
         "SAHNE" | "SCENE" | "TABLO" | "MEŞHED" => Some(Level::Scene),
         _ => None,
     }
@@ -181,7 +183,10 @@ pub(super) fn heading(text: &str) -> Option<(Level, String)> {
     let (level, used) = match up.as_slice() {
         [a, b, ..] if is_ordinal(a) && level_word(b).is_some() => (level_word(b)?, 2),
         [a, b, ..] if level_word(a).is_some() && is_number(b) => (level_word(a)?, 2),
-        [a] if level_word(a).is_some() && a.chars().all(|c| !c.is_lowercase()) => {
+        [a] if level_word(a).is_some()
+            && a.chars().all(|c| !c.is_lowercase())
+            && !a.ends_with('.') =>
+        {
             (level_word(a)?, 1)
         }
         // A number OCR read as something else: `S. Sahne`, `t . Sahne`.
@@ -273,8 +278,11 @@ fn separators(t: &str) -> Vec<(usize, usize, bool)> {
             out.push((i, i + d.len(), false));
         }
     }
-    if let Some(i) = head.find(". ") {
-        out.push((i, i + 2, true));
+    // Each stop: the first may be inside `SELİN (bakar. Bekler). …`.
+    let head: String = t.chars().take(120).collect();
+    out.extend(head.match_indices(". ").map(|(i, _)| (i, i + 2, true)));
+    if let Some(i) = head.find(") ") {
+        out.push((i + 1, i + 2, true));
     }
     out.sort_by_key(|o| o.0);
     out
@@ -527,7 +535,29 @@ pub(super) fn cast_entry(t: &str) -> Option<(String, Option<String>)> {
 /// The paragraphs a draft is made of: who speaks is sure only once all of
 /// them are counted (a name written once before a colon may be a word).
 pub fn shape(src: &Source, lang: Lang) -> Draft {
-    shape_as(src, lang, pages::labels(src))
+    if src.plays.is_empty() {
+        return shape_as(src, lang, pages::labels(src));
+    }
+    // The one the file is named for, else the first.
+    let named = src.title.as_deref().map(fold);
+    let at = src
+        .plays
+        .iter()
+        .position(|p| Some(fold(&p.title)) == named)
+        .unwrap_or(0);
+    shape_play(src, lang, at)
+}
+
+/// One play of a volume.
+pub fn shape_play(src: &Source, lang: Lang, at: usize) -> Draft {
+    let mut d = shape_as(src, lang, pages::labels_of_play(src, at));
+    d.title = src.plays[at].title.clone();
+    if let Some(a) = &src.author {
+        d.author = a.clone();
+    }
+    d.found = (d.title.clone(), d.author.clone());
+    d.play = Some(at);
+    d
 }
 
 /// The play out of the paragraphs labelled so.
@@ -574,6 +604,7 @@ fn shape_as(src: &Source, lang: Lang, labels: Vec<Page>) -> Draft {
     for part in &pages::parts(&labels) {
         let list = &src.paras[part.range.clone()];
         let mut left: Vec<Vec<Run>> = Vec::new();
+        let premiere = part.page == Page::Cast && pages::premiere(list);
         for p in list {
             let t = p.text();
             match part.page {
@@ -581,6 +612,14 @@ fn shape_as(src: &Source, lang: Lang, labels: Vec<Page>) -> Draft {
                 Page::Others => others.push(t.split_whitespace().collect::<Vec<_>>().join(" ")),
                 Page::Footnotes if placed.iter().any(|q| std::ptr::eq(*q, p)) => {}
                 Page::Cast if is_cast_heading(&t) => {}
+                // Who played them first: the names at the head of each line.
+                Page::Cast if premiere => {
+                    for line in t.lines() {
+                        if let Some(name) = caps_lead(line) {
+                            sh.listed(&name, None);
+                        }
+                    }
+                }
                 Page::Cast => {
                     for line in t.lines().map(str::trim) {
                         match cast_entry(line).filter(|(n, _)| !pages::book_word(n)) {
@@ -669,6 +708,14 @@ fn shape_as(src: &Source, lang: Lang, labels: Vec<Page>) -> Draft {
                 continue;
             }
         }
+        // Under a heading, `KARARGÂH.` says where the scene is.
+        if t.trim_end().ends_with('.')
+            && name_alone(t).is_some()
+            && matches!(items.last(), Some(Item::Scene(_) | Item::Act(_)))
+        {
+            items.push(Item::Direction(p.runs.clone()));
+            continue;
+        }
         // NAME, then the words under it.
         if let Some((name, note)) = name_alone(t) {
             let k = key(&name);
@@ -725,6 +772,22 @@ fn shape_as(src: &Source, lang: Lang, labels: Vec<Page>) -> Draft {
             items.push(Item::Plain(p.runs.clone()));
             continue;
         }
+        // The speech goes on past a direction.
+        if p.resumes
+            && let Some(who) = items.iter().rev().find_map(|it| match it {
+                Item::Speech { who, .. } => Some(*who),
+                Item::Direction(..) => None,
+                _ => Some(usize::MAX),
+            })
+            && who != usize::MAX
+        {
+            items.push(Item::Speech {
+                who,
+                said: p.runs.clone(),
+                raw: p.runs.clone(),
+            });
+            continue;
+        }
         // A paragraph after a line of dialogue goes on it.
         if let Some(Item::Speech { said, raw, .. }) = items.last_mut() {
             for v in [said, raw] {
@@ -778,6 +841,7 @@ fn shape_as(src: &Source, lang: Lang, labels: Vec<Page>) -> Draft {
         items: items_all,
         asides,
         others: others.join(" "),
+        play: None,
         lang,
         source: src.clone(),
         labels,
@@ -875,6 +939,17 @@ fn odd_title(t: &str) -> bool {
         || l.ends_with(".docx")
         || l == "untitled"
         || l == "adsız"
+}
+
+/// The capitals a line starts with: `ASKER D` of `ASKER D at the house`.
+fn caps_lead(line: &str) -> Option<String> {
+    let t = line.split("  ").find(|p| !p.trim().is_empty())?.trim();
+    let name: Vec<&str> = t
+        .split_whitespace()
+        .take_while(|w| is_caps_name(w.trim_end_matches(',')))
+        .collect();
+    let name = name.join(" ");
+    (name.chars().count() >= 2).then(|| name.trim_end_matches(',').to_string())
 }
 
 /// A name as OCR may have it: no spaces, Turkish letters as Latin ones.

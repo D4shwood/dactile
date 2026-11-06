@@ -34,6 +34,7 @@ pub fn read(text: &str, markdown: bool) -> Source {
         author: None,
         pages: Vec::new(),
         body_page: None,
+        plays: Vec::new(),
     }
 }
 

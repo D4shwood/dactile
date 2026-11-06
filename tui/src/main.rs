@@ -47,6 +47,9 @@ enum Cmd {
         /// Reads a PDF from its page images, not its text.
         #[arg(long)]
         ocr: bool,
+        /// Which play of a volume of several, by a word of its title.
+        #[arg(long)]
+        play: Option<String>,
     },
     /// Builds a play's PDF next to it, in one XeLaTeX run.
     Pdf {
@@ -90,7 +93,12 @@ fn main() -> Result<()> {
             }
             Ok(())
         }
-        Some(Cmd::Import { file, out, ocr }) => import(&file, out, ocr),
+        Some(Cmd::Import {
+            file,
+            out,
+            ocr,
+            play,
+        }) => import(&file, out, ocr, play),
         Some(Cmd::Install) => {
             for line in install::install()? {
                 println!("{line}");
@@ -137,7 +145,12 @@ fn read_ocr(file: &std::path::Path) -> Result<dactile::import::Source> {
     src
 }
 
-fn import(file: &std::path::Path, out: Option<PathBuf>, ocr: bool) -> Result<()> {
+fn import(
+    file: &std::path::Path,
+    out: Option<PathBuf>,
+    ocr: bool,
+    play: Option<String>,
+) -> Result<()> {
     use dactile::import::ocr::ready;
     use dactile::import::pdf::NoText;
     let cfg = dactile::config::Config::load()?;
@@ -149,7 +162,17 @@ fn import(file: &std::path::Path, out: Option<PathBuf>, ocr: bool) -> Result<()>
             other => other?,
         }
     };
-    let draft = dactile::import::shape::shape(&src, cfg_lang(&cfg));
+    let picked = play.map(|word| {
+        let word = word.to_lowercase();
+        src.plays
+            .iter()
+            .position(|p| p.title.to_lowercase().contains(&word))
+            .ok_or_else(|| anyhow::anyhow!("no play called {word} in this volume"))
+    });
+    let draft = match picked.transpose()? {
+        Some(at) => dactile::import::shape::shape_play(&src, cfg_lang(&cfg), at),
+        None => dactile::import::shape::shape(&src, cfg_lang(&cfg)),
+    };
     let path = match out {
         Some(p) => {
             anyhow::ensure!(!p.exists(), "{} already exists", p.display());
@@ -169,6 +192,10 @@ fn import(file: &std::path::Path, out: Option<PathBuf>, ocr: bool) -> Result<()>
     dactile::file::write_atomic(&path, &draft.tex())?;
     let c = draft.counts();
     println!("{}", path.display());
+    if src.plays.len() > 1 {
+        let titles: Vec<&str> = src.plays.iter().map(|p| p.title.as_str()).collect();
+        println!("bu ciltte: {} (--play ile seçilir)", titles.join(", "));
+    }
     println!(
         "{} replik, {} yönerge, {} perde, {} sahne, {} düz paragraf",
         c.lines, c.directions, c.acts, c.scenes, c.plain
