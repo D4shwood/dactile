@@ -19,6 +19,7 @@ pub mod library;
 pub mod memorize;
 pub mod notes;
 pub mod outline;
+pub mod outputs;
 pub mod render;
 pub mod shelf;
 pub mod sidecar;

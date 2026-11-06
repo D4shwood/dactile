@@ -5,7 +5,7 @@
   import { EditorView } from "@codemirror/view";
   import { redo, selectAll, undo } from "@codemirror/commands";
   import { openSearchPanel } from "@codemirror/search";
-  import { api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Made, type Memo, type Summary, type NoteCard, type Opened, type PlaySettings, type Preview, type Settings } from "./api";
+  import { api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Files, type Made, type Memo, type Summary, type NoteCard, type Opened, type PlaySettings, type Preview, type Settings } from "./api";
   import { focus, setCards, setDim, setFocus } from "./focus";
   import { blockAt, currentView, extensions, insertSnippet, typeBackslash, openCover, pickNote, setNotes, setSource, setView } from "./editor";
   import { BACKSTAGE, type Act } from "./ribbon";
@@ -24,13 +24,15 @@
   import Pdf from "./Pdf.svelte";
   import Board from "./Board.svelte";
   import Notes from "./Notes.svelte";
+  import FileList from "./FileList.svelte";
+  import Temporary from "./Temporary.svelte";
 
   let {
     opened,
     settings,
     tr,
     close,
-  }: { opened: Opened; settings: Settings; tr: boolean; close: () => void } = $props();
+  }: { opened: Opened; settings: Settings; tr: boolean; close: (next?: string) => void } = $props();
 
   const THEMES = ["paper", "sepia", "night", "contrast", "dark"];
 
@@ -47,7 +49,10 @@
   let source = $state(false);
   let typewriter = $state(false);
   /// What stands beside the page.
-  let side = $state<"" | "pdf" | "notes" | "cast">("");
+  let side = $state<"" | "pdf" | "notes" | "cast" | "files">("");
+  let files = $state<Files | null>(null);
+  /// The temporary folder's warning, put away for this play.
+  let tempSeen = $state(false);
   let castRows = $state<CastEntry[]>([]);
   let castOthers = $state("");
   let sums = $state<Summary[]>([]);
@@ -134,6 +139,17 @@
     }
     where = [act, scene].filter(Boolean).join(" · ");
   }
+
+  // ------------------------------------------------------------ my files
+
+  async function loadFiles() {
+    files = await api.files(opened.path).catch((e) => (say(String(e), true), files));
+  }
+
+  // What was just built shows in the open panel.
+  $effect(() => {
+    if (side === "files" && !building && !casting) void loadFiles();
+  });
 
   // ------------------------------------------------------------ saving
 
@@ -517,7 +533,11 @@
   function key(id: string) {
     switch (id) {
       case "save":
-        save().then((ok) => ok && say(l("Kaydedildi.", "Saved.")));
+        save().then((ok) => {
+          if (!ok) return;
+          if (files?.temporary) say(l("Kaydedildi, ama bu klasör geçici: bilgisayar yeniden başlayınca silinebilir.", "Saved, but this folder is temporary: it may be erased when the computer restarts."), true);
+          else say(l("Kaydedildi.", "Saved."));
+        });
         break;
       case "build":
         build();
@@ -566,6 +586,11 @@
         break;
       case "notes":
         openNotes();
+        break;
+      case "files":
+        side = side === "files" ? "" : "files";
+        showNotes();
+        keepCursor();
         break;
       case "cast":
         openCast();
@@ -711,12 +736,13 @@
     }
   }
 
-  async function leave() {
+  /// Back to the start, or on to the play `next`.
+  async function leave(next?: string) {
     if (dirty && !(await save())) {
       if (!confirm(l("Kaydedilemedi. Yine de kapatayım mı?", "Couldn't save. Close anyway?"))) return;
     }
     await api.close();
-    close();
+    close(next);
   }
 
   function onkey(e: KeyboardEvent) {
@@ -809,6 +835,7 @@
 
   onMount(() => {
     document.documentElement.dataset.theme = theme;
+    void loadFiles();
     view = new EditorView({
       parent: host,
       state: EditorState.create({
@@ -887,6 +914,16 @@
     file={() => openBackstage("info")}
   />
 
+  {#if files?.temporary && !tempSeen}
+    <Temporary
+      {tr}
+      shown={files.folder.shown}
+      label={l("Nerede?", "Where is it?")}
+      act={() => side === "files" || key("files")}
+      dismiss={() => (tempSeen = true)}
+    />
+  {/if}
+
   <main class="body" class:split={side !== ""}>
     <div class="left">
       <div class="desk" class:gone={board || casting || memo} class:plain={!sheet} {onwheel}>
@@ -920,6 +957,17 @@
     </div>
     {#if side === "pdf"}
       <Pdf {tr} result={built} {building} close={() => (side = "")} {goto} {say} />
+    {:else if side === "files"}
+      <aside class="files">
+        <div class="head">
+          <strong>{l("Dosyalarım", "My files")}</strong>
+          <span class="grow"></span>
+          <button title={l("Kapat", "Close")} onclick={() => key("files")}>✕</button>
+        </div>
+        {#if files}
+          <div class="list"><FileList {tr} {files} open={leave} /></div>
+        {/if}
+      </aside>
     {:else if side === "cast"}
       <Cast
         {tr}
@@ -1149,6 +1197,37 @@
   }
   .body.split {
     grid-template-columns: minmax(0, 1fr) minmax(320px, 40%);
+  }
+  .files {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--chrome);
+    border-left: 1px solid var(--chrome-line);
+  }
+  .files .head {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--chrome-line);
+  }
+  .files .head button {
+    border: 1px solid var(--chrome-line);
+    background: var(--chrome);
+    border-radius: 4px;
+    width: 28px;
+    height: 24px;
+    cursor: pointer;
+  }
+  .files .grow {
+    flex: 1;
+  }
+  .files .list {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 8px 10px;
   }
   .left {
     position: relative;

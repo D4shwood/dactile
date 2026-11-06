@@ -3,8 +3,10 @@
   // left, tiles for a new play along the top, the plays below with a
   // preview of the one picked.
   import { untrack } from "svelte";
-  import { api, type Home, type PlayCard, type Preview, type Shown, type TemplateCard } from "./api";
+  import { api, type Files, type Home, type PlayCard, type Preview, type Shown, type TemplateCard } from "./api";
+  import FileList from "./FileList.svelte";
   import Import from "./Import.svelte";
+  import Temporary from "./Temporary.svelte";
 
   let { home, tr, open, reload }: { home: Home; tr: boolean; open: (path: string) => void; reload: () => Promise<void> } =
     $props();
@@ -13,6 +15,7 @@
   let section = $state<Section>("home");
   let chosen = $state<PlayCard | null>(null);
   let preview = $state<Preview | null>(null);
+  let files = $state<Files | null>(null);
   let making = $state<TemplateCard | null>(null);
   let title = $state("");
   let error = $state("");
@@ -40,7 +43,19 @@
   async function choose(p: PlayCard) {
     chosen = p;
     preview = null;
+    files = null;
+    api.files(p.path).then(
+      (f) => {
+        if (chosen === p) files = f;
+      },
+      (e) => (error = String(e)),
+    );
     preview = await api.preview(p.path).catch(() => null);
+  }
+
+  async function openFolder() {
+    error = "";
+    await api.launch(home.folder.path).catch((e) => (error = String(e)));
   }
 
   function startNew(t: TemplateCard) {
@@ -221,6 +236,9 @@
   </nav>
 
   <main>
+    {#if home.folder.temporary && section !== "settings" && section !== "keys"}
+      <Temporary {tr} shown={home.folder.shown} label={l("Oyunlar klasörünü değiştir", "Change the plays folder")} act={() => (section = "settings")} />
+    {/if}
     {#if section === "home" || section === "new"}
       <h1>{section === "home" ? l("İyi yazmalar", "Good writing") : l("Yeni oyun", "New play")}</h1>
       <div class="tiles" class:all={section === "new"}>
@@ -272,6 +290,18 @@
           {#if error}<span class="error">{error}</span>{/if}
         </form>
       {/if}
+    {/if}
+
+    {#if section === "home"}
+      <p class="folder">
+        <span>{l("Oyunlar klasörü", "Plays folder")}:</span>
+        {#if home.folder.exists}
+          <button class="link" title={home.folder.path} onclick={openFolder}>{home.folder.shown}</button>
+        {:else}
+          <span class="where" title={home.folder.path}>{home.folder.shown}</span>
+          <span class="muted">{l("henüz yok: ilk oyunla oluşur.", "not there yet: the first play makes it.")}</span>
+        {/if}
+      </p>
     {/if}
 
     {#if section === "home" || section === "open"}
@@ -370,6 +400,13 @@
                 </div>
               </form>
             {/if}
+            {#if files}
+              {#if files.temporary && !home.folder.temporary}
+                <Temporary {tr} shown={files.folder.shown} />
+              {/if}
+              <h3 class="fileshead">{l("Bu oyunun dosyaları", "This play's files")}</h3>
+              <FileList {tr} {files} {open} />
+            {/if}
             <div class="path">{chosen.path}</div>
           {/if}
         </aside>
@@ -417,6 +454,43 @@
 {/if}
 
 <style>
+  .folder {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    min-width: 0;
+    margin: 24px 0 0;
+    font-size: 13px;
+    color: var(--chrome-muted);
+  }
+  .folder > span:first-child {
+    flex: none;
+  }
+  .folder .link,
+  .folder .where {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .folder .link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--claret);
+    font: inherit;
+    cursor: pointer;
+  }
+  .folder .link:hover {
+    text-decoration: underline;
+  }
+  .folder .muted {
+    flex: none;
+  }
+  .fileshead {
+    margin: 16px 0 4px;
+    font-size: 13px;
+  }
   .tools {
     display: flex;
     flex-wrap: wrap;

@@ -114,13 +114,18 @@ pub fn list(cfg: &Config) -> Vec<Play> {
         }
     }
     out.sort_by_key(|p| std::cmp::Reverse(p.modified));
-    // Drafts made before the link was kept: `oyun-0.2.tex` of the same
-    // title next to `oyun.tex`.
-    for i in 0..out.len() {
-        if out[i].parent.is_some() {
+    link_old_drafts(&mut out);
+    out
+}
+
+/// Drafts made before the link was kept: `oyun-0.2.tex` of the same title
+/// next to `oyun.tex`.
+pub fn link_old_drafts(plays: &mut [Play]) {
+    for i in 0..plays.len() {
+        if plays[i].parent.is_some() {
             continue;
         }
-        let stem = out[i]
+        let stem = plays[i]
             .path
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
@@ -129,12 +134,14 @@ pub fn list(cfg: &Config) -> Vec<Play> {
         if base == stem {
             continue;
         }
-        let up = out[i].path.with_file_name(format!("{base}.tex"));
-        if out.iter().any(|p| p.path == up && p.title == out[i].title) {
-            out[i].parent = Some(up);
+        let up = plays[i].path.with_file_name(format!("{base}.tex"));
+        if plays
+            .iter()
+            .any(|p| p.path == up && p.title == plays[i].title)
+        {
+            plays[i].parent = Some(up);
         }
     }
-    out
 }
 
 /// A file name's stem without a draft number at its end:

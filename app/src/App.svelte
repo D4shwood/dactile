@@ -38,9 +38,10 @@
       {opened}
       settings={home.settings}
       {tr}
-      close={async () => {
+      close={async (next) => {
         opened = null;
         await reload();
+        if (next) await open(next);
       }}
     />
   {/key}

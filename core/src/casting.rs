@@ -86,15 +86,16 @@ pub fn roles(text: &str, doc: &Doc, table: &[Vec<Presence>], wpm: u32) -> Vec<Ro
 
 /// Where the table goes beside the play: `oyun-tablo.csv`.
 pub fn table_path(play: &std::path::Path, ext: &str) -> std::path::PathBuf {
+    table_path_in(play, ext, crate::lang::is_tr())
+}
+
+/// `table_path` in Turkish or in English.
+pub fn table_path_in(play: &std::path::Path, ext: &str, tr: bool) -> std::path::PathBuf {
     let stem = play
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_default();
-    let word = if crate::lang::is_tr() {
-        "tablo"
-    } else {
-        "table"
-    };
+    let word = if tr { "tablo" } else { "table" };
     play.with_file_name(format!("{stem}-{word}.{ext}"))
 }
 
@@ -360,15 +361,16 @@ pub fn copies(doc: &Doc, side: &Sidecar, table: &[Vec<Presence>]) -> Vec<ActorCo
 
 /// Where an actor's copies go: `oyun-kopyalar/` beside the play.
 pub fn copies_dir(play: &std::path::Path) -> std::path::PathBuf {
+    copies_dir_in(play, crate::lang::is_tr())
+}
+
+/// `copies_dir` in Turkish or in English.
+pub fn copies_dir_in(play: &std::path::Path, tr: bool) -> std::path::PathBuf {
     let stem = play
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_default();
-    let word = if crate::lang::is_tr() {
-        "kopyalar"
-    } else {
-        "copies"
-    };
+    let word = if tr { "kopyalar" } else { "copies" };
     play.with_file_name(format!("{stem}-{word}"))
 }
 

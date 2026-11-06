@@ -640,6 +640,15 @@ fn launch(path: String) -> Res<()> {
     dactile::build::launch(std::path::Path::new(&path)).map_err(err)
 }
 
+/// Where a play's things are. It reads the plays beside it: off the main
+/// thread.
+#[tauri::command]
+async fn files(path: String) -> Res<plays::Files> {
+    tauri::async_runtime::spawn_blocking(move || plays::files(std::path::Path::new(&path)))
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// A file selected in the desktop's file manager. It may wait for an answer
 /// over D-Bus: off the main thread.
 #[tauri::command]
@@ -753,6 +762,7 @@ pub fn run() {
             play_unlearn,
             launch,
             reveal,
+            files,
             notes_list,
             note_add,
             note_set,

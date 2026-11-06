@@ -33,10 +33,34 @@ export interface Settings {
   ribbon_folded: boolean;
 }
 
+export interface Folder {
+  path: string;
+  shown: string;
+  exists: boolean;
+  temporary: boolean;
+}
+
 export interface Home {
   plays: PlayCard[];
   templates: TemplateCard[];
   settings: Settings;
+  folder: Folder;
+}
+
+export interface Spot {
+  path: string;
+  /// `~/…`.
+  shown: string;
+  modified: number | null;
+}
+
+export interface Files {
+  folder: Spot;
+  pdf: Spot | null;
+  copies: (Spot & { pdfs: number }) | null;
+  table: Spot | null;
+  drafts: (Spot & { title: string; draft: string | null })[];
+  temporary: boolean;
 }
 
 export interface Preview {
@@ -226,6 +250,7 @@ export const api = {
   playUnlearn: (word: string) => invoke<void>("play_unlearn", { word }),
   launch: (path: string) => invoke<void>("launch", { path }),
   reveal: (path: string) => invoke<void>("reveal", { path }),
+  files: (path: string) => invoke<Files>("files", { path }),
 };
 
 export interface RoleRow {

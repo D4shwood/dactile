@@ -4,10 +4,99 @@
 use dactile::config::{Config, tilde};
 use dactile::lang;
 use dactile::library::{self, Play};
+use dactile::outputs;
 use dactile::trash::{self, Moved};
 use dactile::{file, info, sidecar::Sidecar, tex};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
+
+/// A file or a folder, as the window shows it.
+#[derive(Debug, Clone, Serialize)]
+pub struct Spot {
+    pub path: String,
+    /// `~/…`.
+    pub shown: String,
+    /// Seconds since 1970.
+    pub modified: Option<u64>,
+}
+
+fn spot(path: &Path, modified: Option<SystemTime>) -> Spot {
+    Spot {
+        path: path.display().to_string(),
+        shown: tilde(path),
+        modified: crate::play::secs(modified),
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct CopiesSpot {
+    #[serde(flatten)]
+    pub at: Spot,
+    pub pdfs: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DraftSpot {
+    #[serde(flatten)]
+    pub at: Spot,
+    pub title: String,
+    pub draft: Option<String>,
+}
+
+/// Where a play's things are, and whether it is somewhere temporary.
+#[derive(Debug, Clone, Serialize)]
+pub struct Files {
+    pub folder: Spot,
+    pub pdf: Option<Spot>,
+    pub copies: Option<CopiesSpot>,
+    pub table: Option<Spot>,
+    pub drafts: Vec<DraftSpot>,
+    pub temporary: bool,
+}
+
+pub fn files(play: &Path) -> Files {
+    let o = outputs::of(play);
+    let made = |m: outputs::Made| spot(&m.path, m.modified);
+    Files {
+        folder: spot(&o.folder, None),
+        pdf: o.pdf.map(made),
+        copies: o.copies.map(|c| CopiesSpot {
+            at: spot(&c.path, c.modified),
+            pdfs: c.pdfs,
+        }),
+        table: o.table.map(made),
+        drafts: o
+            .drafts
+            .into_iter()
+            .map(|d| DraftSpot {
+                at: spot(&d.path, d.modified),
+                title: d.title,
+                draft: d.draft,
+            })
+            .collect(),
+        temporary: outputs::is_temporary(play),
+    }
+}
+
+/// The plays folder, as the start screen shows it.
+#[derive(Debug, Clone, Serialize)]
+pub struct Folder {
+    pub path: String,
+    pub shown: String,
+    pub exists: bool,
+    pub temporary: bool,
+}
+
+pub fn folder(cfg: &Config) -> Folder {
+    let dir = cfg.plays_dir();
+    Folder {
+        path: dir.display().to_string(),
+        shown: tilde(&dir),
+        exists: dir.is_dir(),
+        temporary: outputs::is_temporary(&dir),
+    }
+}
 
 /// What a form starts from.
 #[derive(Debug, Clone, Serialize)]
@@ -196,6 +285,36 @@ mod tests {
     use super::*;
 
     const PLAY: &str = include_str!("../../../examples/ornek-oyun.tex");
+
+    #[test]
+    fn where_things_are() {
+        let dir = std::env::temp_dir().join(format!("dactile-files-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let src = dir.join("oyun.tex");
+        std::fs::write(&src, PLAY).unwrap();
+        let mut cfg = Config {
+            plays_dir: dir.display().to_string(),
+            ..Config::default()
+        };
+        make(&src, None, Some("0.2"), "oyun-0.2.tex", &mut cfg).unwrap();
+        std::fs::write(dir.join("oyun.pdf"), "x").unwrap();
+        let f = files(&src);
+        assert_eq!(f.folder.path, dir.display().to_string());
+        assert_eq!(
+            f.pdf.unwrap().path,
+            dir.join("oyun.pdf").display().to_string()
+        );
+        assert!(f.copies.is_none());
+        assert_eq!(f.drafts.len(), 1);
+        assert_eq!(f.drafts[0].draft.as_deref(), Some("0.2"));
+        assert!(f.temporary);
+        let shown = folder(&cfg);
+        assert!(shown.exists && shown.temporary);
+        // The window reads a draft's path at the top of it.
+        let json = serde_json::to_value(&f.drafts[0]).unwrap();
+        assert!(json["path"].is_string() && json["modified"].is_number());
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     #[test]
     fn a_draft_a_copy_and_a_new_name() {

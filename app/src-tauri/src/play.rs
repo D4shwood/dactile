@@ -58,13 +58,14 @@ pub struct Home {
     pub plays: Vec<PlayCard>,
     pub templates: Vec<TemplateCard>,
     pub settings: Settings,
+    pub folder: crate::plays::Folder,
 }
 
 pub fn lang_of(cfg: &Config) -> Lang {
     lang::resolve(&cfg.lang, None)
 }
 
-fn secs(t: Option<SystemTime>) -> Option<u64> {
+pub fn secs(t: Option<SystemTime>) -> Option<u64> {
     t?.duration_since(UNIX_EPOCH).ok().map(|d| d.as_secs())
 }
 
@@ -116,6 +117,7 @@ pub fn home(cfg: &Config) -> Home {
         plays,
         templates,
         settings: settings(cfg),
+        folder: crate::plays::folder(cfg),
     }
 }
 

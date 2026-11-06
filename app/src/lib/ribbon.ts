@@ -63,6 +63,8 @@ export const TABS: Tab[] = [
         b("Ara", "Search", "⌘", "Ctrl+K", k("search")),
         b("Komutlar", "Commands", "≡", "Ctrl+P", k("commands")),
       ]),
+      // Last in its tab: the letters before it stay the terminal app's.
+      g("Dosyalar", "Files", [b("Dosyalarım", "My files", "▱", "", k("files"))]),
     ],
   },
   {
@@ -183,6 +185,7 @@ export const BACKSTAGE: Entry[] = [
   { tr: "Bilgi", en: "Info", key: "", act: k("info") },
   { tr: "Kaydet", en: "Save", key: "Ctrl+S", act: k("save") },
   { tr: "PDF derle", en: "Build the PDF", key: "F5", act: k("build") },
+  { tr: "Dosyalarım", en: "My files", key: "", act: k("files") },
   { tr: "Oyun ayarları", en: "Play settings", key: "", act: k("play-settings") },
   { tr: "Şablon olarak kaydet", en: "Save as a template", key: "", act: k("save-template") },
   { tr: "Dağıtım ve oyuncu kopyaları", en: "Casting and actors' copies", key: "F9", act: k("casting") },
