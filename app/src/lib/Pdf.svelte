@@ -608,7 +608,10 @@
   /// Follows one drag to its end.
   function drag(e: PointerEvent, move: (m: PointerEvent) => void, up: (m: PointerEvent) => void) {
     const el = e.currentTarget as HTMLElement;
-    el.setPointerCapture(e.pointerId);
+    // A pointer already gone cannot be captured: the drag still ends on its "up".
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {}
     const end = (m: PointerEvent) => {
       el.removeEventListener("pointermove", move);
       el.removeEventListener("pointerup", end);
