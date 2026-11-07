@@ -43,6 +43,7 @@ enum Screen {
 /// goes straight to it, and quitting the writer then quits the app.
 pub fn run(start: Start) -> Result<()> {
     let mut cfg = Config::load()?;
+    dactile::import::ocr::sweep_scratch();
     let first_run = !Config::exists();
     let direct = matches!(start, Start::Play(_)) && !first_run;
     let mut screen = match start {
@@ -143,6 +144,7 @@ pub fn run(start: Start) -> Result<()> {
         let _ = w.close();
         let _ = remember(w, &mut cfg);
     }
+    dactile::import::ocr::remove_scratch();
     let _ = execute!(stdout(), DisableBracketedPaste, DisableMouseCapture);
     ratatui::restore();
     result
