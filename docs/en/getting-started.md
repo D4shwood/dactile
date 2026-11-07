@@ -73,6 +73,11 @@ From the command line:
 dactile-light pdf oyun.tex --open
 ```
 
+For a Word document: **Home › Export to Word** in Dactile, "Export to Word" on Ctrl+P
+in Dactile Light, `dactile-light docx oyun.tex` on the command line. It lands next to
+the play; someone else's document of that name stays. Footnotes stay in the text, in
+brackets.
+
 If it fails, see [Troubleshooting](troubleshooting.md).
 
 ## Next

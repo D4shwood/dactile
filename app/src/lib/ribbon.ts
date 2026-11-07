@@ -64,7 +64,10 @@ export const TABS: Tab[] = [
         b("Komutlar", "Commands", "≡", "Ctrl+P", k("commands")),
       ]),
       // Last in its tab: the letters before it stay the terminal app's.
-      g("Dosyalar", "Files", [b("Dosyalarım", "My files", "▱", "", k("files"))]),
+      g("Dosyalar", "Files", [
+        b("Dosyalarım", "My files", "▱", "", k("files")),
+        b("Word olarak ver", "Export to Word", "⇱", "", k("docx")),
+      ]),
     ],
   },
   {

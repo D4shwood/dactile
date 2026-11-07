@@ -331,6 +331,17 @@ impl Writer {
             }
             PAct::Board => self.open_board(),
             PAct::NotesPdf => self.notes_pdf(),
+            PAct::Docx => match dactile::word::export(&self.path, &self.buf.text) {
+                Ok(p) => {
+                    let said = lang::f(
+                        "Word belgesi yazıldı: {}",
+                        "Word document written: {}",
+                        &[&p.display()],
+                    );
+                    self.say(&said, false);
+                }
+                Err(e) => self.say(&e.to_string(), true),
+            },
             PAct::NotesPaste => {
                 let text = self
                     .clipboard

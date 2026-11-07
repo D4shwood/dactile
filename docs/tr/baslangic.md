@@ -73,6 +73,11 @@ Komut satırından:
 dactile-light pdf oyun.tex --open
 ```
 
+Word belgesi için Dactile'da **Giriş › Word olarak ver**, Dactile Light'ta Ctrl+P
+ile "Word olarak ver", komut satırında `dactile-light docx oyun.tex`. Belge oyunun
+yanına yazılır; başkasının aynı adlı belgesi ezilmez. Dipnotlar köşeli parantezle
+metinde kalır.
+
 Hata çıkarsa [Sorun giderme](sorun-giderme.md) sayfasına bak.
 
 ## Sonra

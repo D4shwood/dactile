@@ -15,6 +15,7 @@ pub enum PAct {
     Board,
     Memorize,
     NotesPdf,
+    Docx,
     NotesPaste,
     NotesFile,
     About,

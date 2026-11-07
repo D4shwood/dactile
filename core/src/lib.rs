@@ -33,6 +33,7 @@ pub mod templates;
 pub mod tex;
 pub mod timing;
 pub mod trash;
+pub mod word;
 pub mod writing;
 
 /// The tiyatro class files, carried inside the app so a play needs nothing

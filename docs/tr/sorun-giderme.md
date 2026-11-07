@@ -67,5 +67,6 @@ sekmesinde elle işaretle.
 | `dactile-light outline oyun.tex` | Perde ve sahneleri listeler |
 | `dactile-light check oyun.tex` | XeLaTeX'i durduracakları listeler |
 | `dactile-light pdf oyun.tex` | PDF derler, `--open` ile açar |
+| `dactile-light docx oyun.tex` | Word belgesi yazar |
 | `dactile-light import DOSYA` | İçe aktarır |
 | `dactile-light book kitap.tex` | Kitabı tek PDF yapar |

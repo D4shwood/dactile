@@ -66,5 +66,6 @@ hand under Document.
 | `dactile-light outline oyun.tex` | Lists acts and scenes |
 | `dactile-light check oyun.tex` | Lists what would stop XeLaTeX |
 | `dactile-light pdf oyun.tex` | Builds the PDF; `--open` opens it |
+| `dactile-light docx oyun.tex` | Writes a Word document |
 | `dactile-light import FILE` | Imports a file |
 | `dactile-light book kitap.tex` | Builds a book as one PDF |

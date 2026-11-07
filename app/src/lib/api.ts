@@ -269,6 +269,7 @@ export const api = {
     invoke<{ at: number; title: string; text: string }>("summary_here", { text, at }),
   summarySet: (text: string, at: number, summary: string) =>
     invoke<Change | null>("summary_set", { text, at, summary }),
+  docxExport: (path: string, text: string) => invoke<string>("docx_export", { path, text }),
   sceneAlignNext: (text: string) => invoke<Made>("scene_align_next", { text }),
   sceneSplit: (text: string, at: number) => invoke<Made>("scene_split", { text, at }),
   sceneJoin: (text: string, at: number) => invoke<Made>("scene_join", { text, at }),

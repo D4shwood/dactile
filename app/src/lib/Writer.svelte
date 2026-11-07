@@ -610,6 +610,12 @@
         source = !source;
         view.dispatch({ effects: setSource.of(source) });
         break;
+      case "docx":
+        api
+          .docxExport(opened.path, view.state.doc.toString())
+          .then((p) => say(l(`Word belgesi yazıldı: ${p}`, `Word document written: ${p}`)))
+          .catch((e) => say(String(e), true));
+        break;
       case "scene-align":
         if (!opened.read_only) void castCall(() => api.sceneAlignNext(view.state.doc.toString()));
         break;

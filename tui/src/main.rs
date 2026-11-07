@@ -63,6 +63,8 @@ enum Cmd {
     /// Builds a book as one PDF: a cover, the contents, its plays.
     Book { book: PathBuf },
     /// Builds a play's PDF next to it, in one XeLaTeX run.
+    /// Writes a play as a Word document next to it
+    Docx { play: PathBuf },
     Pdf {
         play: PathBuf,
         /// Open it in the desktop's viewer afterwards.
@@ -88,6 +90,11 @@ fn main() -> Result<()> {
             if found.is_empty() {
                 println!("Temiz.");
             }
+            Ok(())
+        }
+        Some(Cmd::Docx { play }) => {
+            let text = std::fs::read_to_string(&play)?;
+            println!("{}", dactile::word::export(&play, &text)?.display());
             Ok(())
         }
         Some(Cmd::Pdf { play, open }) => {

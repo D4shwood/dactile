@@ -381,6 +381,7 @@ pub fn backstage() -> Vec<(&'static str, &'static str, &'static str, PAct)> {
             "",
             PAct::NotesPdf,
         ),
+        ("Word olarak ver", "Export to Word", "", PAct::Docx),
         (
             "Şablon olarak kaydet",
             "Save as a template",
@@ -1167,6 +1168,10 @@ impl Writer {
                     PAct::Key(KeyCode::F(9), _) => lang::l(
                         "Kim kimi oynuyor, sahne/rol tablosu; oradan her oyuncuya kendi kopyası.",
                         "Who plays whom, the scene/role table; from there each actor's own copy.",
+                    ),
+                    PAct::Docx => lang::l(
+                        "Oyunu oyunun yanına bir .docx olarak yazar; başkasının belgesi ezilmez.",
+                        "Writes the play next to it as a .docx; someone else's document stays.",
                     ),
                     PAct::NotesPdf => lang::l(
                         "Açık notlar kenarda, hepsinin listesi sonda, ayrı bir PDF.",
