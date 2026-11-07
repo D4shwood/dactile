@@ -243,8 +243,8 @@ to take and make them together (`--all` on the command line, `--play` for one).
 A play found wrongly goes back into the one before it, and a new one can be
 started by hand at any paragraph.
 
-Plays made together can stand under one book (`--book TITLE`), shown as a tree
-on the home screen, and the pages around them can come in too (`--front`).
+Plays made together can stand under one book (`--book TITLE`), a tree on
+Dactile's start screen, and the pages around them can come in too (`--front`).
 The book builds as one PDF with a cover and contents, each play in it
 (`dactile-light book kitap.tex`).
 

@@ -242,8 +242,8 @@ birlikte oluşturursun (komut satırında `--all`, tek oyun için `--play`). Yan
 bulunan oyun bir öncekine katılır, yeni bir oyun da herhangi bir paragraftan elle
 başlatılır.
 
-Birlikte oluşturulan oyunlar tek kitap altında durabilir (`--book BAŞLIK`), ana
-ekranda ağaç gibi görünür; çevrelerindeki sayfalar da alınabilir (`--front`).
+Birlikte oluşturulan oyunlar tek kitap altında durabilir (`--book BAŞLIK`), Dactile'ın
+başlangıç ekranında ağaç gibi görünür; çevrelerindeki sayfalar da alınabilir (`--front`).
 Kitap, kapağı ve içindekileriyle tek PDF olur (`dactile-light book kitap.tex`).
 
 Okumanın yanlış çıkardığı kişi sayfası elle seçilir, liste de metin olarak, her
