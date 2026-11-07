@@ -372,6 +372,9 @@ export interface Shown {
   play: { kind: string; who: string | null; text: string }[];
   more: number;
   ocr: boolean;
+  cast_text: string;
+  silent: string[];
+  missing: string[];
   plays: string[];
   picked: number | null;
 }
@@ -401,7 +404,9 @@ export type ImportEdit =
   | { kind: "start"; i: number }
   | { kind: "end"; i: number }
   | { kind: "add-play"; i: number; title: string }
-  | { kind: "drop-play"; i: number };
+  | { kind: "drop-play"; i: number }
+  | { kind: "cast-page"; from: number; to: number }
+  | { kind: "cast-list"; text: string };
 
 export interface FormStart {
   title: string;

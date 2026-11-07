@@ -156,7 +156,27 @@
   };
 
   let doc = $state<{ text: string; page: string | null }[]>([]);
-  let tab = $state<"doc" | "play">("doc");
+  let tab = $state<"doc" | "cast" | "play">("doc");
+  /// The list being written, until it is put in.
+  let castText = $state("");
+
+  function toCast() {
+    castText = s.cast_text;
+    tab = "cast";
+  }
+
+  async function castPage() {
+    if (!sel) return;
+    await edit({ kind: "cast-page", from: lo, to: hi });
+    toCast();
+  }
+
+  const putCast = () => edit({ kind: "cast-list", text: castText });
+
+  async function nextPlay() {
+    await openPlay(((s.picked ?? -1) + 1) % s.plays.length);
+    if (tab === "cast") toCast();
+  }
   /// The paragraphs chosen: from where it was started to where it reached.
   let sel = $state<{ a: number; b: number } | null>(null);
   /// Marking a part goes on to the next, as replacing does in a search.
@@ -262,6 +282,7 @@
     <span class="muted">{file}</span>
     {#if s.plays.length > 1 && !overview}
       <button onclick={toOverview}>{l("Cilt", "Volume")}</button>
+      <button onclick={nextPlay}>{l("Sonraki oyun", "Next play")}</button>
       <label class="muted">
         {l("Bu ciltte", "In this volume")}
         <select value={s.picked} onchange={pickPlay}>
@@ -433,6 +454,7 @@
     <div class="right">
       <div class="tabs">
         <button class:on={tab === "doc"} onclick={() => (tab = "doc")}>{l("Belge", "Document")}</button>
+        <button class:on={tab === "cast"} onclick={toCast}>{l("Kişi listesi", "Cast list")}</button>
         <button class:on={tab === "play"} onclick={() => (tab = "play")}>{l("Oyun", "Play")}</button>
         <span class="grow"></span>
         <button title="Shift+F3" onclick={() => step(-1)}>← {l("Önceki", "Previous")}</button>
@@ -444,6 +466,10 @@
             <span class="muted">{l(`${hi - lo + 1} paragraf seçili`, `${hi - lo + 1} paragraphs chosen`)}</span>
             <button class="primary" onclick={startHere}>{l("Oyun buradan başlıyor", "The play starts here")}</button>
             <button onclick={endHere}>{l("Oyun burada bitiyor", "The play ends here")}</button>
+            <button
+              title={l("Seçili paragraflar kişi sayfası sayılır, listesi onlardan çıkarılır", "The chosen paragraphs are the cast page, and a list is made from them")}
+              onclick={castPage}>{l("Kişi sayfası bu", "This is the cast page")}</button
+            >
             {#if naming === null}
               <button onclick={() => (naming = doc[lo]?.text.split("\n")[0] ?? "")}>
                 {l("Burada yeni oyun başlıyor", "A new play starts here")}
@@ -477,6 +503,30 @@
             <p data-i={i} class={s.labels[i]} class:on={i >= lo && i <= hi} onclick={(e) => pick(i, e)}>{p.text}</p>
           {/each}
         </div>
+      {:else if tab === "cast"}
+        <div class="castlist">
+          <p class="muted">
+            {l(
+              "Her satırda bir kişi. Kişi sayfasını Belge'de seçip \"Kişi sayfası bu\" dersen liste oradan çıkar; burada düzelt.",
+              "A person a line. Choose the cast page under Document and say \"This is the cast page\" for a list from it; put it right here.",
+            )}
+          </p>
+          <pre class="muted syntax">{l(
+              "AD | hakkında not\nLİSTEDEKİ AD = REPLİKTEKİ AD | not\n+ yalnızca toplu anılanlar\n# yorum",
+              "NAME | a note on them\nNAME ON THE LIST = NAME OVER THE LINES | note\n+ those named only in a group\n# a comment",
+            )}</pre>
+          <textarea aria-label={l("Kişi listesi", "Cast list")} spellcheck="false" bind:value={castText}></textarea>
+          <div class="castfoot">
+            <button class="primary" disabled={castText === s.cast_text} onclick={putCast}>{l("Uygula", "Put it in")}</button>
+            <button disabled={castText === s.cast_text} onclick={() => (castText = s.cast_text)}>{l("Geri al", "Undo")}</button>
+          </div>
+          {#if s.silent.length}
+            <p class="muted"><b>{l("Listede ama hiç konuşmuyor", "Listed, never speaks")}:</b> {s.silent.join(", ")}</p>
+          {/if}
+          {#if s.missing.length}
+            <p class="muted"><b>{l("Konuşuyor ama listede yok", "Speaks, not listed")}:</b> {s.missing.join(", ")}</p>
+          {/if}
+        </div>
       {:else}
         <div class="reading">
           <div class="column">
@@ -498,6 +548,33 @@
 </div>
 
 <style>
+  .castlist {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+  }
+  .castlist p {
+    margin: 0;
+  }
+  .castlist .syntax {
+    margin: 0;
+    font: 12px/1.4 var(--mono);
+  }
+  .castlist textarea {
+    flex: 1;
+    min-height: 260px;
+    resize: none;
+    padding: 8px;
+    font: 13px/1.5 var(--mono);
+  }
+  .castfoot {
+    display: flex;
+    gap: 8px;
+  }
   .volume {
     flex: 1;
     min-height: 0;

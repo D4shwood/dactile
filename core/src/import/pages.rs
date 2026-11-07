@@ -651,6 +651,85 @@ pub(super) fn attach_notes<'a>(paras: &mut [Para], notes: &[&'a Para]) -> Vec<&'
     placed
 }
 
+/// A word of a name in capitals, as a book's cast page has it.
+fn caps_word(w: &str) -> bool {
+    let w = w.trim_matches([',', ':', ';', '.']);
+    w.chars().any(char::is_uppercase) && !w.chars().any(char::is_lowercase)
+}
+
+/// A first reading of a cast page, for the user to put right: a name and
+/// what is said of them, a line each, and "+" for those the list only
+/// names in a group. Who played the parts stays out of it, and a page laid
+/// out in columns comes apart, so this is a start, not the answer.
+pub fn cast_guess(paras: &[Para]) -> String {
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    let mut others = Vec::new();
+    for p in paras {
+        let text = p.text();
+        let t = text.trim();
+        if t.starts_with('(') || (t.ends_with(':') && t.split_whitespace().count() > 6) {
+            continue;
+        }
+        // "SOLDIERS, WORKERS, GUARDS: who played them".
+        if let Some((head, _)) = t.split_once(':')
+            && head.contains(',')
+            && head.split_whitespace().all(caps_word)
+        {
+            others.push(format!(
+                "+ {}",
+                head.split_whitespace().collect::<Vec<_>>().join(" ")
+            ));
+            continue;
+        }
+        for run in &p.runs {
+            for piece in run.text.split('\n').flat_map(|l| l.split("   ")) {
+                let words: Vec<&str> = piece.split_whitespace().collect();
+                let mut i = 0;
+                while i < words.len() {
+                    if !caps_word(words[i]) {
+                        i += 1;
+                        continue;
+                    }
+                    let start = i;
+                    let mut stop = false;
+                    while i < words.len() && !stop {
+                        let w = words[i];
+                        let number = i > start && w.chars().all(|c| c.is_ascii_digit() || c == ',');
+                        if !caps_word(w) && !number {
+                            break;
+                        }
+                        stop = w.ends_with([',', ':']);
+                        i += 1;
+                    }
+                    let name = words[start..i].join(" ");
+                    let name = name.trim_end_matches([',', ':', '.']).to_string();
+                    let first = i;
+                    // What is said of them: slanted, or starting small.
+                    let said = words.get(i).is_some_and(|w| {
+                        run.italic || w.chars().next().is_some_and(char::is_lowercase)
+                    });
+                    if said {
+                        while i < words.len() && !caps_word(words[i]) {
+                            i += 1;
+                        }
+                    }
+                    if name.chars().count() < 2 || book_word(&name) || !seen.insert(fold(&name)) {
+                        continue;
+                    }
+                    out.push(if i > first {
+                        format!("{name} | {}", words[first..i].join(" "))
+                    } else {
+                        name
+                    });
+                }
+            }
+        }
+    }
+    out.extend(others);
+    out.join("\n")
+}
+
 /// A play of a volume of several: its title, where its title page starts,
 /// and the first paragraph after that page.
 #[derive(Debug, Clone, PartialEq)]

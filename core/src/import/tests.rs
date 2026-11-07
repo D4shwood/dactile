@@ -683,3 +683,79 @@ fn what_was_put_right_stays_with_its_play() {
     assert_eq!(both[0].title, "Düzeltilmiş");
     assert_eq!(both[1].title, "Yol");
 }
+
+/// A cast page of a first production: names, who played them, notes.
+fn premiere_page() -> Vec<Para> {
+    [
+        "KAR MASALI was first seen at a small stage with the following cast:",
+        "SELİN                                   Deniz Kaya",
+        "OZAN, later a doctor                    Ali Veli",
+        "ASKER 1 at the door                     Can Er",
+        "HAMAL                                   Ece Su",
+        "SOLDIERS, WORKERS, GUARDS: Can Er, Ece Su",
+    ]
+    .iter()
+    .map(|t| Para::plain(t))
+    .collect()
+}
+
+#[test]
+fn a_first_reading_of_a_cast_page_leaves_the_actors_out() {
+    assert_eq!(
+        pages::cast_guess(&premiere_page()),
+        "SELİN\nOZAN | later a doctor\nASKER 1 | at the door\nHAMAL\n+ SOLDIERS, WORKERS, GUARDS"
+    );
+}
+
+#[test]
+fn the_cast_by_hand_decides_order_notes_and_the_silent() {
+    let text = "I. PERDE\n\nSELİN: Bir.\n\nOZAN: İki.\n\nSELİN: Üç.\n\nOZAN: Dört.\n";
+    let mut d = shape::shape(&plain::read(text, false), Lang::Tr);
+    d.set_cast("OZAN | köylü\nHAMAL | hiç konuşmaz\nSELİN\n+ Askerler, köylüler");
+    let names: Vec<&str> = d
+        .cast()
+        .into_iter()
+        .map(|i| d.people[i].name.as_str())
+        .collect();
+    assert_eq!(names, ["OZAN", "HAMAL", "SELİN"]);
+    assert_eq!(d.others, "Askerler, köylüler");
+    let tex = d.tex();
+    assert!(tex.contains("\\karakter[köylü]{OZAN}"), "{tex}");
+    assert!(tex.contains("\\karakter[hiç konuşmaz]{HAMAL}"), "{tex}");
+    assert_eq!(d.cast_check(), (vec!["HAMAL".to_string()], Vec::new()));
+    d.set_cast("OZAN");
+    assert_eq!(d.cast_check().1, ["SELİN"]);
+    assert_eq!(d.counts().lines, 4);
+}
+
+#[test]
+fn a_cast_by_hand_stays_when_the_play_is_read_again() {
+    let text = "Bir not\n\nI. PERDE\n\nSELİN: Bir.\n\nOZAN: İki.\n\nSELİN: Üç.\n\nOZAN: Dört.\n";
+    let mut d = shape::shape(&plain::read(text, false), Lang::Tr);
+    d.set_cast("OZAN | köylü\nHAMAL");
+    d.mark(0, 0, pages::Page::Other);
+    assert_eq!(d.cast_text(), "OZAN | köylü\nHAMAL");
+    assert!(d.tex().contains("\\karakter[köylü]{OZAN}"));
+    assert!(d.tex().contains("{HAMAL}"));
+}
+
+#[test]
+fn a_name_on_the_list_goes_with_the_shorter_one_that_speaks() {
+    let text = "I. PERDE\n\nDÜK. Bir.\n\nOZAN. İki.\n\nDÜK. Üç.\n\nOZAN. Dört.\n";
+    let mut d = shape::shape(&plain::read(text, false), Lang::Tr);
+    let page = [Para::plain("KUZEY DÜK"), Para::plain("OZAN")];
+    d.source.paras.extend(page);
+    d.labels.extend([pages::Page::Other, pages::Page::Other]);
+    let n = d.source.paras.len();
+    d.mark_cast(n - 2, n - 1);
+    assert!(
+        d.cast_text().contains("KUZEY DÜK = DÜK"),
+        "{}",
+        d.cast_text()
+    );
+    assert!(
+        d.tex().contains("\\karakter[KUZEY DÜK][]{DÜK}"),
+        "{}",
+        d.tex()
+    );
+}

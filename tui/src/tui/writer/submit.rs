@@ -135,6 +135,7 @@ impl Writer {
             | FormKind::ImportPerson(_)
             | FormKind::ImportInfo
             | FormKind::ImportPlay(_)
+            | FormKind::ImportCastLine(_)
             | FormKind::Settings
             | FormKind::Copy(_)
             | FormKind::Fork(_)

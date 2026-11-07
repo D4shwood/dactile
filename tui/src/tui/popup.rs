@@ -124,6 +124,8 @@ pub enum FormKind {
     ImportPerson(usize),
     /// The title and author in the import's preview.
     ImportInfo,
+    /// A line of the import's cast list; none, a new one.
+    ImportCastLine(Option<usize>),
     /// The name of a new play of a volume, starting at this paragraph.
     ImportPlay(usize),
     /// A copy of this play under a new title.

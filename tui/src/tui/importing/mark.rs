@@ -351,6 +351,11 @@ impl Marking {
         self.lo()
     }
 
+    /// The last paragraph chosen.
+    pub(super) fn end(&self) -> usize {
+        self.hi()
+    }
+
     pub(super) fn ranging(&self) -> bool {
         self.ranging
     }

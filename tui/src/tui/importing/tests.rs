@@ -86,9 +86,11 @@ fn tab_goes_round_the_views() {
     press(&mut p, KeyCode::Tab);
     assert!(p.view == View::Play);
     press(&mut p, KeyCode::Tab);
+    assert!(p.view == View::Cast);
+    press(&mut p, KeyCode::Tab);
     assert!(p.view == View::People);
     press(&mut p, KeyCode::BackTab);
-    assert!(p.view == View::Play);
+    assert!(p.view == View::Cast);
 }
 
 #[test]
@@ -173,7 +175,7 @@ fn parts_are_stepped_through_and_going_on_can_be_turned_off() {
 #[test]
 fn small_screens_do_not_panic() {
     let mut p = preview(&book());
-    for _ in 0..3 {
+    for _ in 0..4 {
         for (w, h) in [(120, 40), (80, 24), (41, 13), (30, 8), (10, 4)] {
             screen(&p, w, h);
         }
@@ -194,6 +196,7 @@ fn the_play_view_stops_at_as_many_lines_as_it_shows() {
         .collect();
     let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
     let mut p = preview(&source(&refs));
+    press(&mut p, KeyCode::BackTab);
     press(&mut p, KeyCode::BackTab);
     press(&mut p, KeyCode::End);
     let s = screen(&p, 100, 30);
@@ -448,4 +451,18 @@ fn small_screens_show_a_volume() {
     for (w, h) in [(20, 5), (40, 8), (80, 12)] {
         screen(&p, w, h);
     }
+}
+
+#[test]
+fn the_cast_list_is_put_right_a_line_at_a_time() {
+    let mut p = preview(&book());
+    for _ in 0..3 {
+        press(&mut p, KeyCode::Tab);
+    }
+    assert!(p.view == View::Cast);
+    let before = p.draft.cast_text().lines().count();
+    press(&mut p, KeyCode::Char('x'));
+    assert_eq!(p.draft.cast_text().lines().count(), before - 1);
+    assert!(screen(&p, 100, 30).contains("x"));
+    screen(&p, 30, 8);
 }

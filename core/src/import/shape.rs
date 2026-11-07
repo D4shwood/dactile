@@ -69,6 +69,10 @@ pub struct Draft {
     pub asides: Vec<Aside>,
     /// Those the cast page has under its list.
     pub others: String,
+    /// The cast as it was written by hand, a person a line; see `set_cast`.
+    pub cast_list: Option<String>,
+    /// Who that list has, in its order.
+    order: Vec<String>,
     /// Which play of a volume this is.
     pub play: Option<usize>,
     /// The volume's other plays as they were left, corrections and all.
@@ -1020,6 +1024,8 @@ fn shape_as(src: &Source, lang: Lang, labels: Vec<Page>) -> Draft {
     items_all.extend(items);
     let mut d = Draft {
         left: Vec::new(),
+        cast_list: None,
+        order: Vec::new(),
         title,
         author,
         people: sh.people,
@@ -1194,14 +1200,192 @@ impl Draft {
 
     /// The people the play declares: speaking, not merged away, characters.
     pub fn cast(&self) -> Vec<usize> {
-        (0..self.people.len())
+        let place = |i: usize| {
+            let k = key(&self.people[i].name);
+            self.order.iter().position(|n| *n == k)
+        };
+        let mut all: Vec<usize> = (0..self.people.len())
             .filter(|&i| {
                 let p = &self.people[i];
                 p.merged_into.is_none()
                     && !p.not_character
-                    && (self.lines_of(i) > 0 || p.desc.is_some() || p.full.is_some())
+                    && (self.lines_of(i) > 0
+                        || p.desc.is_some()
+                        || p.full.is_some()
+                        || place(i).is_some())
             })
-            .collect()
+            .collect();
+        all.sort_by_key(|&i| place(i).unwrap_or(usize::MAX));
+        all
+    }
+
+    /// The cast a person a line, to edit: `NAME | what is said of them`,
+    /// `NAME ON THE LIST = NAME OVER THEIR LINES`, and `+ those named only in
+    /// a group`.
+    pub fn cast_text(&self) -> String {
+        if let Some(t) = &self.cast_list {
+            return t.clone();
+        }
+        let mut out: Vec<String> = self
+            .cast()
+            .into_iter()
+            .map(|i| {
+                let p = &self.people[i];
+                let name = match p.full.as_deref().filter(|f| key(f) != key(&p.name)) {
+                    Some(f) => format!("{f} = {}", p.name),
+                    None => p.name.clone(),
+                };
+                match &p.desc {
+                    Some(d) => format!("{name} | {d}"),
+                    None => name,
+                }
+            })
+            .collect();
+        if !self.others.is_empty() {
+            out.push(format!("+ {}", self.others));
+        }
+        out.join("\n")
+    }
+
+    /// The cast by hand: it decides the order, who is listed though they
+    /// never speak, and what is said of each. Those who speak stay in the
+    /// play whether it has them or not.
+    pub fn set_cast(&mut self, text: &str) {
+        self.cast_list = Some(text.to_string());
+        self.apply_cast();
+    }
+
+    fn apply_cast(&mut self) {
+        let Some(text) = self.cast_list.clone() else {
+            return;
+        };
+        for i in 0..self.people.len() {
+            self.people[i].desc = None;
+            if self.lines_of(i) == 0 {
+                self.people[i].full = None;
+            }
+        }
+        self.order.clear();
+        let mut others = Vec::new();
+        for line in text.lines().map(str::trim) {
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if let Some(group) = line.strip_prefix('+') {
+                others.push(group.trim().to_string());
+                continue;
+            }
+            let (name, said) = match line.split_once('|') {
+                Some((n, s)) => (n.trim(), Some(s.trim()).filter(|s| !s.is_empty())),
+                None => (line, None),
+            };
+            let (full, name) = match name.split_once(" = ") {
+                Some((f, n)) => (Some(f.trim()), n.trim()),
+                None => (None, name),
+            };
+            if name.is_empty() {
+                continue;
+            }
+            let k = key(&upper_tr(name));
+            let i = self
+                .people
+                .iter()
+                .position(|p| key(&p.name) == k || fold(&p.name) == fold(name))
+                .unwrap_or_else(|| {
+                    self.people.push(Person {
+                        name: upper_tr(name),
+                        full: None,
+                        desc: None,
+                        alias: String::new(),
+                        lines: 0,
+                        sample: String::new(),
+                        not_character: false,
+                        merged_into: None,
+                        found: k.clone(),
+                        listed: true,
+                    });
+                    let i = self.people.len() - 1;
+                    self.fresh_alias(i);
+                    i
+                });
+            let i = self.owner(i);
+            self.people[i].listed = true;
+            self.people[i].not_character = false;
+            self.people[i].desc = said.map(str::to_string);
+            if let Some(f) = full {
+                self.people[i].full = Some(f.to_string());
+            }
+            self.order.push(key(&self.people[i].name));
+        }
+        self.others = others.join(" ");
+    }
+
+    /// An alias unlike anyone else's.
+    fn fresh_alias(&mut self, i: usize) {
+        let others: String = (0..self.people.len())
+            .filter(|&j| j != i)
+            .map(|j| format!("\\karakter{{X}}{{{}}}\n", self.people[j].alias))
+            .collect();
+        self.people[i].alias =
+            Cast::parse(&others, 0..others.len()).suggest_alias(&self.people[i].name);
+    }
+
+    /// These paragraphs are the cast page: what they say is a first list.
+    pub fn mark_cast(&mut self, from: usize, to: usize) {
+        let end = (to + 1).min(self.source.paras.len());
+        if from >= end {
+            return;
+        }
+        let guess = pages::cast_guess(&self.source.paras[from..end]);
+        self.cast_list = None;
+        self.mark(from, to, Page::Cast);
+        self.set_cast(&guess);
+        let linked = self.link_names(&guess);
+        self.set_cast(&linked);
+    }
+
+    /// A list's DUKE OF CORNWALL who never speaks, where CORNWALL speaks and
+    /// isn't on it: one person, if nobody else could be.
+    fn link_names(&self, list: &str) -> String {
+        let (silent, missing) = self.cast_check();
+        // Two on the list who could be the same speaker: left for the user.
+        let claims = |speaker: &str| {
+            let tail = format!(" {speaker}");
+            silent.iter().filter(|s| s.ends_with(&tail)).count()
+        };
+        let lines = list.lines().map(|line| {
+            let (name, rest) = match line.split_once(" | ") {
+                Some((n, r)) => (n, format!(" | {r}")),
+                None => (line, String::new()),
+            };
+            let ends = |s: &&String| name.ends_with(&format!(" {s}"));
+            let found: Vec<&String> = missing.iter().filter(ends).collect();
+            match found[..] {
+                [speaker] if silent.iter().any(|s| s == name) && claims(speaker) == 1 => {
+                    format!("{name} = {speaker}{rest}")
+                }
+                _ => line.to_string(),
+            }
+        });
+        lines.collect::<Vec<_>>().join("\n")
+    }
+
+    /// What to look at in the list by hand: those on it who never speak,
+    /// and those who speak and aren't on it.
+    pub fn cast_check(&self) -> (Vec<String>, Vec<String>) {
+        let silent = self
+            .cast()
+            .into_iter()
+            .filter(|&i| self.lines_of(i) == 0)
+            .map(|i| self.people[i].name.clone())
+            .collect();
+        let missing = self
+            .cast()
+            .into_iter()
+            .filter(|&i| self.lines_of(i) > 0 && !self.order.contains(&key(&self.people[i].name)))
+            .map(|i| self.people[i].name.clone())
+            .collect();
+        (silent, missing)
     }
 
     /// Fresh aliases for everyone, in order, each unlike the others.
@@ -1377,12 +1561,7 @@ impl Draft {
         for i in 0..d.people.len() {
             let alias = d.people[i].alias.clone();
             if d.alias_problem(i, &alias).is_some() {
-                let others: String = (0..d.people.len())
-                    .filter(|&j| j != i)
-                    .map(|j| format!("\\karakter{{X}}{{{}}}\n", d.people[j].alias))
-                    .collect();
-                d.people[i].alias =
-                    Cast::parse(&others, 0..others.len()).suggest_alias(&d.people[i].name);
+                d.fresh_alias(i);
             }
         }
         if self.title != self.found.0 {
@@ -1391,7 +1570,11 @@ impl Draft {
         if self.author != self.found.1 {
             d.author = std::mem::take(&mut self.author);
         }
+        d.cast_list = self.cast_list.take();
+        d.left = std::mem::take(&mut self.left);
+        d.play = self.play;
         *self = d;
+        self.apply_cast();
     }
 
     /// The play as it will be written: the asides kept, around its items.

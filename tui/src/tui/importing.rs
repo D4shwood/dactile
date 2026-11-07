@@ -64,6 +64,8 @@ enum View {
     People,
     Document,
     Play,
+    /// The cast a person a line, to put right.
+    Cast,
 }
 
 pub struct Preview {
@@ -74,6 +76,8 @@ pub struct Preview {
     chosen: Vec<bool>,
     /// The line on in the volume's list.
     play_sel: usize,
+    /// The line on in the cast list.
+    cast_sel: usize,
     ocr: bool,
     /// `o` pressed once: it asks before the marks start over.
     again: bool,
@@ -380,6 +384,7 @@ impl Preview {
             chosen: vec![true; plays.len()],
             plays,
             play_sel: 0,
+            cast_sel: 0,
             sel: 0,
             merging: None,
             form: None,
@@ -401,6 +406,64 @@ impl Preview {
         self.doc.go_to_play(&self.draft);
         self.sel = 0;
         self.merging = None;
+    }
+
+    fn cast_form(&mut self, at: Option<usize>, line: &str) {
+        self.form = Some(Form {
+            kind: FormKind::ImportCastLine(at),
+            title: lang::l(
+                "AD | not · LİSTEDEKİ = REPLİKTEKİ | not · + toplu",
+                "NAME | note · ON THE LIST = OVER THE LINES | note · + a group",
+            )
+            .into(),
+            fields: vec![Field::text("Satır", line, Vec::new())],
+            focus: 0,
+            at: 0..0,
+            error: None,
+            confirmed: false,
+        });
+    }
+
+    fn set_cast(&mut self, text: &str) {
+        self.draft.set_cast(text);
+        self.doc.refresh(&self.draft);
+        let n = self.draft.cast_text().lines().count();
+        self.cast_sel = self.cast_sel.min(n.saturating_sub(1));
+    }
+
+    /// The cast list, under the head.
+    fn cast_lines(&self, room: usize) -> Vec<Line<'static>> {
+        let text = self.draft.cast_text();
+        let first = self.cast_sel.saturating_sub(room.saturating_sub(1));
+        let (silent, missing) = self.draft.cast_check();
+        let mut out: Vec<Line> = text
+            .lines()
+            .enumerate()
+            .skip(first)
+            .take(room.saturating_sub(2).max(1))
+            .map(|(i, l)| {
+                let style = if i == self.cast_sel {
+                    Style::default().fg(BEIGE).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default().fg(FG)
+                };
+                let mark = if i == self.cast_sel { ">" } else { " " };
+                Line::from(Span::styled(format!("{mark} {l}"), style))
+            })
+            .collect();
+        let say = |what: &str, names: &[String]| {
+            Line::from(Span::styled(
+                format!("{what}: {}", names.join(", ")),
+                Style::default().fg(MUTED),
+            ))
+        };
+        if !silent.is_empty() {
+            out.push(say(lang::l("Hiç konuşmuyor", "Never speaks"), &silent));
+        }
+        if !missing.is_empty() {
+            out.push(say(lang::l("Listede yok", "Not listed"), &missing));
+        }
+        out
     }
 
     /// The volume changed: its list, and the document, again.
@@ -427,19 +490,13 @@ impl Preview {
     }
 
     fn next_view(&mut self, on: bool) {
-        let volume = self.draft.source.plays.len() > 1;
-        if volume && self.view == View::Volume {
-            self.plays = self.draft.summaries();
+        let mut views = vec![View::People, View::Document, View::Play, View::Cast];
+        if self.draft.source.plays.len() > 1 {
+            views.insert(0, View::Volume);
         }
-        self.view = match (self.view, on) {
-            (View::Volume, true) => View::People,
-            (View::Volume, false) => View::Play,
-            (View::People, true) | (View::Play, false) => View::Document,
-            (View::Document, true) => View::Play,
-            (View::People, false) | (View::Play, true) if volume => View::Volume,
-            (View::People, false) => View::Play,
-            (View::Play, true) | (View::Document, false) => View::People,
-        };
+        let at = views.iter().position(|v| *v == self.view).unwrap_or(0);
+        let by = if on { 1 } else { views.len() - 1 };
+        self.view = views[(at + by) % views.len()];
         if self.view == View::Volume {
             self.plays = self.draft.summaries();
         }
@@ -519,6 +576,36 @@ impl Preview {
                 self.draft.drop_play(self.play_sel);
                 self.volume_changed();
             }
+            KeyCode::Up if self.view == View::Cast => {
+                self.cast_sel = self.cast_sel.saturating_sub(1)
+            }
+            KeyCode::Down if self.view == View::Cast => {
+                let n = self.draft.cast_text().lines().count();
+                self.cast_sel = (self.cast_sel + 1).min(n.saturating_sub(1))
+            }
+            KeyCode::Enter | KeyCode::Char('e') if self.view == View::Cast => {
+                let text = self.draft.cast_text();
+                let line = text.lines().nth(self.cast_sel).unwrap_or("").to_string();
+                self.cast_form(Some(self.cast_sel), &line);
+            }
+            KeyCode::Char('n') if self.view == View::Cast => self.cast_form(None, ""),
+            KeyCode::Char('x') if self.view == View::Cast => {
+                let text = self.draft.cast_text();
+                let kept: Vec<&str> = text
+                    .lines()
+                    .enumerate()
+                    .filter(|(i, _)| *i != self.cast_sel)
+                    .map(|(_, l)| l)
+                    .collect();
+                self.set_cast(&kept.join("\n"));
+            }
+            KeyCode::Char('k') if self.view == View::Document => {
+                self.draft.mark_cast(self.doc.at(), self.doc.end());
+                self.doc.stop_ranging();
+                self.people_changed();
+                self.view = View::Cast;
+                self.cast_sel = 0;
+            }
             KeyCode::Char('y') if self.view == View::Document => {
                 let at = self.doc.at();
                 let first = self.draft.source.paras[at].text();
@@ -561,7 +648,7 @@ impl Preview {
                 }
             }
             _ if self.view == View::Play => self.doc.play_key(k),
-            _ if self.view == View::Volume || n == 0 => {}
+            _ if matches!(self.view, View::Volume | View::Cast) || n == 0 => {}
             KeyCode::Char('m') => {
                 if self.draft.people[self.sel].merged_into.is_some() {
                     self.draft.unmerge(self.sel);
@@ -620,6 +707,16 @@ impl Preview {
                     self.draft.source.plays[at].title = self.draft.title.clone();
                 }
             }
+            FormKind::ImportCastLine(at) => {
+                let text = self.draft.cast_text();
+                let mut lines: Vec<&str> = text.lines().collect();
+                let line = form.get("Satır");
+                match at {
+                    Some(i) if i < lines.len() => lines[i] = line,
+                    _ => lines.insert((self.cast_sel + 1).min(lines.len()), line),
+                }
+                self.set_cast(&lines.join("\n"));
+            }
             FormKind::ImportPlay(i) => {
                 self.draft.add_play(i, form.get("Ad"))?;
                 self.volume_changed();
@@ -660,6 +757,7 @@ impl Preview {
             tab(View::People, lang::l("Kişiler", "People")),
             tab(View::Document, lang::l("Belge", "Document")),
             tab(View::Play, lang::l("Oyun", "Play")),
+            tab(View::Cast, lang::l("Kişi listesi", "Cast list")),
             Span::styled("(Tab)", Style::default().fg(FAINT)),
         ]);
         Line::from(tabs)
@@ -834,6 +932,12 @@ impl Preview {
                 .max(1);
             lines.extend(self.volume_lines(room));
         }
+        if self.view == View::Cast {
+            let room = (inner.height as usize)
+                .saturating_sub(lines.len() + 3)
+                .max(1);
+            lines.extend(self.cast_lines(room));
+        }
         if self.view == View::People {
             lines.push(Line::from(Span::styled(
                 format!(
@@ -910,7 +1014,7 @@ impl Preview {
         }
         f.render_widget(Paragraph::new(lines), inner);
         match self.view {
-            View::Volume | View::People => {}
+            View::Volume | View::People | View::Cast => {}
             View::Document => self.doc.draw_doc(f, body),
             View::Play => self.doc.draw_play(f, body),
         }
@@ -938,8 +1042,17 @@ impl Preview {
                 )
                 .to_string(),
                 View::Document => {
-                    self.doc.help() + lang::l(" · y burada yeni oyun", " · y a new play here")
+                    self.doc.help()
+                        + lang::l(
+                            " · k kişi sayfası bu · y burada yeni oyun",
+                            " · k this is the cast page · y a new play here",
+                        )
                 }
+                View::Cast => lang::l(
+                    "↑↓ · ⏎ satırı düzelt · n yeni satır · x sil · Esc vazgeç",
+                    "↑↓ · ⏎ edit the line · n new line · x delete · Esc cancel",
+                )
+                .to_string(),
                 View::Play => lang::l(
                     "↑↓ kaydır · ⏎ içe aktar · t başlık · Esc vazgeç",
                     "↑↓ scroll · ⏎ import · t title · Esc cancel",

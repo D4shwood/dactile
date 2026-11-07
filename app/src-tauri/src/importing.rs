@@ -61,6 +61,11 @@ pub struct Shown {
     pub more: usize,
     /// A PDF that can be read again from its page images.
     pub ocr: bool,
+    /// The cast a person a line, and what to look at in it: on the list and
+    /// never speaking, speaking and not on the list.
+    pub cast_text: String,
+    pub silent: Vec<String>,
+    pub missing: Vec<String>,
     /// The plays of a volume of several, and which this is.
     pub plays: Vec<String>,
     pub picked: Option<usize>,
@@ -173,6 +178,7 @@ pub fn shown(file: &Path, d: &Draft) -> Shown {
         scenes,
         plain,
     } = d.counts();
+    let (silent, missing) = d.cast_check();
     let mut play = lines(d);
     let more = play.len().saturating_sub(SHOWN);
     play.truncate(SHOWN);
@@ -205,6 +211,9 @@ pub fn shown(file: &Path, d: &Draft) -> Shown {
         plain,
         play,
         more,
+        cast_text: d.cast_text(),
+        silent,
+        missing,
         plays: d.source.plays.iter().map(|p| p.title.clone()).collect(),
         picked: d.play,
         ocr: file
@@ -255,6 +264,15 @@ pub enum Edit {
     /// The play ends at this paragraph.
     End {
         i: usize,
+    },
+    /// Paragraphs `from` to `to` are the cast page: a first list from them.
+    CastPage {
+        from: usize,
+        to: usize,
+    },
+    /// The cast by hand, a person a line.
+    CastList {
+        text: String,
     },
     /// A new play of the volume starts at this paragraph.
     AddPlay {
@@ -321,6 +339,8 @@ pub fn edit(d: &mut Draft, e: Edit) -> Result<(), String> {
             d.add_play(i, &title)?;
         }
         Edit::DropPlay { i } => d.drop_play(i),
+        Edit::CastPage { from, to } => d.mark_cast(from, to),
+        Edit::CastList { text } => d.set_cast(&text),
     }
     Ok(())
 }
