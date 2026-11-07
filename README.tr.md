@@ -31,6 +31,7 @@ Dactile'da açılır.
 ```
 
 Tüm özellikler için: [examples/ornek-oyun.tex](examples/ornek-oyun.tex).
+Bütün kılavuz: [belgeler](docs/README.md).
 
 ## Kurulum
 

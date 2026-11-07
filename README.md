@@ -30,7 +30,8 @@ elsewhere.
 \sedo\ozdo Birbirlerine bakarlar.
 ```
 
-See [examples/ornek-oyun.tex](examples/ornek-oyun.tex) for every feature.
+See [examples/ornek-oyun.tex](examples/ornek-oyun.tex) for every feature, and
+[the documentation](docs/README.md) for a guide to all of it.
 
 ## Install
 
