@@ -683,6 +683,12 @@ fn pdf(path: String) -> Res<tauri::ipc::Response> {
         .map_err(|e| e.to_string())
 }
 
+/// A web address from a PDF's link, in the desktop's browser.
+#[tauri::command]
+fn open_url(url: String) -> Res<()> {
+    dactile::build::open_url(&url).map_err(err)
+}
+
 /// Where a line of the open play is in its PDF. Runs a program: off the main
 /// thread.
 #[tauri::command]
@@ -814,6 +820,7 @@ pub fn run() {
             note_fix,
             note_authors,
             pdf,
+            open_url,
             sync_view,
             sync_edit,
             misspelt,

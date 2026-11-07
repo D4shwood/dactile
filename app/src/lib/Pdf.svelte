@@ -12,6 +12,7 @@
   import { Lens } from "./pdf/lens";
   import Search from "./pdf/Search.svelte";
   import { Sheets, type Fit, type Place } from "./pdf/sheets";
+  import Side from "./pdf/Side.svelte";
   import TopBar from "./pdf/TopBar.svelte";
 
   pdfjs.GlobalWorkerOptions.workerSrc = worker;
@@ -50,6 +51,8 @@
   // A rectangle being dragged out, in the window's coordinates.
   let band = $state<{ x: number; y: number; w: number; h: number } | null>(null);
   let doc = $state.raw<pdfjs.PDFDocumentProxy | null>(null);
+  let size = $state(0);
+  let labels = $state.raw<string[] | null>(null);
   let search: Search | undefined = $state();
   // The lens while the button is held: where it is, and what draws in it.
   let glass = $state<{ x: number; y: number } | null>(null);
@@ -76,6 +79,8 @@
   async function show(path: string, n: number) {
     const bytes = new Uint8Array(await api.pdf(path));
     if (n !== drawn) return;
+    // pdf.js takes the bytes over: their length is gone after.
+    const length = bytes.length;
     const loading = pdfjs.getDocument({ data: bytes });
     try {
       const opened = await loading.promise;
@@ -85,6 +90,8 @@
       // A newer build came meanwhile: this one is about to close.
       if (n !== drawn) return sheets.forget(opened);
       pages = opened.numPages;
+      size = length;
+      labels = await opened.getPageLabels();
       doc = opened;
       if (waiting) void reveal(...waiting);
       waiting = null;
@@ -118,6 +125,7 @@
       page: (n) => (page = n),
       zoom: (z) => (zoom = z),
       error: (text) => (failure = text),
+      link: follow,
     });
     apply();
     sheets.fit(v.fit);
@@ -219,6 +227,13 @@
   function toggle(side: "left" | "right") {
     if (!o) return;
     if (side === "right") choose({ right: o.right ? "" : "search" });
+    else choose({ left: o.left ? "" : "thumbs" });
+  }
+
+  /// A quarter turn, for the session: the file stays as it is.
+  function rotate(by: number) {
+    turn = (turn + by + 360) % 360;
+    apply();
   }
 
   /// Ctrl+F: the search panel, ready to type in.
@@ -276,10 +291,31 @@
     trailed();
   }
 
+  /// A link or an outline entry. Web addresses go to the browser.
+  async function follow(dest: unknown, url?: string) {
+    if (url) {
+      if (!/^(https?:|mailto:)/i.test(url)) return say(l("Bu bağlantı açılmaz.", "This link can't be opened."), true);
+      return api.openUrl(url).catch((e) => say(String(e), true));
+    }
+    try {
+      const to = await sheets?.follow(dest);
+      if (to) jump(() => void sheets?.reveal(to.page, to.rect));
+    } catch (e) {
+      say(String(e), true);
+    }
+  }
+
+  /// The page box takes a page's number, or its label if the PDF has them.
+  function pageOf(text: string): number {
+    const t = text.trim();
+    const i = labels?.indexOf(t) ?? -1;
+    return i >= 0 ? i + 1 : parseInt(t, 10);
+  }
+
   const step = () => (o ? stepOf({ columns: o.columns, rows: o.rows, offset: o.offset, single: o.single_step }) : 1);
 
   function goPage(text: string) {
-    const n = parseInt(text.trim(), 10);
+    const n = pageOf(text);
     if (n >= 1 && n <= pages) jump(() => sheets?.go(n));
     else say(l(`Sayfa 1 ile ${pages} arasında olmalı.`, `The page must be from 1 to ${pages}.`), true);
   }
@@ -389,6 +425,9 @@
     else if (o?.right) {
       choose({ right: "" });
       host?.focus();
+    } else if (o?.left) {
+      choose({ left: "" });
+      host?.focus();
     } else if (wide) wide = false;
     else close();
   }
@@ -451,6 +490,8 @@
     if (e.button !== 0 || !sheets || !host) return;
     if (e.target === host && e.offsetX > host.clientWidth) return; // Its scroll bar.
     const mod = e.ctrlKey || e.metaKey;
+    // A plain click on a link follows it, in any mode.
+    if (!mod && !e.shiftKey && !e.altKey && (e.target as HTMLElement).closest?.("a.link")) return;
     if (mod && e.shiftKey) {
       e.preventDefault();
       const s = sheets.at(e.clientX, e.clientY);
@@ -560,6 +601,13 @@
           <span>{l("Başlangıç sütunu", "Start column")}</span>
           <input type="number" min="1" max={o.columns} value={o.offset + 1} title={l("İlk sayfanın sütunu", "The first page's column")} aria-label={l("Başlangıç sütunu", "Start column")} onchange={(e) => choose({ offset: Math.min(o!.columns, Math.max(1, +e.currentTarget.value || 1)) - 1 })} />
         </div>
+        <div class="row">
+          <span>{l("Döndür", "Rotate")}</span>
+          <button class="word" title={l("Sola döndür", "Rotate left")} onclick={() => rotate(-90)}>↺</button>
+          <button class="word" title={l("Sağa döndür", "Rotate right")} onclick={() => rotate(90)}>↻</button>
+        </div>
+        <label title={l("Renkleri ters çevir", "Invert the colours")}><input type="checkbox" checked={o.invert} onchange={(e) => choose({ invert: e.currentTarget.checked })} /> {l("Renkleri çevir", "Invert colours")}</label>
+        <label title={l("Gri tonlarda göster", "Show in grayscale")}><input type="checkbox" checked={o.gray} onchange={(e) => choose({ gray: e.currentTarget.checked })} /> {l("Gri tonlama", "Grayscale")}</label>
         <hr />
         <label title={l("PDF yazarın imlecini izler", "The PDF follows the writer's cursor")}><input type="checkbox" checked={o.follow_cursor} onchange={(e) => choose({ follow_cursor: e.currentTarget.checked })} /> {l("Kaydırma imleci izlesin", "Scrolling follows cursor")}</label>
         <label title={l("Yazarın imleci PDF'i izler", "The writer's cursor follows the PDF")}><input type="checkbox" checked={o.follow_scroll} onchange={(e) => choose({ follow_scroll: e.currentTarget.checked })} /> {l("İmleç kaydırmayı izlesin", "Cursor follows scrolling")}</label>
@@ -579,7 +627,7 @@
 <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 <aside class="pdf" class:wide bind:this={root} tabindex="-1" onkeydown={onkey} onmouseup={onmouseup}>
   {#if o?.toolbar}
-    <TopBar {tr} bind:mode bind:box fit={o.fit} {page} {pages} label="" {canBack} {canForward} {wide} disabled={none} {act} go={goPage} {more} />
+    <TopBar {tr} bind:mode bind:box fit={o.fit} {page} {pages} label={labels?.[page - 1] ?? ""} {canBack} {canForward} {wide} disabled={none} {act} go={goPage} {more} />
   {:else if o}
     <button class="unhide" title={l("Araç çubuğunu göster", "Show toolbar")} aria-label={l("Araç çubuğunu göster", "Show toolbar")} onclick={() => act("hide")}><Icon name="show" /></button>
   {/if}
@@ -603,6 +651,9 @@
   {/if}
   {#if building}<p class="muted note">{tr ? "derleniyor…" : "building…"}</p>{/if}
   <div class="middle">
+    {#if o?.left}
+      <Side {tr} tab={o.left} {doc} {page} bytes={size} {labels} choose={(tab) => choose({ left: tab })} go={(n) => jump(() => sheets?.go(n))} {follow} />
+    {/if}
     <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_static_element_interactions -->
     <div class="pages {mode}" class:invert={o?.invert} class:gray={o?.gray} class:dim={building} bind:this={host} tabindex="0" onpointerdown={ondown} {onwheel} {onscroll}></div>
     {#if o?.right && sheets}
@@ -619,7 +670,7 @@
       </div>
     {/if}
   </div>
-  <BottomBar {tr} left={!!o?.left} right={!!o?.right} {page} {pages} {zoom} disabled={none} {toggle} {setZoom} step={(up) => setZoom(stepZoom(zoom, up))} />
+  <BottomBar {tr} hasLeft left={!!o?.left} right={!!o?.right} {page} {pages} {zoom} disabled={none} {toggle} {setZoom} step={(up) => setZoom(stepZoom(zoom, up))} />
   {#if glass && o}
     <div
       class="lens"
@@ -804,6 +855,14 @@
   }
   .lens.invert.gray canvas {
     filter: invert(1) grayscale(1);
+  }
+  .pages :global(.sheet a.link) {
+    position: absolute;
+    z-index: 2;
+    cursor: pointer;
+  }
+  .pages :global(.sheet a.link:focus-visible) {
+    outline: 2px solid var(--claret);
   }
   .pages :global(.marks) {
     position: absolute;

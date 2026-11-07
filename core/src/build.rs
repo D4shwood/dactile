@@ -407,6 +407,29 @@ pub fn launch(path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// A web or mail address with the desktop's own program; nothing else, a
+/// PDF's link being anyone's to write.
+pub fn open_url(url: &str) -> anyhow::Result<()> {
+    if !web_address(url) {
+        anyhow::bail!("{url}: not a web address");
+    }
+    let mut child = outside("xdg-open")
+        .arg(url)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()?;
+    std::thread::spawn(move || child.wait());
+    Ok(())
+}
+
+fn web_address(url: &str) -> bool {
+    let low = url.to_lowercase();
+    ["http://", "https://", "mailto:"]
+        .iter()
+        .any(|s| low.starts_with(s))
+}
+
 /// Shows a file selected in the desktop's file manager; if none answers,
 /// opens its folder. Waits for the answer, a few seconds at worst: a window
 /// calls this off its own thread.
@@ -518,6 +541,14 @@ mod tests {
     }
 
     const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
+
+    #[test]
+    fn only_web_addresses_open() {
+        assert!(web_address("https://example.org/a"));
+        assert!(web_address("MAILTO:a@example.org"));
+        assert!(!web_address("file:///etc/passwd"));
+        assert!(!web_address("/bin/sh"));
+    }
 
     #[test]
     fn casts_as_the_class_writes_them() {

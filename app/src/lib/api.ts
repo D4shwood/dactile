@@ -220,6 +220,7 @@ export const api = {
   startup: () => invoke<string | null>("startup"),
   pick: () => invoke<string | null>("pick"),
   pdf: (path: string) => invoke<ArrayBuffer>("pdf", { path }),
+  openUrl: (url: string) => invoke<void>("open_url", { url }),
   syncView: (line: number, column: number) => invoke<SyncPlace[]>("sync_view", { line, column }),
   syncEdit: (pdf: string, page: number, x: number, y: number) => invoke<number>("sync_edit", { pdf, page, x, y }),
   misspelt: (text: string, from: number, to: number) => invoke<Checked>("misspelt", { text, from, to }),

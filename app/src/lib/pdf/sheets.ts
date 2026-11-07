@@ -53,6 +53,8 @@ export interface Events {
   page: (n: number) => void;
   zoom: (percent: number) => void;
   error: (text: string) => void;
+  /// A link clicked: a place in the document, or a web address.
+  link: (dest: unknown, url?: string) => void;
 }
 
 export class Sheets {
@@ -455,12 +457,54 @@ export class Sheets {
   private async layers(s: Sheet, page: PDFPageProxy, view: PageViewport) {
     this.paint(s);
     if (s.text) return;
+    this.links(s, page).catch(() => {}); // A page gone meanwhile.
     const div = document.createElement("div");
     div.className = "textLayer";
     s.el.append(div);
     const text = new TextLayer({ textContentSource: page.streamTextContent(), container: div, viewport: view });
     s.text = text;
     await text.render();
+  }
+
+  /// The page's links, as boxes in percent of the page.
+  private async links(s: Sheet, page: PDFPageProxy) {
+    const notes = await page.getAnnotations({ intent: "display" });
+    const view = s.base;
+    if (!view || s.page !== page) return;
+    for (const a of notes) {
+      if (a.subtype !== "Link" || (!a.dest && !a.url)) continue;
+      const [x1, y1, x2, y2] = view.convertToViewportRectangle(a.rect);
+      const link = document.createElement("a");
+      link.className = "link";
+      link.href = a.url ?? "#";
+      link.title = a.url ?? "";
+      link.style.left = `${(Math.min(x1, x2) / view.width) * 100}%`;
+      link.style.top = `${(Math.min(y1, y2) / view.height) * 100}%`;
+      link.style.width = `${(Math.abs(x2 - x1) / view.width) * 100}%`;
+      link.style.height = `${(Math.abs(y2 - y1) / view.height) * 100}%`;
+      link.onclick = (e) => {
+        e.preventDefault();
+        // Ctrl and Shift clicks are the viewer's own, on links too.
+        if (!e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey) this.on.link(a.dest, a.url);
+      };
+      s.el.append(link);
+    }
+  }
+
+  /// The page and height a destination points to.
+  async follow(dest: unknown): Promise<{ page: number; rect: number[] } | null> {
+    const doc = this.doc;
+    if (!doc) return null;
+    const list = typeof dest === "string" ? await doc.getDestination(dest) : (dest as unknown[] | null);
+    if (!list?.length) return null;
+    const ref = list[0];
+    const index = typeof ref === "number" ? ref : await doc.getPageIndex(ref as Parameters<PDFDocumentProxy["getPageIndex"]>[0]);
+    const page = await doc.getPage(index + 1);
+    // [ref, /XYZ, left, top, zoom]; others have no place on the page.
+    const named = (list[1] as { name?: string })?.name;
+    const top = named === "XYZ" && typeof list[3] === "number" ? list[3] : page.view[3];
+    const left = named === "XYZ" && typeof list[2] === "number" ? list[2] : page.view[0];
+    return { page: index + 1, rect: [left, top - 1, left + 1, top] };
   }
 
   /// The search's marks, by page, in place of those there.
