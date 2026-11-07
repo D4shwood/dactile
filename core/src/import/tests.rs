@@ -596,3 +596,90 @@ fn read_as_goes_to_the_images_where_a_pdf_has_no_text() {
     );
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+/// The same book with no contents to go by.
+fn volume_unlisted() -> Source {
+    let mut src = volume();
+    src.paras.drain(..2);
+    src.plays = pages::volume(&src.paras);
+    src
+}
+
+#[test]
+fn a_volume_without_contents_is_found_by_who_speaks() {
+    let src = volume_unlisted();
+    let titles: Vec<&str> = src.plays.iter().map(|p| p.title.as_str()).collect();
+    assert_eq!(titles, ["Kar Masalı", "Yol"]);
+    assert!(src.plays.iter().all(|p| !p.sure));
+}
+
+#[test]
+fn one_play_with_a_quiet_page_in_it_stays_one() {
+    let mut paras = Vec::new();
+    let mut add = |page: usize, t: String| {
+        paras.push(Para {
+            page: Some(page),
+            ..Para::plain(&t)
+        })
+    };
+    add(0, "Kar Masalı".into());
+    for i in 0..30 {
+        add(1 + i / 10, format!("SELİN. Bir söz {i}."));
+    }
+    add(4, "Bir dizeden sonra".into());
+    for i in 0..30 {
+        add(5 + i / 10, format!("SELİN. Yine söz {i}."));
+    }
+    add(8, "İKİNCİ PERDE".into());
+    for i in 0..30 {
+        add(9 + i / 10, format!("SELİN. Son söz {i}."));
+    }
+    assert!(pages::volume(&paras).is_empty());
+}
+
+#[test]
+fn a_play_marked_by_hand() {
+    let src = volume();
+    let mut d = shape::shape(&src, Lang::Tr);
+    let at = 20;
+    assert_eq!(d.add_play(at, "Ara Oyun"), Ok(1));
+    let titles: Vec<&str> = d.source.plays.iter().map(|p| p.title.as_str()).collect();
+    assert_eq!(titles, ["Kar Masalı", "Ara Oyun", "Yol"]);
+    assert_eq!(d.title, "Ara Oyun");
+    assert_eq!(d.play, Some(1));
+    let all = d.summaries();
+    assert_eq!(all[0].lines + all[1].lines, 30);
+    assert!(d.add_play(at, "Yine").is_err());
+    d.drop_play(1);
+    assert_eq!(d.source.plays.len(), 2);
+    assert_eq!(d.summaries()[0].lines, 30);
+    d.drop_play(1);
+    assert!(d.source.plays.is_empty());
+    assert_eq!(d.play, None);
+}
+
+#[test]
+fn a_book_taken_for_one_play_is_split_by_hand() {
+    let mut src = plain::read("", false);
+    src.paras = (0..40)
+        .map(|i| Para::plain(&format!("SELİN. Bir söz {i}.")))
+        .collect();
+    let mut d = shape::shape(&src, Lang::Tr);
+    assert_eq!(d.add_play(20, "İkinci"), Ok(1));
+    let all = d.summaries();
+    assert_eq!((all[0].lines, all[1].lines), (20, 20));
+}
+
+#[test]
+fn what_was_put_right_stays_with_its_play() {
+    let src = volume();
+    let mut d = shape::shape(&src, Lang::Tr);
+    d.title = "Düzeltilmiş".into();
+    d.go_to_play(1);
+    assert_eq!(d.title, "Yol");
+    d.go_to_play(0);
+    assert_eq!(d.title, "Düzeltilmiş");
+    let both = d.plays(&[0, 1]);
+    assert_eq!(both[0].title, "Düzeltilmiş");
+    assert_eq!(both[1].title, "Yol");
+}

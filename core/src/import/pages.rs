@@ -11,7 +11,7 @@ use super::shape::{
 };
 use super::{Para, Run, Source};
 use crate::cast::upper_tr;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -651,20 +651,33 @@ pub(super) fn attach_notes<'a>(paras: &mut [Para], notes: &[&'a Para]) -> Vec<&'
     placed
 }
 
-/// A play of a volume of several: its title, and the first paragraph after
-/// its title page.
+/// A play of a volume of several: its title, where its title page starts,
+/// and the first paragraph after that page.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Volume {
     pub title: String,
+    pub start: usize,
     pub from: usize,
+    /// The contents list it; else it is a guess from the pages.
+    pub sure: bool,
 }
 
 /// As many speeches as show that what follows a title page is a play.
 const SPOKEN: usize = 20;
 
 /// The plays of a book of several: pages of a title or so, the title being
-/// in the contents, each with people speaking after it.
+/// in the contents, each with people speaking after it. A book without
+/// contents that show them is read for the same pages by who speaks.
 pub fn volume(paras: &[Para]) -> Vec<Volume> {
+    let listed = by_contents(paras);
+    if listed.is_empty() {
+        by_speakers(paras)
+    } else {
+        listed
+    }
+}
+
+fn by_contents(paras: &[Para]) -> Vec<Volume> {
     let Some(contents) = paras
         .iter()
         .find(|p| page_title(&p.text()) == Some(Page::Contents))
@@ -694,7 +707,12 @@ pub fn volume(paras: &[Para]) -> Vec<Volume> {
             && title.split_whitespace().count() <= 10
             && listed.contains(&folded)
         {
-            found.push(Volume { title, from: end });
+            found.push(Volume {
+                title,
+                start: at,
+                from: end,
+                sure: true,
+            });
         }
         at = end;
     }
@@ -720,24 +738,99 @@ pub fn volume(paras: &[Para]) -> Vec<Volume> {
     if plays.len() >= 2 { plays } else { Vec::new() }
 }
 
-/// What each paragraph is with one play of a volume in view: the rest is
-/// the book's.
-pub fn labels_of_play(src: &Source, at: usize) -> Vec<Page> {
-    let from = src.plays[at].from;
+/// Whether a page's first line could be the title of a play.
+fn title_like(title: &str, whole: &str) -> bool {
+    title.chars().filter(|c| c.is_alphabetic()).count() >= 3
+        && title.split_whitespace().count() <= 10
+        && !title.ends_with(['.', ',', ';', ':', '!', '?'])
+        && !title.starts_with(['(', '['])
+        && page_title(whole).is_none()
+        && heading(title).is_none()
+        && speech_head(title).is_none()
+}
+
+/// Who speaks in these paragraphs.
+fn speakers(paras: &[Para]) -> HashSet<String> {
+    paras
+        .iter()
+        .filter_map(|p| speech_head(&p.text()).map(|h| fold(&h.0)))
+        .collect()
+}
+
+/// Pages of a line or so with people speaking after them, where those who
+/// speak change: the same people going on are one play with a page of a
+/// quotation in it, not two.
+fn by_speakers(paras: &[Para]) -> Vec<Volume> {
+    let mut pages: Vec<Volume> = Vec::new();
+    let mut at = 0;
+    while at < paras.len() {
+        let page = paras[at].page;
+        let end = (at..paras.len())
+            .find(|&j| paras[j].page != page)
+            .unwrap_or(paras.len());
+        let whole = paras[at].text();
+        let title = first_line(&whole).trim().to_string();
+        if page.is_some() && end - at <= 2 && !paras[at].foot && title_like(&title, &whole) {
+            pages.push(Volume {
+                title,
+                start: at,
+                from: end,
+                sure: false,
+            });
+        }
+        at = end;
+    }
+    let bound: Vec<usize> = pages
+        .iter()
+        .skip(1)
+        .map(|v| v.start)
+        .chain([paras.len()])
+        .collect();
+    let mut plays: Vec<(Volume, HashSet<String>)> = Vec::new();
+    for (v, end) in pages.into_iter().zip(bound) {
+        let part = &paras[v.from..end];
+        let spoken = part
+            .iter()
+            .filter(|p| speech_head(&p.text()).is_some())
+            .count();
+        if spoken < SPOKEN {
+            continue;
+        }
+        let who = speakers(part);
+        match plays.last_mut() {
+            Some((_, seen)) if seen.intersection(&who).count() * 2 >= seen.len().min(who.len()) => {
+                seen.extend(who)
+            }
+            _ => plays.push((v, who)),
+        }
+    }
+    if plays.len() >= 2 {
+        plays.into_iter().map(|(v, _)| v).collect()
+    } else {
+        Vec::new()
+    }
+}
+
+/// The paragraphs of one play of a volume, from after its title page.
+pub fn play_range(src: &Source, at: usize) -> Range<usize> {
     let body = src
         .paras
         .iter()
         .position(|p| p.foot)
         .unwrap_or(src.paras.len());
-    let to = src.plays.get(at + 1).map_or(body, |next| {
-        // Back to its title page.
-        let page = src.paras[next.from - 1].page;
-        (0..next.from)
-            .rev()
-            .take_while(|&i| src.paras[i].page == page)
-            .last()
-            .unwrap_or(next.from)
-    });
+    let to = src.plays.get(at + 1).map_or(body, |next| next.start);
+    src.plays[at].from..to
+}
+
+/// What each paragraph is with one play of a volume in view: the rest is
+/// the book's.
+pub fn labels_of_play(src: &Source, at: usize) -> Vec<Page> {
+    let Range { start: from, end: to } = play_range(src, at);
+    let body = src
+        .paras
+        .iter()
+        .position(|p| p.foot)
+        .unwrap_or(src.paras.len());
     let pages = src.paras[from].page..=src.paras[to.saturating_sub(1)].page;
     let mut taken: Vec<usize> = (from..to).collect();
     taken.extend((body..src.paras.len()).filter(|&i| pages.contains(&src.paras[i].page)));

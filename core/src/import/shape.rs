@@ -71,12 +71,26 @@ pub struct Draft {
     pub others: String,
     /// Which play of a volume this is.
     pub play: Option<usize>,
+    /// The volume's other plays as they were left, corrections and all.
+    pub left: Vec<Draft>,
     pub lang: Lang,
     /// What was read, and what each of its paragraphs is taken for.
     pub source: Source,
     pub labels: Vec<Page>,
     /// The title and author as found, to tell them from corrections.
     found: (String, String),
+}
+
+/// A play of a volume, for choosing among them.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Summary {
+    pub title: String,
+    /// The pages it is on, as the book prints them.
+    pub pages: Option<(String, String)>,
+    pub lines: usize,
+    pub people: usize,
+    /// The contents list it; else it is a guess.
+    pub sure: bool,
 }
 
 /// What a draft holds, for the preview.
@@ -560,6 +574,173 @@ pub fn shape_play(src: &Source, lang: Lang, at: usize) -> Draft {
     d
 }
 
+impl Draft {
+    /// The draft of one play of the volume, with what was put right in it.
+    fn of_play(&self, at: usize) -> Draft {
+        if self.play == Some(at) {
+            let mut d = self.clone();
+            d.left.clear();
+            return d;
+        }
+        let mut d = match self.left.iter().find(|d| d.play == Some(at)) {
+            Some(d) => d.clone(),
+            None => shape_play(&self.source, self.lang, at),
+        };
+        d.source = self.source.clone();
+        d
+    }
+
+    /// Another play of the volume. What was put right stays with its play.
+    pub fn go_to_play(&mut self, at: usize) {
+        if at >= self.source.plays.len() || self.play == Some(at) {
+            return;
+        }
+        let mut next = self.of_play(at);
+        let mut left = std::mem::take(&mut self.left);
+        left.retain(|d| d.play != Some(at));
+        if self.play.is_some() {
+            left.push(self.clone());
+        }
+        next.left = left;
+        *self = next;
+    }
+
+    /// The volume's plays, as they stand now.
+    pub fn plays(&self, picked: &[usize]) -> Vec<Draft> {
+        picked
+            .iter()
+            .filter(|&&at| at < self.source.plays.len())
+            .map(|&at| self.of_play(at))
+            .collect()
+    }
+
+    /// Each of the volume's plays in a line.
+    pub fn summaries(&self) -> Vec<Summary> {
+        let src = &self.source;
+        let printed = |i: usize| {
+            src.paras[i]
+                .page
+                .and_then(|p| src.pages.get(p).cloned().or(Some((p + 1).to_string())))
+        };
+        (0..src.plays.len())
+            .map(|at| {
+                let d = self.of_play(at);
+                let range = pages::play_range(src, at);
+                let pages = if range.is_empty() {
+                    None
+                } else {
+                    printed(range.start).zip(printed(range.end - 1))
+                };
+                Summary {
+                    title: d.title.clone(),
+                    pages,
+                    lines: d.counts().lines,
+                    people: d.cast().len(),
+                    sure: src.plays[at].sure,
+                }
+            })
+            .collect()
+    }
+
+    /// Reads this play again, with the plays around it no longer as they were.
+    fn read_again(&mut self, at: Option<usize>) {
+        let source = self.source.clone();
+        let mut left = std::mem::take(&mut self.left);
+        if let Some(at) = at {
+            left.retain(|d| d.play != Some(at));
+        }
+        *self = match at {
+            Some(at) => shape_play(&source, self.lang, at),
+            None => shape(&source, self.lang),
+        };
+        self.left = left;
+    }
+
+    /// A new play of the volume starts at this paragraph. A book taken for
+    /// one play becomes a volume of two. Says which play it is now.
+    pub fn add_play(&mut self, i: usize, title: &str) -> Result<usize, &'static str> {
+        let title = title.trim();
+        if title.is_empty() {
+            return Err(crate::lang::l("Oyunun adı boş olamaz.", "The play needs a name."));
+        }
+        if i >= self.source.paras.len() {
+            return Err("no such paragraph");
+        }
+        if self.source.plays.is_empty() {
+            self.source.plays.push(pages::Volume {
+                title: self.title.clone(),
+                start: 0,
+                from: 0,
+                sure: false,
+            });
+            self.play = Some(0);
+        }
+        let plays = &mut self.source.plays;
+        if plays.iter().any(|p| p.start == i || p.from == i) {
+            return Err(crate::lang::l(
+                "Burada zaten bir oyun başlıyor.",
+                "A play starts here already.",
+            ));
+        }
+        let at = plays.partition_point(|p| p.from < i);
+        plays.insert(
+            at,
+            pages::Volume {
+                title: title.to_string(),
+                start: i,
+                from: i,
+                sure: true,
+            },
+        );
+        for d in self.left.iter_mut() {
+            if let Some(p) = d.play.as_mut().filter(|p| **p >= at) {
+                *p += 1;
+            }
+        }
+        // The one before it is cut short, and the page is on the new one.
+        if let Some(before) = at.checked_sub(1) {
+            self.left.retain(|d| d.play != Some(before));
+        }
+        let now = self.play.map(|p| if p >= at { p + 1 } else { p });
+        if now.is_some() && now != at.checked_sub(1) {
+            let mut was = self.clone();
+            was.left.clear();
+            was.play = now;
+            self.left.push(was);
+        }
+        self.read_again(Some(at));
+        Ok(at)
+    }
+
+    /// One of the volume's plays is no play: what it holds goes with the one
+    /// before it. A book left with one is a book again.
+    pub fn drop_play(&mut self, at: usize) {
+        if at >= self.source.plays.len() {
+            return;
+        }
+        self.source.plays.remove(at);
+        if self.source.plays.len() < 2 {
+            self.source.plays.clear();
+            self.left.clear();
+            self.read_again(None);
+            return;
+        }
+        self.left.retain(|d| d.play != Some(at));
+        for d in self.left.iter_mut() {
+            if let Some(p) = d.play.as_mut().filter(|p| **p > at) {
+                *p -= 1;
+            }
+        }
+        let before = at.saturating_sub(1);
+        self.left.retain(|d| d.play != Some(before));
+        match self.play {
+            Some(p) if p > at && p - 1 != before => self.play = Some(p - 1),
+            Some(p) if p < at && p != before => {}
+            _ => self.read_again(Some(before)),
+        }
+    }
+}
+
 /// The play out of the paragraphs labelled so.
 fn shape_as(src: &Source, lang: Lang, labels: Vec<Page>) -> Draft {
     let book = labels.iter().any(|&p| p != Page::Play);
@@ -835,6 +1016,7 @@ fn shape_as(src: &Source, lang: Lang, labels: Vec<Page>) -> Draft {
     }
     items_all.extend(items);
     let mut d = Draft {
+        left: Vec::new(),
         title,
         author,
         people: sh.people,
