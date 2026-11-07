@@ -938,7 +938,6 @@
       if (first) view.dispatch({ selection: { anchor: first.to }, scrollIntoView: true });
       view.focus();
     });
-    if (opened.read_only) say(l(`Salt okunur: ${opened.holder ?? "başka bir Dactile"} açık tutuyor.`, `Read only: held by ${opened.holder ?? "another Dactile"}.`), true);
   });
 
   onDestroy(() => {
@@ -1067,7 +1066,11 @@
     <span>{where}</span>
     <span class="grow"></span>
     {#if message}<span class:warn={message.warn}>{message.text}</span>{/if}
-    <span class="muted">{dirty ? l("kaydedilmedi", "unsaved") : l("kaydedildi", "saved")}</span>
+    {#if opened.read_only}
+      <span class="warn">{l(`Salt okunur: ${opened.holder ?? "başka bir Dactile"} açık tutuyor.`, `Read only: held by ${opened.holder ?? "another Dactile"}.`)}</span>
+    {:else}
+      <span class="muted">{dirty ? l("kaydedilmedi", "unsaved") : l("kaydedildi", "saved")}</span>
+    {/if}
     <button class="zoom" title="Ctrl+0" onclick={() => setZoom(100)}>{zoom}%</button>
     <span class="muted">{theme}</span>
     <span class="muted">Alt: {l("şerit harfleri", "ribbon letters")}</span>
