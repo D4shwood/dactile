@@ -73,7 +73,10 @@ removes that one.
 ## Using it
 
 This page describes Dactile Light's keys and screens; Dactile has the
-same plays and tools on a page, with a ribbon and the mouse.
+same plays and tools on a page, with a ribbon and the mouse. On its start
+screen Shift and Ctrl choose several plays and a right click gives a play's
+options. Its themes are the same five, with a sixth button, Surprise me, that
+makes new colours at every press.
 
 ```sh
 dactile-light                   # the home screen: your plays, a new one, settings
@@ -233,8 +236,30 @@ Poppler's tools. A scanned PDF is read from its page images by itself, and
 `dactile-light import --ocr` does the same where Tesseract with Turkish is
 installed. Dactile Light reads a PDF better where `pdftotext` is there.
 
-A volume of several plays is told by its contents and title pages: the preview
-says which plays it has and takes one at a time (`--play` on the command line).
+A volume of several plays is told by its contents and title pages, or, without
+them, by who speaks; a play found that way is marked as a guess. The volume
+opens on a list of its plays with their pages, lines and people: choose those
+to take and make them together (`--all` on the command line, `--play` for one).
+A play found wrongly goes back into the one before it, and a new one can be
+started by hand at any paragraph.
+
+Plays made together can stand under one book (`--book TITLE`), shown as a tree
+on the home screen, and the pages around them can come in too (`--front`).
+The book builds as one PDF with a cover and contents, each play in it
+(`dactile-light book kitap.tex`).
+
+A cast page the reading gets wrong can be chosen by hand, and the list put
+right as text, a person a line:
+
+```text
+NAME | a note on them
+NAME ON THE LIST = NAME OVER THE LINES | note
+\chargroup The group's name
+\gkarakter NAME | note
++ those named only in a group
+# a comment
+```
+
 Where a PDF sets its directions in italics, they are read as directions, and
 a list of who first played the parts gives the characters without the actors.
 
@@ -309,7 +334,8 @@ ticking it is yours. Nothing changes the play by itself.
 
 [tex/](tex/) holds the class, which Dactile carries inside itself:
 
-- characters with aliases: `\karakter`, groups (`\karaktergrubu`), characters
+- characters with aliases: `\karakter`, groups (`\karaktergrubu` or
+  `\chargroup`, their members `\gkarakter`), characters
   left out of the cast table (`\gizlikarakter`), and the name used inside a
   line (`\setinlinename`), and those the cast page doesn't name, under the
   list (`\digerkisiler{Köylüler, müzisyenler.}`, or `\othercast`)

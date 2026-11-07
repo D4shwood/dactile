@@ -74,7 +74,10 @@ onu kaldırır.
 ## Kullanım
 
 Bu sayfa Dactile Light'ın tuşlarını ve ekranlarını anlatır; Dactile
-aynı oyunları ve araçları bir sayfa üstünde, şerit ve fareyle sunar.
+aynı oyunları ve araçları bir sayfa üstünde, şerit ve fareyle sunar. Başlangıç
+ekranında Shift ve Ctrl birkaç oyunu seçer, sağ tık oyunun seçeneklerini açar.
+Temaları aynı beş temadır; altıncı düğme Sürpriz yap, her basışta yeni renkler
+üretir.
 
 ```sh
 dactile-light                   # ana ekran: oyunların, yeni oyun, ayarlar
@@ -232,8 +235,29 @@ okunur; metni kötü bir PDF için önizlemedeki "OCR ile yeniden oku" aynısın
 yapar. Tesseract ve Türkçe modeli kuruluysa `dactile-light import --ocr` da
 çalışır. Dactile Light, `pdftotext` kuruluysa PDF'i daha temiz okur.
 
-Birkaç oyunluk bir cilt, içindekiler ve başlık sayfalarından tanınır: önizleme
-hangi oyunlar olduğunu gösterir ve birini seçtirir (komut satırında `--play`).
+Birkaç oyunluk bir cilt, içindekiler ve başlık sayfalarından, bunlar yoksa kimin
+konuştuğundan tanınır; böyle bulunan oyun tahmin diye işaretlenir. Cilt, oyunların
+sayfa, replik ve kişi sayılarıyla bir listede açılır: almak istediklerini seçip
+birlikte oluşturursun (komut satırında `--all`, tek oyun için `--play`). Yanlış
+bulunan oyun bir öncekine katılır, yeni bir oyun da herhangi bir paragraftan elle
+başlatılır.
+
+Birlikte oluşturulan oyunlar tek kitap altında durabilir (`--book BAŞLIK`), ana
+ekranda ağaç gibi görünür; çevrelerindeki sayfalar da alınabilir (`--front`).
+Kitap, kapağı ve içindekileriyle tek PDF olur (`dactile-light book kitap.tex`).
+
+Okumanın yanlış çıkardığı kişi sayfası elle seçilir, liste de metin olarak, her
+satırda bir kişi, düzeltilir:
+
+```text
+AD | hakkında not
+LİSTEDEKİ AD = REPLİKTEKİ AD | not
+\chargroup Grubun adı
+\gkarakter AD | not
++ yalnızca toplu anılanlar
+# yorum
+```
+
 PDF'te italik yazılmış yönergeler yönerge olarak okunur; ilk oynayanların
 listesinden oyuncular değil karakterler alınır.
 
@@ -306,7 +330,7 @@ Sınıf [tex/](tex/) klasöründe; Dactile onu kendi içinde taşır.
 
 - **Karakterler** kısaltmalarla tanımlanır:
   - `\karakter`
-  - gruplar (`\karaktergrubu`)
+  - gruplar (`\karaktergrubu` ya da `\chargroup`, üyeleri `\gkarakter`)
   - kişiler tablosuna girmeyenler (`\gizlikarakter`)
   - kişiler sayfasında adı geçmeyenler, listenin altında (`\digerkisiler{Köylüler, müzisyenler.}`)
   - replik ve yönergelerde dipnot: `\dipnot{…}`
