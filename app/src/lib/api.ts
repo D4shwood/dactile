@@ -87,6 +87,8 @@ export interface Home {
   templates: TemplateCard[];
   settings: Settings;
   folder: Folder;
+  /// What went wrong with the settings file.
+  notice: string | null;
 }
 
 export interface Spot {

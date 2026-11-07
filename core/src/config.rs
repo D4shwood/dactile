@@ -1,6 +1,7 @@
 //! The settings: `~/.config/dactile/config.toml`.
 
 use anyhow::{Context, Result};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -58,6 +59,18 @@ pub struct Config {
     pub recent: Vec<String>,
     /// The desktop app's PDF viewer.
     pub viewer: Viewer,
+    /// What `read` couldn't read; while it is here, `save` writes nothing.
+    #[serde(skip)]
+    pub unread: Option<Unread>,
+}
+
+/// A settings file that didn't read, or not all of it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Unread {
+    /// The file as it was, kept beside it; none if it couldn't be copied.
+    pub copy: Option<PathBuf>,
+    /// The settings that fell back to their defaults; empty: all of them.
+    pub fields: Vec<String>,
 }
 
 /// What the PDF viewer remembers between plays.
@@ -144,6 +157,7 @@ impl Default for Config {
             keyboard: "q".into(),
             recent: Vec::new(),
             viewer: Viewer::default(),
+            unread: None,
         }
     }
 }
@@ -199,12 +213,62 @@ impl Config {
         }
     }
 
+    /// `load` for a window, which can say what went wrong and go on: a bad
+    /// value falls back alone, the rest stays. Whatever didn't read is in
+    /// `unread`, with a copy of the file beside it.
+    pub fn read() -> Config {
+        Config::read_at(&path())
+    }
+
+    fn read_at(p: &Path) -> Config {
+        let unreadable = |copy| Config {
+            unread: Some(Unread {
+                copy,
+                fields: Vec::new(),
+            }),
+            ..Config::default()
+        };
+        let bytes = match std::fs::read(p) {
+            Ok(b) => b,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Config::default(),
+            Err(_) => return unreadable(None),
+        };
+        let table = std::str::from_utf8(&bytes)
+            .ok()
+            .and_then(|t| t.parse::<toml::Table>().ok());
+        let Some(mut table) = table else {
+            return unreadable(aside(p, &bytes));
+        };
+        let mut fields = Vec::new();
+        if let Some(toml::Value::Table(v)) = table.remove("viewer") {
+            let v = readable::<Viewer>(v, "viewer.", &mut fields);
+            table.insert("viewer".into(), toml::Value::Table(v));
+        }
+        let table = readable::<Config>(table, "", &mut fields);
+        let mut cfg: Config = toml::Value::Table(table).try_into().unwrap_or_default();
+        if !fields.is_empty() {
+            cfg.unread = Some(Unread {
+                copy: aside(p, &bytes),
+                fields,
+            });
+        }
+        cfg
+    }
+
+    /// Writes the settings, unless they didn't read: what the file holds is
+    /// not ours to replace until someone changes a setting.
     pub fn save(&self) -> Result<()> {
-        let p = path();
+        self.save_at(&path())
+    }
+
+    fn save_at(&self, p: &Path) -> Result<()> {
+        if self.unread.is_some() {
+            return Ok(());
+        }
         if let Some(d) = p.parent() {
             std::fs::create_dir_all(d)?;
         }
-        crate::file::write_atomic(&p, &toml::to_string(self)?)
+        crate::file::write_atomic(p, &toml::to_string(self)?)
     }
 
     pub fn plays_dir(&self) -> PathBuf {
@@ -224,9 +288,127 @@ impl Config {
     }
 }
 
+/// The settings of `file` that `T` can take, naming the others in `bad`.
+fn readable<T: DeserializeOwned>(
+    file: toml::Table,
+    prefix: &str,
+    bad: &mut Vec<String>,
+) -> toml::Table {
+    let takes = |t: &toml::Table| toml::Value::Table(t.clone()).try_into::<T>().is_ok();
+    if takes(&file) {
+        return file;
+    }
+    let mut good = toml::Table::new();
+    for (key, value) in file {
+        good.insert(key.clone(), value);
+        if !takes(&good) {
+            good.remove(&key);
+            bad.push(format!("{prefix}{key}"));
+        }
+    }
+    good
+}
+
+/// A copy of a file that didn't read, as `config.toml.bad`; an older copy
+/// with something else in it stays, and this one gets the next number.
+fn aside(p: &Path, bytes: &[u8]) -> Option<PathBuf> {
+    let name = p.file_name()?.to_string_lossy().to_string();
+    for n in 1..100 {
+        let tail = if n == 1 {
+            String::new()
+        } else {
+            format!("-{n}")
+        };
+        let copy = p.with_file_name(format!("{name}.bad{tail}"));
+        match std::fs::read(&copy) {
+            Ok(old) if old == bytes => return Some(copy),
+            Ok(_) => {}
+            Err(_) => return std::fs::write(&copy, bytes).ok().map(|_| copy),
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+
+    fn tmp(name: &str) -> (PathBuf, PathBuf) {
+        let d = std::env::temp_dir().join(format!("dactile-cfg-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        let p = d.join("config.toml");
+        (d, p)
+    }
+
+    #[test]
+    fn a_file_that_does_not_read_stays() {
+        let (d, p) = tmp("broken");
+        let broken = "plays_dir = \"~/Yazılar\"\nauthor = [oops\n";
+        fs::write(&p, broken).unwrap();
+        let c = Config::read_at(&p);
+        assert_eq!(c.plays_dir, Config::default().plays_dir);
+        let u = c.unread.clone().unwrap();
+        assert!(u.fields.is_empty());
+        let copy = d.join("config.toml.bad");
+        assert_eq!(u.copy.as_ref(), Some(&copy));
+        assert_eq!(fs::read_to_string(&copy).unwrap(), broken);
+        // Saving changes nothing.
+        c.save_at(&p).unwrap();
+        assert_eq!(fs::read_to_string(&p).unwrap(), broken);
+        // The same file again makes no second copy; another keeps the first.
+        Config::read_at(&p);
+        assert!(!d.join("config.toml.bad-2").exists());
+        fs::write(&p, "= başka").unwrap();
+        let c = Config::read_at(&p);
+        assert_eq!(c.unread.unwrap().copy, Some(d.join("config.toml.bad-2")));
+        assert_eq!(fs::read_to_string(&copy).unwrap(), broken);
+        // Not even text.
+        fs::write(&p, [0xff, 0xfe, 0x00]).unwrap();
+        assert!(Config::read_at(&p).unread.is_some());
+        let _ = fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn a_bad_value_falls_back_alone() {
+        let (d, p) = tmp("field");
+        let file = "plays_dir = \"~/Yazılar\"\nauthor = \"Ayşe Yılmaz\"\npage_size = \"iri\"\n[viewer]\ncolumns = \"iki\"\nlens_size = 200\n";
+        fs::write(&p, file).unwrap();
+        let c = Config::read_at(&p);
+        assert_eq!(
+            (c.plays_dir.as_str(), c.author.as_str()),
+            ("~/Yazılar", "Ayşe Yılmaz")
+        );
+        assert_eq!(c.page_size, 17);
+        assert_eq!((c.viewer.columns, c.viewer.lens_size), (1, 200));
+        let mut u = c.unread.clone().unwrap();
+        u.fields.sort();
+        assert_eq!(u.fields, ["page_size", "viewer.columns"]);
+        assert_eq!(fs::read_to_string(u.copy.unwrap()).unwrap(), file);
+        c.save_at(&p).unwrap();
+        assert_eq!(fs::read_to_string(&p).unwrap(), file);
+        // A setting changed on purpose writes what did read.
+        let c = Config { unread: None, ..c };
+        c.save_at(&p).unwrap();
+        let c = Config::read_at(&p);
+        assert_eq!((c.author.as_str(), c.unread), ("Ayşe Yılmaz", None));
+        let _ = fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn nothing_there_and_all_well() {
+        let (d, p) = tmp("fine");
+        assert_eq!(Config::read_at(&p), Config::default());
+        assert!(!d.join("config.toml.bad").exists());
+        fs::write(&p, "author = \"X\"\nunknown = 1\n").unwrap();
+        let c = Config::read_at(&p);
+        assert_eq!((c.author.as_str(), c.unread), ("X", None));
+        assert!(!d.join("config.toml.bad").exists());
+        // Dactile Light's `load` still refuses a bad value.
+        assert!(toml::from_str::<Config>("page_size = \"iri\"").is_err());
+        let _ = fs::remove_dir_all(d);
+    }
 
     #[test]
     fn defaults_and_recent() {

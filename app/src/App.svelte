@@ -14,6 +14,7 @@
   async function reload() {
     home = await api.home();
     applyLook(home.settings);
+    if (home.notice) error = home.notice;
   }
 
   async function open(path: string) {
@@ -65,6 +66,8 @@
     transform: translateX(-50%);
     background: var(--claret);
     color: #f6efe4;
+    max-width: 80vw;
+    overflow-wrap: anywhere;
     padding: 8px 14px;
     border-radius: 6px;
     z-index: 50;

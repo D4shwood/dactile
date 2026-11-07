@@ -66,6 +66,8 @@ pub struct Home {
     pub templates: Vec<TemplateCard>,
     pub settings: Settings,
     pub folder: crate::plays::Folder,
+    /// What went wrong with the settings file.
+    pub notice: Option<String>,
 }
 
 pub fn lang_of(cfg: &Config) -> Lang {
@@ -132,7 +134,30 @@ pub fn home(cfg: &Config) -> Home {
         templates,
         settings: settings(cfg),
         folder: crate::plays::folder(cfg),
+        notice: notice(cfg),
     }
+}
+
+/// A settings file that didn't read, in words.
+fn notice(cfg: &Config) -> Option<String> {
+    let u = cfg.unread.as_ref()?;
+    let copy = u.copy.as_deref().map_or_else(
+        || lang::l("kopyalanamadı", "couldn't be copied").to_string(),
+        config::tilde,
+    );
+    Some(if u.fields.is_empty() {
+        lang::f(
+            "Ayarlar dosyası okunamadı: varsayılanlarla çalışılıyor. Bir ayar değiştirmedikçe dosyaya dokunulmaz. Kopyası: {}",
+            "The settings file can't be read: running on defaults. It stays as it is until you change a setting. Its copy: {}",
+            &[&copy],
+        )
+    } else {
+        lang::f(
+            "Bazı ayarlar okunamadı ({}): yerlerine varsayılanlar kondu. Bir ayar değiştirmedikçe dosyaya dokunulmaz. Kopyası: {}",
+            "Some settings can't be read ({}): defaults stand in for them. The file stays as it is until you change a setting. Its copy: {}",
+            &[&u.fields.join(", "), &copy],
+        )
+    })
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -389,6 +414,9 @@ pub fn relocate(text: &str, i: usize, to: usize) -> Option<Change> {
 /// The settings the app changes.
 pub fn set(cfg: &mut Config, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
     change(cfg, key, value)?;
+    // The viewer keeps its layout by itself: nobody chose to write the file.
+    // And a file with no copy beside it stays, whatever is chosen.
+    cfg.unread.take_if(|u| key != "viewer" && u.copy.is_some());
     cfg.save()
 }
 
@@ -428,11 +456,7 @@ fn change(cfg: &mut Config, key: &str, value: &serde_json::Value) -> anyhow::Res
 }
 
 pub fn load_config() -> Config {
-    if config::Config::exists() {
-        Config::load().unwrap_or_default()
-    } else {
-        Config::default()
-    }
+    Config::read()
 }
 
 #[cfg(test)]
@@ -445,6 +469,25 @@ mod tests {
         let mut u: Vec<u16> = text.encode_utf16().collect();
         u.splice(c.from..c.to, c.insert.encode_utf16());
         String::from_utf16(&u).unwrap()
+    }
+
+    #[test]
+    fn a_settings_file_that_did_not_read_is_told_and_kept() {
+        let mut c = Config {
+            unread: Some(config::Unread {
+                copy: Some(PathBuf::from("/ev/config.toml.bad")),
+                fields: vec!["page_size".into()],
+            }),
+            ..Config::default()
+        };
+        lang::set(Lang::En);
+        let told = notice(&c).unwrap();
+        assert!(told.contains("page_size") && told.contains("config.toml.bad"));
+        // The viewer saving its layout is no one's choice: still nothing written.
+        let viewer = serde_json::to_value(config::Viewer::default()).unwrap();
+        set(&mut c, "viewer", &viewer).unwrap();
+        assert!(c.unread.is_some());
+        assert_eq!(notice(&Config::default()), None);
     }
 
     #[test]
