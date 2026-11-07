@@ -3,9 +3,11 @@
   // left, tiles for a new play along the top, the plays below with a
   // preview of the one picked.
   import { untrack } from "svelte";
-  import { api, type Files, type Home, type PlayCard, type Preview, type Shown, type TemplateCard } from "./api";
+  import { api, type Files, type Home, type Look, type PlayCard, type Preview, type Shown, type TemplateCard } from "./api";
   import FileList from "./FileList.svelte";
   import Import from "./Import.svelte";
+  import LookForm from "./LookForm.svelte";
+  import { applyLook, pickLook } from "./look";
   import Temporary from "./Temporary.svelte";
 
   let { home, tr, open, reload }: { home: Home; tr: boolean; open: (path: string) => void; reload: () => Promise<void> } =
@@ -25,6 +27,15 @@
   let author = $state(untrack(() => home.settings.author));
   let playsDir = $state(untrack(() => home.settings.plays_dir));
   let lang = $state("auto");
+  let look = $state(untrack(() => pickLook(home.settings)));
+  let lookError = $state("");
+
+  function setLook<K extends keyof Look>(key: K, value: Look[K]) {
+    look[key] = value;
+    applyLook(look);
+    lookError = "";
+    api.set(key, value).catch((e) => (lookError = String(e)));
+  }
 
   const l = (t: string, e: string) => (tr ? t : e);
   const ago = (s: number | null) => {
@@ -51,6 +62,13 @@
       (e) => (error = String(e)),
     );
     preview = await api.preview(p.path).catch(() => null);
+  }
+
+  async function reloadFiles() {
+    const p = chosen;
+    if (!p) return;
+    const f = await api.files(p.path).catch(() => null);
+    if (f && chosen === p) files = f;
   }
 
   async function openFolder() {
@@ -405,7 +423,7 @@
                 <Temporary {tr} shown={files.folder.shown} />
               {/if}
               <h3 class="fileshead">{l("Bu oyunun dosyaları", "This play's files")}</h3>
-              <FileList {tr} {files} {open} />
+              <FileList {tr} {files} {open} reload={reloadFiles} />
             {/if}
             <div class="path">{chosen.path}</div>
           {/if}
@@ -434,6 +452,9 @@
         </label>
         <button class="primary">{l("Kaydet", "Save")}</button>
       </form>
+      <h2 class="lookhead">{l("Görünüş", "Appearance")}</h2>
+      <LookForm {tr} {look} set={setLook} />
+      {#if lookError}<p class="error">{lookError}</p>{/if}
     {/if}
 
     {#if section === "keys"}
@@ -477,7 +498,7 @@
     padding: 0;
     border: 0;
     background: none;
-    color: var(--claret);
+    color: var(--accent-ink);
     font: inherit;
     cursor: pointer;
   }
@@ -486,6 +507,9 @@
   }
   .folder .muted {
     flex: none;
+  }
+  .lookhead {
+    margin: 28px 0 10px;
   }
   .fileshead {
     margin: 16px 0 4px;
@@ -576,8 +600,8 @@
       width: 0;
     }
   }
+  /* The cursor blinks all the same. */
   @media (prefers-reduced-motion: reduce) {
-    .caret,
     .brand .what {
       animation: none;
     }
@@ -659,11 +683,11 @@
     transform: translateY(-2px);
   }
   .tile.picked .sheet {
-    outline: 2px solid var(--claret);
+    outline: 2px solid var(--accent-ink);
   }
   .plus {
     font-size: 44px;
-    color: var(--claret);
+    color: var(--accent-ink);
     font-weight: 300;
   }
   .lines {
@@ -688,7 +712,7 @@
   }
   .ex {
     font: 600 20px/1.1 var(--serif);
-    color: var(--claret);
+    color: var(--accent-ink);
     text-align: center;
   }
   .make {
@@ -714,7 +738,7 @@
     width: 320px;
   }
   .error {
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   .primary {
     background: var(--claret);

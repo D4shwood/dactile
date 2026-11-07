@@ -3,7 +3,12 @@
   // and in the writer's "My files" panel.
   import { api, type Files, type Spot } from "./api";
 
-  let { tr, files, open }: { tr: boolean; files: Files; open: (path: string) => void } = $props();
+  let {
+    tr,
+    files,
+    open,
+    reload,
+  }: { tr: boolean; files: Files; open: (path: string) => void; reload: () => Promise<void> } = $props();
 
   let failed = $state("");
 
@@ -14,6 +19,15 @@
   async function launch(s: Spot) {
     failed = "";
     await api.launch(s.path).catch((e) => (failed = String(e)));
+  }
+
+  /// A draft may have gone since the list was made: then the list changes
+  /// and the play stays open.
+  async function openDraft(path: string) {
+    failed = "";
+    await reload();
+    if (files.drafts.some((d) => d.path === path)) open(path);
+    else failed = l("Bu taslak artık yok: taşınmış ya da silinmiş olabilir.", "This draft is gone: it may have moved or been deleted.");
   }
 </script>
 
@@ -52,7 +66,7 @@
     {@render none(l("Oyuncu kopyaları", "Actors' copies"), l("Henüz yok: oyun açıkken Dağıtım (F9) içinden yapılır.", "None yet: made from Casting (F9) while the play is open."))}
   {/if}
   {#each files.drafts as d (d.path)}
-    <button class="item" title={d.path} onclick={() => open(d.path)}>
+    <button class="item" title={d.path} onclick={() => openDraft(d.path)}>
       <span class="name">{l("Taslak", "Draft")}{d.draft ? ` ${d.draft}` : ""}</span>
       <span class="where">{d.title}</span>
       <span class="note">{date(d.modified)}</span>
@@ -111,7 +125,7 @@
   }
   .failed {
     margin: 6px 0 0;
-    color: var(--claret);
+    color: var(--accent-ink);
     font-size: 12px;
     overflow-wrap: anywhere;
   }

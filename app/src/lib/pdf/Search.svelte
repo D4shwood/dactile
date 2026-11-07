@@ -182,7 +182,7 @@
     background: var(--chrome-2);
     border: 1px solid var(--chrome-line);
     border-radius: 3px;
-    caret-color: var(--claret);
+    caret-color: var(--accent-ink);
   }
   .line button {
     display: inline-flex;
@@ -231,7 +231,7 @@
   }
   button:focus-visible,
   input:focus-visible {
-    outline: 2px solid var(--claret);
+    outline: 2px solid var(--accent-ink);
     outline-offset: -1px;
   }
 </style>

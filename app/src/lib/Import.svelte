@@ -361,7 +361,7 @@
   }
   .head strong {
     font: 600 17px var(--serif);
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   .grow {
     flex: 1;
@@ -373,7 +373,7 @@
   h3 {
     margin: 16px 0 6px;
     font: 600 14px var(--serif);
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   .parts {
     max-height: 38vh;
@@ -394,7 +394,7 @@
     font-size: 13px;
   }
   .part.play {
-    border-left-color: var(--claret);
+    border-left-color: var(--accent-ink);
   }
   .part.on {
     background: var(--chrome-line);
@@ -421,7 +421,7 @@
     font-size: 13px;
   }
   .tabs .on {
-    color: var(--claret);
+    color: var(--accent-ink);
     border-color: var(--claret);
   }
   .tools .row {
@@ -436,7 +436,7 @@
   }
   .tag.play {
     border-color: var(--claret);
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   .onward {
     flex-direction: row;
@@ -462,7 +462,7 @@
     contain-intrinsic-size: auto 24px;
   }
   .doc p.play {
-    border-left-color: var(--claret);
+    border-left-color: var(--accent-ink);
     color: var(--chrome-fg);
   }
   .doc p.on {
@@ -586,7 +586,7 @@
   .section {
     margin-top: 1em !important;
     font-weight: 700;
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   .direction {
     font-style: italic;

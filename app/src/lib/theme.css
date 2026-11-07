@@ -5,13 +5,15 @@
 :root {
   --claret: #b0444a;
   --claret-deep: #8e3238;
+  /* The accent as text and lines; --claret is for what it fills. */
+  --accent-ink: #a03a40;
   --beige: #d8cfc0;
 
   --chrome: #f3efe7;
   --chrome-2: #e8e1d4;
   --chrome-line: #d6cdbd;
   --chrome-fg: #2a2520;
-  --chrome-muted: #7a7064;
+  --chrome-muted: #665d52;
   --desk: #d9d2c5;
 
   /* The page: paper by default. */
@@ -29,6 +31,12 @@
   --serif: "EB Garamond", "Libertinus Serif", "Noto Serif", "DejaVu Serif", Georgia, serif;
   --sans: "Inter", "Noto Sans", "Cantarell", system-ui, sans-serif;
   --mono: "JetBrains Mono", "Hack", "Noto Sans Mono", monospace;
+
+  /* The page's look, from the settings (look.ts). */
+  --page-font: var(--serif);
+  --page-size: 17px;
+  --line-spacing: 1.55;
+  --page-width: 44;
 
   color-scheme: light;
 }
@@ -65,6 +73,7 @@
   --chrome-line: #3a3f4a;
   --chrome-fg: #e2e4e8;
   --chrome-muted: #9198a5;
+  --accent-ink: #e08f94;
   color-scheme: dark;
 }
 
@@ -89,9 +98,71 @@
   --faint: #4a4a4a;
   --star: #d8cfc0;
   --name-ref: #d8cfc0;
-  --heading: #b0444a;
+  --heading: #d9757b;
   --warn: #c88a5a;
   --selection: #3a2a2c;
+}
+
+/* The accents: for fills and light pages, and as ink on dark ones. Each
+   reads at 4.5:1 on what it stands on. */
+:root[data-accent="blue"] {
+  --claret: #2f5f9e;
+  --accent-ink: #2f5f9e;
+  --claret-deep: #24497a;
+  --heading: #2f5f9e;
+}
+
+:root[data-theme="night"][data-accent="blue"],
+:root[data-theme="dark"][data-accent="blue"] {
+  --accent-ink: #8ab4e8;
+  --heading: #8ab4e8;
+}
+
+:root[data-accent="green"] {
+  --claret: #2f6f4f;
+  --accent-ink: #2f6f4f;
+  --claret-deep: #245539;
+  --heading: #2f6f4f;
+}
+
+:root[data-theme="night"][data-accent="green"],
+:root[data-theme="dark"][data-accent="green"] {
+  --accent-ink: #7cc4a0;
+  --heading: #7cc4a0;
+}
+
+:root[data-accent="plum"] {
+  --claret: #7a3f8a;
+  --accent-ink: #7a3f8a;
+  --claret-deep: #5f2f6c;
+  --heading: #7a3f8a;
+}
+
+:root[data-theme="night"][data-accent="plum"],
+:root[data-theme="dark"][data-accent="plum"] {
+  --accent-ink: #c79ad6;
+  --heading: #c79ad6;
+}
+
+:root[data-accent="ochre"] {
+  --claret: #8a5a10;
+  --accent-ink: #8a5a10;
+  --claret-deep: #6b450c;
+  --heading: #8a5a10;
+}
+
+:root[data-theme="night"][data-accent="ochre"],
+:root[data-theme="dark"][data-accent="ochre"] {
+  --accent-ink: #d9a95a;
+  --heading: #d9a95a;
+}
+
+/* Everything appears at once; the cursor still blinks. */
+:root[data-animations="off"] *:not(.cm-cursor, .cm-cursorLayer, .caret),
+:root[data-animations="off"] *::before,
+:root[data-animations="off"] *::after {
+  animation: none !important;
+  transition: none !important;
 }
 
 * {
@@ -124,6 +195,6 @@ textarea {
 }
 
 :focus-visible {
-  outline: 2px solid var(--claret);
+  outline: 2px solid var(--accent-ink);
   outline-offset: 1px;
 }

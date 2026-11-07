@@ -49,6 +49,6 @@
     cursor: pointer;
   }
   button:focus-visible {
-    outline: 2px solid var(--claret);
+    outline: 2px solid var(--accent-ink);
   }
 </style>

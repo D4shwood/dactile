@@ -124,7 +124,7 @@
   h3 {
     margin: 0;
     font: 600 16px var(--serif);
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   .two {
     display: grid;
@@ -163,7 +163,7 @@
   }
   .error {
     margin: 0;
-    color: var(--claret);
+    color: var(--accent-ink);
     font-size: 12.5px;
   }
   .row {

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { api, type Home, type Opened } from "./lib/api";
+  import { applyLook } from "./lib/look";
   import Start from "./lib/Start.svelte";
   import Writer from "./lib/Writer.svelte";
 
@@ -12,7 +13,7 @@
 
   async function reload() {
     home = await api.home();
-    document.documentElement.dataset.theme = home.settings.theme || "paper";
+    applyLook(home.settings);
   }
 
   async function open(path: string) {

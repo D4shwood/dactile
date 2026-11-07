@@ -132,7 +132,7 @@
   }
   button.on {
     border-color: var(--chrome-line);
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   button:disabled {
     opacity: 0.35;
@@ -140,7 +140,7 @@
   button:focus-visible,
   select:focus-visible,
   input:focus-visible {
-    outline: 2px solid var(--claret);
+    outline: 2px solid var(--accent-ink);
     outline-offset: -1px;
   }
   select,
@@ -151,7 +151,7 @@
     background: var(--chrome-2);
     border: 1px solid var(--chrome-line);
     border-radius: 3px;
-    caret-color: var(--claret);
+    caret-color: var(--accent-ink);
   }
   .custom {
     width: 5em;
@@ -161,6 +161,6 @@
     width: 110px;
     min-width: 40px;
     flex-shrink: 1;
-    accent-color: var(--claret);
+    accent-color: var(--accent-ink);
   }
 </style>

@@ -25,7 +25,7 @@
     align-items: center;
     min-width: 0;
     padding: 6px 10px;
-    border-left: 3px solid var(--claret);
+    border-left: 3px solid var(--accent-ink);
     background: var(--chrome-2);
     color: var(--chrome-fg);
     font-size: 12px;
@@ -44,10 +44,10 @@
   button {
     flex: none;
     padding: 3px 8px;
-    border: 1px solid var(--claret);
+    border: 1px solid var(--accent-ink);
     border-radius: 4px;
     background: none;
-    color: var(--claret);
+    color: var(--accent-ink);
     cursor: pointer;
   }
 </style>

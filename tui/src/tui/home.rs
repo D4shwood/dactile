@@ -611,6 +611,52 @@ impl Home {
                     _ => "q",
                 }
                 .into();
+                let (Some(theme_id), Some(accent)) = (
+                    theme::theme_named(form.get(lang::l("Tema", "Theme"))),
+                    theme::accent_named(form.get(lang::l("Vurgu rengi", "Accent colour"))),
+                ) else {
+                    return fail(
+                        self,
+                        form,
+                        lang::l(
+                            "Tema ya da vurgu rengi yok: Tab ile seç.",
+                            "No such theme or accent: pick with Tab.",
+                        )
+                        .into(),
+                    );
+                };
+                let page_bg = form.get(lang::l("Sayfa zemini", "Page colour")).to_string();
+                let page_fg = form.get(lang::l("Sayfa yazısı", "Page text")).to_string();
+                if [&page_bg, &page_fg]
+                    .iter()
+                    .any(|c| !c.is_empty() && theme::hex(c).is_none())
+                {
+                    return fail(
+                        self,
+                        form,
+                        lang::l(
+                            "Sayfa renkleri #rrggbb biçiminde olmalı.",
+                            "Page colours go as #rrggbb.",
+                        )
+                        .into(),
+                    );
+                }
+                cfg.theme = theme_id.into();
+                cfg.paper = theme_id != "dark";
+                cfg.accent = accent.into();
+                cfg.page_bg = page_bg;
+                cfg.page_fg = page_fg;
+                if !theme::readable(cfg) {
+                    return fail(
+                        self,
+                        form,
+                        lang::l(
+                            "Bu iki renkle sayfa okunmaz: birbirine fazla yakın.",
+                            "The page won't read in these two colours: too close.",
+                        )
+                        .into(),
+                    );
+                }
                 match form.get("Dakikada kelime").parse::<u32>() {
                     Ok(n) if (30..=400).contains(&n) => cfg.wpm = n,
                     _ => {
@@ -642,6 +688,7 @@ impl Home {
                 {
                     return fail(self, form, format!("{e:#}"));
                 }
+                theme::set_look(cfg);
                 self.first_run = false;
                 self.refresh(cfg);
                 if let Some(p) = self.pending.take() {
@@ -1997,6 +2044,10 @@ fn settings_form(cfg: &Config, first: bool) -> Form {
     } else {
         menus[0].clone()
     };
+    let themes = theme::THEMES.map(|t| theme::theme_name(t).to_string());
+    let accents = theme::ACCENTS.map(|a| theme::accent_name(a.0).to_string());
+    // A terminal draws its text in its own font: the desktop app chooses.
+    let terminal = lang::l("terminalin ayarı", "the terminal's setting");
     Form {
         kind: FormKind::Settings,
         title: if first {
@@ -2013,6 +2064,31 @@ fn settings_form(cfg: &Config, first: bool) -> Form {
             Field::text("Dakikada kelime", &cfg.wpm.to_string(), Vec::new()),
             Field::text("Klavye", &keyboard, keyboards),
             Field::flag("Animasyonlar", cfg.animations),
+            Field::text(
+                lang::l("Tema", "Theme"),
+                theme::theme_name(cfg.theme()),
+                themes.to_vec(),
+            ),
+            Field::text(
+                lang::l("Vurgu rengi", "Accent colour"),
+                theme::accent_name(&cfg.accent),
+                accents.to_vec(),
+            ),
+            Field::text(
+                lang::l("Sayfa zemini", "Page colour"),
+                &cfg.page_bg,
+                ["#fbf8f1", "#efe0c2", "#1f2530"].map(String::from).to_vec(),
+            ),
+            Field::text(
+                lang::l("Sayfa yazısı", "Page text"),
+                &cfg.page_fg,
+                ["#221f1b", "#3a2a1a", "#d6dbe4"].map(String::from).to_vec(),
+            ),
+            Field::text(
+                lang::l("Yazı tipi, boyut", "Font, size"),
+                terminal,
+                vec![terminal.to_string()],
+            ),
         ],
         focus: 0,
         at: 0..0,

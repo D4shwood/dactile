@@ -254,14 +254,14 @@
     margin: 5px 0;
     border-radius: 6px;
     background: var(--chrome-2);
-    border-left: 3px solid var(--claret);
+    border-left: 3px solid var(--accent-ink);
     cursor: pointer;
   }
   .person.member {
     margin-left: 14px;
   }
   .picked {
-    outline: 2px solid var(--claret);
+    outline: 2px solid var(--accent-ink);
   }
   .top {
     display: flex;
@@ -275,7 +275,7 @@
   code {
     font-family: var(--mono);
     font-size: 12px;
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   .nums {
     font-variant-numeric: tabular-nums;
@@ -347,6 +347,6 @@
     opacity: 0.5;
   }
   .danger {
-    color: var(--claret);
+    color: var(--accent-ink);
   }
 </style>

@@ -7,6 +7,9 @@ use std::path::{Path, PathBuf};
 /// How many recently opened plays are remembered.
 const RECENT: usize = 12;
 
+/// The accent colours, by the name the settings keep.
+pub const ACCENTS: [&str; 5] = ["claret", "blue", "green", "plum", "ochre"];
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -28,7 +31,19 @@ pub struct Config {
     pub paper: bool,
     /// paper, sepia, night, contrast or dark; empty in older settings.
     pub theme: String,
+    /// One of `ACCENTS`.
+    pub accent: String,
+    /// The desktop app's page: a font's name, empty for its own; its size in
+    /// pixels, its line spacing in percent, its width in ems.
+    pub page_font: String,
+    pub page_size: u16,
+    pub line_spacing: u16,
+    pub page_width: u16,
+    /// Dactile Light's page, `#rrggbb`; empty: the theme's.
+    pub page_bg: String,
+    pub page_fg: String,
     /// Typing, scrolling and windows move; off, everything appears at once.
+    /// The cursor blinks either way.
     pub animations: bool,
     /// Page view: A4-shaped sheets.
     pub pages: bool,
@@ -115,6 +130,13 @@ impl Default for Config {
             dim: false,
             paper: true,
             theme: String::new(),
+            accent: "claret".into(),
+            page_font: String::new(),
+            page_size: 17,
+            line_spacing: 155,
+            page_width: 44,
+            page_bg: String::new(),
+            page_fg: String::new(),
             animations: true,
             pages: false,
             ribbon_folded: false,
@@ -211,6 +233,12 @@ mod tests {
         let c: Config = toml::from_str("author = \"X\"").unwrap();
         assert_eq!(c.author, "X");
         assert_eq!(c.menu, "auto");
+        // Settings older than the page's look keep the look it had.
+        assert_eq!(
+            (c.accent.as_str(), c.page_size, c.line_spacing, c.page_width),
+            ("claret", 17, 155, 44)
+        );
+        assert!(c.page_font.is_empty() && c.page_bg.is_empty() && c.page_fg.is_empty());
         let mut c = Config::default();
         for i in 0..15 {
             c.opened(Path::new(&format!("/tmp/o{i}.tex")));

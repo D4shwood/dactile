@@ -265,7 +265,7 @@
     margin: 6px 0;
     border-radius: 6px;
     background: var(--chrome-2);
-    border-left: 3px solid var(--claret);
+    border-left: 3px solid var(--accent-ink);
     cursor: pointer;
   }
   .note.done {
@@ -273,7 +273,7 @@
     border-left-color: var(--chrome-line);
   }
   .note.picked {
-    outline: 2px solid var(--claret);
+    outline: 2px solid var(--accent-ink);
     opacity: 1;
   }
   .meta {
@@ -323,7 +323,7 @@
     opacity: 0.5;
   }
   .danger {
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   .form {
     display: flex;

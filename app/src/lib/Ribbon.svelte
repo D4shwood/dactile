@@ -313,8 +313,8 @@
     background: var(--chrome-2);
   }
   .tabs button.on {
-    border-bottom-color: var(--claret);
-    color: var(--claret);
+    border-bottom-color: var(--accent-ink);
+    color: var(--accent-ink);
     font-weight: 600;
   }
   .tabs button.file {
@@ -378,7 +378,7 @@
   .btn .icon {
     font-size: 22px;
     line-height: 1;
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   .btn .label {
     font-size: 11.5px;
@@ -404,7 +404,7 @@
     z-index: 2;
   }
   .found .icon {
-    color: var(--claret);
+    color: var(--accent-ink);
     width: 18px;
     text-align: center;
   }
