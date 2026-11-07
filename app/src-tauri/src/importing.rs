@@ -7,7 +7,7 @@ use dactile::import::Run;
 use dactile::import::ocr::{self, Job};
 use dactile::import::pages::Page;
 use dactile::import::pdf::NoText;
-use dactile::import::shape::{Counts, Draft, Item, shape, shape_play};
+use dactile::import::shape::{Counts, Draft, Item, shape};
 use dactile::lang::{self, Lang};
 use dactile::{cast, file, library};
 use serde::{Deserialize, Serialize};
@@ -64,6 +64,25 @@ pub struct Shown {
     /// The plays of a volume of several, and which this is.
     pub plays: Vec<String>,
     pub picked: Option<usize>,
+}
+
+/// A play of a volume, in a line of the volume's list.
+#[derive(Debug, Clone, Serialize)]
+pub struct PlayLine {
+    pub title: String,
+    pub pages: Option<(String, String)>,
+    pub lines: usize,
+    pub people: usize,
+    /// Found by the pages alone, the contents not listing it.
+    pub guess: bool,
+}
+
+/// What became of one play of those written together.
+#[derive(Debug, Clone, Serialize)]
+pub struct Written {
+    pub title: String,
+    pub path: Option<String>,
+    pub error: Option<String>,
 }
 
 /// Stops the reading under way.
@@ -237,6 +256,15 @@ pub enum Edit {
     End {
         i: usize,
     },
+    /// A new play of the volume starts at this paragraph.
+    AddPlay {
+        i: usize,
+        title: String,
+    },
+    /// This one of the volume is no play: it goes with the one before.
+    DropPlay {
+        i: usize,
+    },
 }
 
 pub fn edit(d: &mut Draft, e: Edit) -> Result<(), String> {
@@ -247,11 +275,14 @@ pub fn edit(d: &mut Draft, e: Edit) -> Result<(), String> {
             if i >= d.source.plays.len() {
                 return Err("no such play".to_string());
             }
-            *d = shape_play(&d.source, d.lang, i);
+            d.go_to_play(i);
         }
         Edit::Info { title, author } => {
             d.title = title.trim().to_string();
             d.author = author.trim().to_string();
+            if let Some(at) = d.play {
+                d.source.plays[at].title = d.title.clone();
+            }
         }
         Edit::Person { i, name, alias } => {
             known(i)?;
@@ -286,6 +317,10 @@ pub fn edit(d: &mut Draft, e: Edit) -> Result<(), String> {
         }
         Edit::Start { i } => d.play_from(i),
         Edit::End { i } => d.play_to(i),
+        Edit::AddPlay { i, title } => {
+            d.add_play(i, &title)?;
+        }
+        Edit::DropPlay { i } => d.drop_play(i),
     }
     Ok(())
 }
@@ -304,6 +339,40 @@ pub fn write(file_from: &Path, d: &Draft, cfg: &Config) -> anyhow::Result<PathBu
     let path = library::free_path(&dir, &library::file_name(&title));
     file::write_atomic(&path, &d.tex())?;
     Ok(path)
+}
+
+/// The volume's plays, a line each.
+pub fn volume(d: &Draft) -> Vec<PlayLine> {
+    d.summaries()
+        .into_iter()
+        .map(|s| PlayLine {
+            title: s.title,
+            pages: s.pages,
+            lines: s.lines,
+            people: s.people,
+            guess: !s.sure,
+        })
+        .collect()
+}
+
+/// These plays of the volume, each under its own name: one that can't be
+/// written doesn't stop the others, and nothing there is written over.
+pub fn write_all(file_from: &Path, d: &Draft, picked: &[usize], cfg: &Config) -> Vec<Written> {
+    d.plays(picked)
+        .iter()
+        .map(|play| match write(file_from, play, cfg) {
+            Ok(path) => Written {
+                title: play.title.clone(),
+                path: Some(path.display().to_string()),
+                error: None,
+            },
+            Err(e) => Written {
+                title: play.title.clone(),
+                path: None,
+                error: Some(format!("{e:#}")),
+            },
+        })
+        .collect()
 }
 
 #[cfg(test)]

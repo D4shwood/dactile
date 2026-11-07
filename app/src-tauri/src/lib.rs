@@ -513,6 +513,22 @@ fn import_write(app: Shared) -> Res<String> {
 }
 
 #[tauri::command]
+fn import_volume(app: Shared) -> Res<Vec<importing::PlayLine>> {
+    let a = app.lock().unwrap();
+    let (_, draft) = a.importing.as_ref().ok_or("no import open")?;
+    Ok(importing::volume(draft))
+}
+
+/// The chosen plays of the volume written; the import stays open for the
+/// list of what became of them.
+#[tauri::command]
+fn import_write_all(app: Shared, picked: Vec<usize>) -> Res<Vec<importing::Written>> {
+    let a = app.lock().unwrap();
+    let (file, draft) = a.importing.as_ref().ok_or("no import open")?;
+    Ok(importing::write_all(file, draft, &picked, &a.cfg))
+}
+
+#[tauri::command]
 fn import_drop(app: Shared) {
     app.lock().unwrap().importing = None;
 }
@@ -811,6 +827,8 @@ pub fn run() {
             import_edit,
             import_doc,
             import_write,
+            import_volume,
+            import_write_all,
             import_drop,
             fork_start,
             fork_file,

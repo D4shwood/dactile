@@ -283,6 +283,8 @@ export const api = {
   importEdit: (edit: ImportEdit) => invoke<Shown>("import_edit", { edit }),
   importDoc: () => invoke<{ text: string; page: string | null }[]>("import_doc"),
   importWrite: () => invoke<string>("import_write"),
+  importVolume: () => invoke<PlayLine[]>("import_volume"),
+  importWriteAll: (picked: number[]) => invoke<Written[]>("import_write_all", { picked }),
   importDrop: () => invoke<void>("import_drop"),
   forkStart: (path: string, draft: string | null, today: string) => invoke<FormStart>("fork_start", { path, draft, today }),
   forkFile: (path: string, draft: string) => invoke<string>("fork_file", { path, draft }),
@@ -374,6 +376,20 @@ export interface Shown {
   picked: number | null;
 }
 
+export interface PlayLine {
+  title: string;
+  pages: [string, string] | null;
+  lines: number;
+  people: number;
+  guess: boolean;
+}
+
+export interface Written {
+  title: string;
+  path: string | null;
+  error: string | null;
+}
+
 export type ImportEdit =
   | { kind: "play"; i: number }
   | { kind: "info"; title: string; author: string }
@@ -383,7 +399,9 @@ export type ImportEdit =
   | { kind: "not-character"; i: number }
   | { kind: "mark"; from: number; to: number; page: string }
   | { kind: "start"; i: number }
-  | { kind: "end"; i: number };
+  | { kind: "end"; i: number }
+  | { kind: "add-play"; i: number; title: string }
+  | { kind: "drop-play"; i: number };
 
 export interface FormStart {
   title: string;

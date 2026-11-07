@@ -3,7 +3,7 @@
   // document's parts to mark (a book's cover, its contents, where the play
   // starts), and the play as it was read, before anything is written.
   import { onMount, tick, untrack } from "svelte";
-  import { api, type ImportEdit, type Shown } from "./api";
+  import { api, type ImportEdit, type PlayLine, type Shown, type Written } from "./api";
 
   let {
     tr,
@@ -33,6 +33,8 @@
     try {
       s = await api.importRead(s.file, true);
       doc = await api.importDoc();
+      overview = s.plays.length > 1;
+      if (overview) await list();
       error = "";
       round++;
     } catch (err) {
@@ -45,6 +47,70 @@
   async function pickPlay(e: Event) {
     await edit({ kind: "play", i: Number((e.currentTarget as HTMLSelectElement).value) });
     doc = await api.importDoc();
+  }
+
+  /// The volume's list: first on view for a book of several plays.
+  let volume = $state<PlayLine[]>([]);
+  let overview = $state(untrack(() => start.plays.length > 1));
+  /// The plays to write; none is left out until asked.
+  let chosen = $state<boolean[]>([]);
+  let written = $state<Written[] | null>(null);
+  let writing = $state(false);
+  const count = $derived(chosen.filter(Boolean).length);
+
+  async function list() {
+    const was = chosen;
+    const same = was.length === s.plays.length;
+    volume = await api.importVolume();
+    chosen = volume.map((_, i) => (same ? was[i] : true));
+  }
+
+  async function toOverview() {
+    await list();
+    overview = true;
+  }
+
+  async function openPlay(i: number) {
+    await edit({ kind: "play", i });
+    doc = await api.importDoc();
+    overview = false;
+  }
+
+  async function dropPlay(i: number) {
+    await edit({ kind: "drop-play", i });
+    doc = await api.importDoc();
+    if (s.plays.length < 2) overview = false;
+    else await list();
+  }
+
+  async function writeAll() {
+    writing = true;
+    try {
+      written = await api.importWriteAll(chosen.flatMap((on, i) => (on ? [i] : [])));
+      error = "";
+    } catch (err) {
+      error = String(err);
+    }
+    writing = false;
+  }
+
+  function openWritten(path: string) {
+    void api.importDrop();
+    open(path);
+  }
+
+  /// The name of the play to start at the chosen paragraph, being asked.
+  let naming = $state<string | null>(null);
+
+  async function addPlay() {
+    if (naming === null || !sel) return;
+    const was = s.plays.length;
+    await edit({ kind: "add-play", i: lo, title: naming });
+    if (s.plays.length > was) {
+      naming = null;
+      doc = await api.importDoc();
+      await list();
+    }
   }
 
   async function edit(e: ImportEdit) {
@@ -164,6 +230,7 @@
 
   onMount(async () => {
     doc = await api.importDoc();
+    if (s.plays.length > 1) await list();
     const play = s.labels.indexOf("play");
     if (play > 0) {
       const p = parts.find((x) => x.from === play);
@@ -173,7 +240,10 @@
   });
 
   function onkey(e: KeyboardEvent) {
-    if (e.key === "Escape") drop();
+    if (e.key === "Escape") {
+      if (naming !== null) naming = null;
+      else drop();
+    }
     if (e.key === "F3") {
       e.preventDefault();
       step(e.shiftKey ? -1 : 1);
@@ -190,7 +260,8 @@
   <div class="head">
     <strong>{l("İçe aktar", "Import")}</strong>
     <span class="muted">{file}</span>
-    {#if s.plays.length > 1}
+    {#if s.plays.length > 1 && !overview}
+      <button onclick={toOverview}>{l("Cilt", "Volume")}</button>
       <label class="muted">
         {l("Bu ciltte", "In this volume")}
         <select value={s.picked} onchange={pickPlay}>
@@ -208,10 +279,77 @@
         onclick={readAgain}>{l("OCR ile yeniden oku", "Read again with OCR")}</button
       >
     {/if}
-    <button onclick={drop}>{l("Vazgeç", "Cancel")}</button>
-    <button class="primary" onclick={write}>{l("Oyunu oluştur", "Make the play")}</button>
+    <button onclick={drop}>{written ? l("Kapat", "Close") : l("Vazgeç", "Cancel")}</button>
+    {#if overview}
+      <button class="primary" disabled={!count || writing || !!written} onclick={writeAll}>
+        {l(`Seçilenleri oluştur (${count})`, `Make the chosen (${count})`)}
+      </button>
+    {:else}
+      <button class="primary" onclick={write}>{l("Oyunu oluştur", "Make the play")}</button>
+    {/if}
   </div>
   {#if error}<div class="error">{error}</div>{/if}
+  {#if overview}
+    <div class="volume">
+      {#if written}
+        <h3>{l("Oluşturulanlar", "Made")}</h3>
+        <ul class="made">
+          {#each written as w, i (i)}
+            <li>
+              <b>{w.title}</b>
+              {#if w.path}
+                <button onclick={() => openWritten(w.path!)}>{l("Aç", "Open")}</button>
+                <span class="muted">{w.path}</span>
+              {:else}
+                <span class="fail">{w.error}</span>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <p class="muted">
+          {l(
+            `Bu kitapta ${volume.length} oyun bulundu. Almak istediklerini seç; bakmak ve düzeltmek için oyunun adına tıkla.`,
+            `${volume.length} plays were found in this book. Choose those to take; click a play's name to look it over.`,
+          )}
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>{l("Oyun", "Play")}</th>
+              <th>{l("Sayfalar", "Pages")}</th>
+              <th>{l("Replik", "Lines")}</th>
+              <th>{l("Kişi", "People")}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each volume as p, i (i)}
+              <tr>
+                <td><input type="checkbox" aria-label={p.title} bind:checked={chosen[i]} /></td>
+                <td>
+                  <button class="name" onclick={() => openPlay(i)}>{p.title}</button>
+                  {#if p.guess}
+                    <span class="guess" title={l("İçindekilerde yok, sayfalardan tahmin edildi", "Not in the contents: a guess from the pages")}>{l("tahmin", "guess")}</span>
+                  {/if}
+                </td>
+                <td class="num">{p.pages ? (p.pages[0] === p.pages[1] ? p.pages[0] : `${p.pages[0]}–${p.pages[1]}`) : ""}</td>
+                <td class="num">{p.lines}</td>
+                <td class="num">{p.people}</td>
+                <td class="acts">
+                  <button
+                    title={l("Yanlış bulundu: metni bir öncekine katılır", "Wrongly found: its text joins the one before")}
+                    onclick={() => dropPlay(i)}>{l("Oyun değil", "Not a play")}</button
+                  >
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      {/if}
+    </div>
+  {:else}
   <div class="body">
     <div class="left">
       {#key round}
@@ -306,6 +444,22 @@
             <span class="muted">{l(`${hi - lo + 1} paragraf seçili`, `${hi - lo + 1} paragraphs chosen`)}</span>
             <button class="primary" onclick={startHere}>{l("Oyun buradan başlıyor", "The play starts here")}</button>
             <button onclick={endHere}>{l("Oyun burada bitiyor", "The play ends here")}</button>
+            {#if naming === null}
+              <button onclick={() => (naming = doc[lo]?.text.split("\n")[0] ?? "")}>
+                {l("Burada yeni oyun başlıyor", "A new play starts here")}
+              </button>
+            {:else}
+              <span class="row">
+                <input
+                  class="naming"
+                  aria-label={l("Yeni oyunun adı", "The new play's name")}
+                  bind:value={naming}
+                  onkeydown={(e) => e.key === "Enter" && addPlay()}
+                />
+                <button class="primary" onclick={addPlay}>{l("Ekle", "Add")}</button>
+                <button onclick={() => (naming = null)}>{l("Vazgeç", "Cancel")}</button>
+              </span>
+            {/if}
             <span class="row">
               {#each PAGES as [id, t, e] (id)}
                 <button class="tag {id}" onclick={() => mark(id)}>{l(t, e)}</button>
@@ -340,9 +494,74 @@
       {/if}
     </div>
   </div>
+  {/if}
 </div>
 
 <style>
+  .volume {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 16px 20px;
+  }
+  .volume table {
+    width: 100%;
+    max-width: 860px;
+    border-collapse: collapse;
+  }
+  .volume th {
+    text-align: left;
+    font-weight: 500;
+    color: var(--chrome-muted);
+  }
+  .volume th,
+  .volume td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--chrome-line);
+  }
+  .volume .num {
+    font-variant-numeric: tabular-nums;
+  }
+  .volume .name {
+    border: none;
+    background: none;
+    padding: 0;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: left;
+  }
+  .volume .name:hover {
+    text-decoration: underline;
+  }
+  .guess {
+    margin-left: 6px;
+    padding: 0 6px;
+    border: 1px solid var(--claret);
+    border-radius: 3px;
+    color: var(--claret);
+    font-size: 11px;
+  }
+  .made {
+    list-style: none;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .made li {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    flex-wrap: wrap;
+  }
+  .fail {
+    color: var(--claret);
+  }
+  .naming {
+    min-width: 220px;
+  }
   .import {
     position: fixed;
     inset: 0;
