@@ -27,6 +27,7 @@ pub mod source;
 pub mod spell;
 pub mod stage;
 pub mod structure;
+pub mod synctex;
 pub mod templates;
 pub mod tex;
 pub mod timing;

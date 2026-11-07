@@ -119,6 +119,8 @@ export const TABS: Tab[] = [
         b("Tema", "Theme", "◈", "F6", k("theme")),
         b("Şeridi katla", "Fold ribbon", "⌃", "Ctrl+F1", k("fold")),
       ]),
+      // Last in its tab: the letters before it stay the terminal app's.
+      g("PDF", "PDF", [b("PDF'te göster", "Show in PDF", "⌖", "Ctrl+'", k("pdf-show"))]),
     ],
   },
   {

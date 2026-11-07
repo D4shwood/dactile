@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount, untrack } from "svelte";
+  import { onDestroy, onMount, tick, untrack } from "svelte";
   import { getVersion } from "@tauri-apps/api/app";
   import { EditorState } from "@codemirror/state";
   import { EditorView } from "@codemirror/view";
@@ -12,7 +12,7 @@
   import { closeMenu, nextWord, recheck, showMenu, spelling } from "./spelling";
   import { completion, openMenu } from "./completion";
   import { kept } from "./session";
-  import { mouse } from "./mouse";
+  import { caretAt, mouse } from "./mouse";
   import HeadingForm from "./HeadingForm.svelte";
   import Cast from "./Cast.svelte";
   import Casting from "./Casting.svelte";
@@ -50,6 +50,7 @@
   let typewriter = $state(false);
   /// What stands beside the page.
   let side = $state<"" | "pdf" | "notes" | "cast" | "files">("");
+  let pdf: Pdf | undefined = $state();
   let files = $state<Files | null>(null);
   /// The temporary folder's warning, put away for this play.
   let tempSeen = $state(false);
@@ -204,12 +205,25 @@
     requestAnimationFrame(() => view.dispatch({ effects: EditorView.scrollIntoView(head, { y: "center" }) }));
   }
 
-  function goto(line: number) {
+  function goto(line: number, quiet = false) {
     const n = Math.min(Math.max(line, 1), view.state.doc.lines);
     const pos = view.state.doc.line(n).from;
     board = false;
     view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
-    view.focus();
+    if (!quiet) view.focus();
+  }
+
+  /// The place of a line in the PDF, shown there.
+  async function showInPdf(pos = view.state.selection.main.head) {
+    if (built?.kind !== "built") return say(l("Önce F5 ile derle.", "Build with F5 first."));
+    const line = view.state.doc.lineAt(pos);
+    if (side !== "pdf") {
+      side = "pdf";
+      showNotes();
+      keepCursor();
+      await tick();
+    }
+    await pdf?.reveal(line.number, pos - line.from);
   }
 
   /// Memorizing a role from its next line on; Esc goes back to where it
@@ -578,6 +592,9 @@
         source = !source;
         view.dispatch({ effects: setSource.of(source) });
         break;
+      case "pdf-show":
+        void showInPdf();
+        break;
       case "pdf-panel":
         side = side === "pdf" ? "" : "pdf";
         // The notes' underlines go with their panel.
@@ -770,6 +787,7 @@
       if (e.key === "n") id = "notes";
       if (e.key === "k") id = "search";
       if (e.key === "o") id = "cast";
+      if (e.key === "'") id = "pdf-show";
     }
     if (e.altKey && !mod && (e.key === "n" || e.key === "N")) id = "note-here";
     if (e.altKey && !mod && (e.key === "s" || e.key === "S")) id = "spelling";
@@ -864,9 +882,25 @@
             missing: (why) => say(why, true),
           }),
           EditorState.readOnly.of(opened.read_only),
+          // Ctrl+click: the place in the PDF.
+          EditorView.domEventHandlers({
+            mousedown(e, v) {
+              if (e.button !== 0 || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return false;
+              const pos = caretAt(v, e.clientX, e.clientY);
+              if (pos === null) return false;
+              e.preventDefault();
+              void showInPdf(pos);
+              return true;
+            },
+          }),
           EditorView.updateListener.of((u) => {
             if (u.selectionSet) {
               locate();
+              if (view?.hasFocus) {
+                const head = u.state.selection.main.head;
+                const line = u.state.doc.lineAt(head);
+                pdf?.cursorMoved(line.number, head - line.from);
+              }
               if (typewriter) {
                 const head = u.state.selection.main.head;
                 requestAnimationFrame(() =>
@@ -956,7 +990,7 @@
       {/if}
     </div>
     {#if side === "pdf"}
-      <Pdf {tr} result={built} {building} close={() => (side = "")} {goto} {say} />
+      <Pdf bind:this={pdf} {tr} result={built} {building} close={() => ((side = ""), view.focus())} {goto} {say} />
     {:else if side === "files"}
       <aside class="files">
         <div class="head">

@@ -172,6 +172,8 @@ fn xelatex(dir: &Path, name: &Path, path: &str, log_path: &Path) -> Result<Strin
             "-interaction=nonstopmode",
             "-halt-on-error",
             "-file-line-error",
+            // For going between the play's lines and the PDF.
+            "-synctex=1",
             // A play from someone else runs no programs, not even the few
             // TeX Live allows by default; the class needs none.
             "-no-shell-escape",

@@ -520,6 +520,12 @@ export class Sheets {
     this.update();
   }
 
+  /// Where a page's top is, in PDF points: SyncTeX counts down from it.
+  async pageTop(n: number): Promise<number> {
+    const page = await this.doc!.getPage(n);
+    return page.view[3];
+  }
+
   /// The drawn page under a point of the window.
   under(x: number, y: number) {
     for (const s of this.sheets) {

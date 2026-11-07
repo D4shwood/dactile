@@ -4,7 +4,7 @@
   import { onDestroy, onMount, tick, untrack } from "svelte";
   import * as pdfjs from "pdfjs-dist";
   import worker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-  import { api, type BuildResult, type Viewer } from "./api";
+  import { api, type BuildResult, type SyncPlace, type Viewer } from "./api";
   import BottomBar from "./pdf/BottomBar.svelte";
   import Clock from "./pdf/Clock.svelte";
   import Icon from "./pdf/Icon.svelte";
@@ -28,7 +28,7 @@
     result: BuildResult | null;
     building: boolean;
     close: () => void;
-    goto: (line: number) => void;
+    goto: (line: number, quiet?: boolean) => void;
     say: (text: string, warn?: boolean) => void;
   } = $props();
 
@@ -86,6 +86,8 @@
       if (n !== drawn) return sheets.forget(opened);
       pages = opened.numPages;
       doc = opened;
+      if (waiting) void reveal(...waiting);
+      waiting = null;
       const ended = new Promise<void>((done) => {
         release?.();
         release = done;
@@ -129,8 +131,65 @@
     sheets?.destroy();
     release?.();
     release = null;
+    clearTimeout(following);
     clearTimeout(saving);
   });
+
+  // ------------------------------------------------------- SyncTeX
+
+  // A line asked for before the PDF was on the screen.
+  let waiting: [number, number] | null = null;
+  let lastLine = 0;
+  let following = 0;
+  // When the view last moved by itself: that isn't the reader scrolling.
+  let moved = 0;
+
+  /// From the writer: the place of a line, lit up for a moment.
+  export async function reveal(line: number, column: number, quiet = false) {
+    if (!doc || !sheets) {
+      waiting = [line, column];
+      return;
+    }
+    try {
+      const places = await api.syncView(line, column);
+      const first = places[0];
+      const top = await sheets.pageTop(first.page);
+      const rect = (p: SyncPlace) => [p.x, top - p.y - p.height, p.x + p.width, top - p.y];
+      moved = Date.now();
+      await sheets.reveal(first.page, rect(first), places.filter((p) => p.page === first.page).map(rect));
+    } catch (e) {
+      if (!quiet) say(String(e), true);
+    }
+  }
+
+  /// The writer's cursor moved: followed, if the choice is on.
+  export function cursorMoved(line: number, column: number) {
+    if (!o?.follow_cursor || line === lastLine) return;
+    lastLine = line;
+    clearTimeout(following);
+    following = window.setTimeout(() => reveal(line, column, true), 350);
+  }
+
+  /// To the writer: the line behind a place of the PDF.
+  async function toSource(page: number, x: number, top: number, quiet = false) {
+    if (result?.kind !== "built") return;
+    try {
+      goto(await api.syncEdit(result.pdf, page, x, top), quiet);
+    } catch (e) {
+      if (!quiet) say(String(e), true);
+    }
+  }
+
+  /// The reader scrolled: the writer's cursor follows, if the choice is on.
+  function onscroll() {
+    if (!o?.follow_scroll || Date.now() - moved < 800 || !root?.contains(document.activeElement)) return;
+    clearTimeout(following);
+    following = window.setTimeout(() => {
+      const r = host?.getBoundingClientRect();
+      const s = r && sheets?.at(r.left + r.width / 2, r.top + r.height / 2);
+      if (s) void toSource(s.page, s.x, s.top, true);
+    }, 400);
+  }
 
   // ------------------------------------------------------- the choices
 
@@ -395,7 +454,13 @@
     if (mod && e.shiftKey) {
       e.preventDefault();
       const s = sheets.at(e.clientX, e.clientY);
-      if (s) copyPlace(s.x, s.y);
+      if (s) void copyPlace(s.x, s.y);
+      return;
+    }
+    if (mod) {
+      e.preventDefault();
+      const s = sheets.at(e.clientX, e.clientY);
+      if (s) void toSource(s.page, s.x, s.top);
       return;
     }
     if (mode === "scroll") {
@@ -495,6 +560,17 @@
           <span>{l("Başlangıç sütunu", "Start column")}</span>
           <input type="number" min="1" max={o.columns} value={o.offset + 1} title={l("İlk sayfanın sütunu", "The first page's column")} aria-label={l("Başlangıç sütunu", "Start column")} onchange={(e) => choose({ offset: Math.min(o!.columns, Math.max(1, +e.currentTarget.value || 1)) - 1 })} />
         </div>
+        <hr />
+        <label title={l("PDF yazarın imlecini izler", "The PDF follows the writer's cursor")}><input type="checkbox" checked={o.follow_cursor} onchange={(e) => choose({ follow_cursor: e.currentTarget.checked })} /> {l("Kaydırma imleci izlesin", "Scrolling follows cursor")}</label>
+        <label title={l("Yazarın imleci PDF'i izler", "The writer's cursor follows the PDF")}><input type="checkbox" checked={o.follow_scroll} onchange={(e) => choose({ follow_scroll: e.currentTarget.checked })} /> {l("İmleç kaydırmayı izlesin", "Cursor follows scrolling")}</label>
+        <hr />
+        <label title={l("Yuvarlak mercek; kapalıysa dikdörtgen", "A round lens; off: a rectangle")}><input type="checkbox" checked={o.lens_round} onchange={(e) => choose({ lens_round: e.currentTarget.checked })} /> {l("Yuvarlak mercek", "Round lens")}</label>
+        <label title={l("Merceğin gölgesi", "The lens's shadow")}><input type="checkbox" checked={o.lens_shadow} onchange={(e) => choose({ lens_shadow: e.currentTarget.checked })} /> {l("Gölge", "Shadow")}</label>
+        <label title={l("Merceğin kenarlığı", "The lens's border")}><input type="checkbox" checked={o.lens_border} onchange={(e) => choose({ lens_border: e.currentTarget.checked })} /> {l("Kenarlık", "Border")}</label>
+        <div class="row">
+          <span>{l("Mercek boyu", "Lens size")}</span>
+          <input type="number" min="80" max="400" step="10" value={o.lens_size} title={l("Merceğin çapı, piksel", "The lens's size, in pixels")} aria-label={l("Mercek boyu", "Lens size")} onchange={(e) => choose({ lens_size: Math.min(400, Math.max(80, +e.currentTarget.value || 170)) })} />
+        </div>
       </div>
     {/if}
   </span>
@@ -528,7 +604,7 @@
   {#if building}<p class="muted note">{tr ? "derleniyor…" : "building…"}</p>{/if}
   <div class="middle">
     <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_static_element_interactions -->
-    <div class="pages {mode}" class:invert={o?.invert} class:gray={o?.gray} class:dim={building} bind:this={host} tabindex="0" onpointerdown={ondown} {onwheel}></div>
+    <div class="pages {mode}" class:invert={o?.invert} class:gray={o?.gray} class:dim={building} bind:this={host} tabindex="0" onpointerdown={ondown} {onwheel} {onscroll}></div>
     {#if o?.right && sheets}
       <div class="panel">
         <div class="tabs" role="tablist">
@@ -615,6 +691,12 @@
     border: 1px solid var(--chrome-line);
     border-radius: 6px;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  }
+  .drop hr {
+    width: 100%;
+    margin: 2px 0;
+    border: 0;
+    border-top: 1px solid var(--chrome-line);
   }
   .drop label,
   .row {

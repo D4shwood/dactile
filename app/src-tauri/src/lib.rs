@@ -683,6 +683,48 @@ fn pdf(path: String) -> Res<tauri::ipc::Response> {
         .map_err(|e| e.to_string())
 }
 
+/// Where a line of the open play is in its PDF. Runs a program: off the main
+/// thread.
+#[tauri::command]
+async fn sync_view(
+    app: Shared<'_>,
+    line: usize,
+    column: usize,
+) -> Res<Vec<dactile::synctex::Place>> {
+    let path = open_path(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        dactile::synctex::view(&path, line, column).map_err(err)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The open play's line behind a point of its PDF, in points from the page's
+/// top left.
+#[tauri::command]
+async fn sync_edit(app: Shared<'_>, pdf: String, page: usize, x: f32, y: f32) -> Res<usize> {
+    let path = open_path(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let found = dactile::synctex::edit(std::path::Path::new(&pdf), page, x, y).map_err(err)?;
+        // A class file's line is no use to the writer.
+        if found.file.file_name() != path.file_name() {
+            return Err(dactile::lang::l(
+                "PDF'in bu yeri oyunun bir satırından gelmiyor.",
+                "This place in the PDF doesn't come from a line of the play.",
+            )
+            .to_string());
+        }
+        Ok(found.line)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn open_path(app: &Shared) -> Res<PathBuf> {
+    let a = app.lock().unwrap();
+    Ok(a.open.as_ref().ok_or("no play open")?.path.clone())
+}
+
 /// In a debug build with `DACTILE_DEV_EVAL=file`: JavaScript written to that
 /// file runs in the window, and the file goes. For trying the app out from
 /// a script, with no hands on it.
@@ -772,6 +814,8 @@ pub fn run() {
             note_fix,
             note_authors,
             pdf,
+            sync_view,
+            sync_edit,
             misspelt,
             suggest,
             learn,

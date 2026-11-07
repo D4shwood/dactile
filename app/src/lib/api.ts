@@ -34,6 +34,15 @@ export interface Settings {
   viewer: Viewer;
 }
 
+/// A box of the PDF for a line: points from the page's top left.
+export interface SyncPlace {
+  page: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /// What the PDF viewer remembers (core's `config::Viewer`).
 export interface Viewer {
   fit: "" | "width" | "text" | "window";
@@ -211,6 +220,8 @@ export const api = {
   startup: () => invoke<string | null>("startup"),
   pick: () => invoke<string | null>("pick"),
   pdf: (path: string) => invoke<ArrayBuffer>("pdf", { path }),
+  syncView: (line: number, column: number) => invoke<SyncPlace[]>("sync_view", { line, column }),
+  syncEdit: (pdf: string, page: number, x: number, y: number) => invoke<number>("sync_edit", { pdf, page, x, y }),
   misspelt: (text: string, from: number, to: number) => invoke<Checked>("misspelt", { text, from, to }),
   suggest: (word: string) => invoke<string[]>("suggest", { word }),
   learn: (word: string) => invoke<void>("learn", { word }),
