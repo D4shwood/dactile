@@ -1656,14 +1656,15 @@
   }
   .page :global(.cm-cover-cast) {
     list-style: none;
-    padding: 0;
+    padding: 0 2em;
+    text-align: left;
     margin: 0;
     font-size: 0.9em;
     line-height: 1.6;
   }
   .page :global(.cm-cover-group) {
     display: flex;
-    justify-content: center;
+    justify-content: flex-start;
     align-items: stretch;
     gap: 0.4em;
     margin: 0.3em 0;

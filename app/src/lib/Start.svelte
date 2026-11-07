@@ -1005,6 +1005,7 @@
     margin-bottom: 12px;
   }
   .pcast {
+    text-align: left;
     list-style: none;
     padding: 0;
     margin: 0 0 12px;
