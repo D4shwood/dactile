@@ -51,6 +51,7 @@ pub struct Settings {
     pub theme: String,
     pub page_zoom: u16,
     pub ribbon_folded: bool,
+    pub viewer: config::Viewer,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -77,6 +78,7 @@ pub fn settings(cfg: &Config) -> Settings {
         theme: cfg.theme().to_string(),
         page_zoom: cfg.page_zoom,
         ribbon_folded: cfg.ribbon_folded,
+        viewer: cfg.viewer.clone(),
     }
 }
 
@@ -381,6 +383,7 @@ pub fn set(cfg: &mut Config, key: &str, value: &serde_json::Value) -> anyhow::Re
         "author" => cfg.author = value.as_str().unwrap_or("").to_string(),
         "plays_dir" => cfg.plays_dir = value.as_str().unwrap_or("~/Oyunlar").to_string(),
         "lang" => cfg.lang = value.as_str().unwrap_or("auto").to_string(),
+        "viewer" => cfg.viewer = serde_json::from_value(value.clone())?,
         _ => anyhow::bail!("no setting {key}"),
     }
     cfg.save()

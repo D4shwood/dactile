@@ -41,6 +41,65 @@ pub struct Config {
     pub keyboard: String,
     /// Plays opened lately, newest first.
     pub recent: Vec<String>,
+    /// The desktop app's PDF viewer.
+    pub viewer: Viewer,
+}
+
+/// What the PDF viewer remembers between plays.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Viewer {
+    /// "width", "text", "window", or "" for `zoom`.
+    pub fit: String,
+    /// In percent, when `fit` is empty.
+    pub zoom: f32,
+    pub continuous: bool,
+    pub columns: u8,
+    pub rows: u8,
+    /// Next and previous go one page at a time, whatever the grid.
+    pub single_step: bool,
+    /// Empty places before the first page.
+    pub offset: u8,
+    /// The open tab of the left panel, and of the right one; empty: closed.
+    pub left: String,
+    pub right: String,
+    pub toolbar: bool,
+    pub invert: bool,
+    pub gray: bool,
+    pub lens_round: bool,
+    /// Across, in pixels.
+    pub lens_size: u16,
+    pub lens_shadow: bool,
+    pub lens_border: bool,
+    /// The PDF goes where the writer's cursor goes.
+    pub follow_cursor: bool,
+    /// The writer's cursor goes where the PDF scrolls.
+    pub follow_scroll: bool,
+}
+
+impl Default for Viewer {
+    fn default() -> Viewer {
+        Viewer {
+            fit: "width".into(),
+            zoom: 100.0,
+            continuous: true,
+            columns: 1,
+            rows: 1,
+            single_step: false,
+            offset: 0,
+            left: String::new(),
+            right: String::new(),
+            toolbar: true,
+            invert: false,
+            gray: false,
+            lens_round: true,
+            lens_size: 170,
+            lens_shadow: true,
+            lens_border: false,
+            follow_cursor: false,
+            follow_scroll: false,
+        }
+    }
 }
 
 impl Default for Config {
@@ -62,6 +121,7 @@ impl Default for Config {
             page_zoom: 100,
             keyboard: "q".into(),
             recent: Vec::new(),
+            viewer: Viewer::default(),
         }
     }
 }
@@ -159,5 +219,19 @@ mod tests {
         assert_eq!(c.recent.len(), RECENT);
         assert_eq!(c.recent[0], "/tmp/o3.tex");
         assert_eq!(expand("~/a"), dirs::home_dir().unwrap().join("a"));
+    }
+
+    #[test]
+    fn older_settings_have_a_viewer_and_it_comes_back() {
+        let c: Config = toml::from_str("author = \"X\"").unwrap();
+        assert_eq!(c.viewer, Viewer::default());
+        let c: Config = toml::from_str("[viewer]\ncolumns = 2").unwrap();
+        assert_eq!(c.viewer.columns, 2);
+        assert_eq!(c.viewer.fit, "width");
+        let mut c = Config::default();
+        c.recent.push("/tmp/o.tex".into());
+        c.viewer.zoom = 12.5;
+        let back: Config = toml::from_str(&toml::to_string(&c).unwrap()).unwrap();
+        assert_eq!(back, c);
     }
 }

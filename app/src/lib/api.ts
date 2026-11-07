@@ -31,6 +31,29 @@ export interface Settings {
   theme: string;
   page_zoom: number;
   ribbon_folded: boolean;
+  viewer: Viewer;
+}
+
+/// What the PDF viewer remembers (core's `config::Viewer`).
+export interface Viewer {
+  fit: "" | "width" | "text" | "window";
+  zoom: number;
+  continuous: boolean;
+  columns: number;
+  rows: number;
+  single_step: boolean;
+  offset: number;
+  left: string;
+  right: string;
+  toolbar: boolean;
+  invert: boolean;
+  gray: boolean;
+  lens_round: boolean;
+  lens_size: number;
+  lens_shadow: boolean;
+  lens_border: boolean;
+  follow_cursor: boolean;
+  follow_scroll: boolean;
 }
 
 export interface Folder {
