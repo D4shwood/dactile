@@ -392,6 +392,23 @@ fn a_build_without_a_line_says_nothing_of_alt_g() {
     assert_eq!(w.buf.cursor, at);
 }
 
+#[test]
+fn the_windows_draw_at_any_size() {
+    let mut o = open("sizes");
+    let w = &mut o.w;
+    w.animations = false;
+    for key in ['f', 'k', 'o', 'g'] {
+        with(w, KeyCode::Char(key), KeyModifiers::CONTROL);
+        for width in [1, 2, 3, 8, 20, 30, 35, 36, 44, 60] {
+            for height in [1, 2, 3, 5, 8, 12, 24] {
+                let mut t = Terminal::new(TestBackend::new(width, height)).unwrap();
+                t.draw(|f| w.draw(f)).unwrap();
+            }
+        }
+        press(w, KeyCode::Esc);
+    }
+}
+
 /// The play's files, read.
 fn files_of(w: &mut Writer) {
     w.run(PAct::Files);

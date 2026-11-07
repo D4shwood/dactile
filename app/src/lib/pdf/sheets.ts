@@ -79,6 +79,10 @@ export class Sheets {
   private fitting: Fit = "width";
   /// The first page shown, when pages come a screen at a time.
   private first = 1;
+  /// The page jumped to, and where that left the view: the page stays the
+  /// one asked for, whatever is in the middle, until the view moves.
+  private held = 0;
+  private heldTop = 0;
   zoom = 100;
   page = 1;
 
@@ -123,6 +127,8 @@ export class Sheets {
     }
     this.sheets[0].page = one;
     this.page = Math.min(keep?.page ?? 1, doc.numPages);
+    this.held = Math.min(this.held, doc.numPages);
+    this.on.page(this.page);
     this.first = screenStart(this.page, this.lay);
     await this.arrange(keep && { ...keep, page: this.page });
     void this.measure(doc);
@@ -212,16 +218,39 @@ export class Sheets {
 
   /// A zoom in percent, keeping the point at (x, y) of the view in place.
   setZoom(percent: number, x?: number, y?: number) {
-    this.fitting = "";
     const px = x ?? this.host.clientWidth / 2;
     const py = y ?? this.host.clientHeight / 2;
-    const ratio = percent / this.zoom;
-    const sx = this.host.scrollLeft + px;
-    const sy = this.host.scrollTop + py;
+    this.zoomAt(percent, px, py, px, py);
+  }
+
+  /// A zoom that brings the point at (x, y) of the view to (toX, toY). The
+  /// point is held as a share of its sheet: the gaps between sheets don't
+  /// grow with the zoom, so a share of the whole scroll would drift.
+  private zoomAt(percent: number, x: number, y: number, toX: number, toY: number) {
+    this.fitting = "";
+    const inGrid = (): [number, number] => [this.grid.offsetLeft, this.grid.offsetTop];
+    const [gx, gy] = inGrid();
+    const cx = this.host.scrollLeft + x - gx;
+    const cy = this.host.scrollTop + y - gy;
+    let at: Sheet | null = null;
+    let nearest = Infinity;
+    for (const s of this.sheets) {
+      if (s.el.hidden) continue;
+      const { offsetLeft: l, offsetTop: t, offsetWidth: w, offsetHeight: h } = s.el;
+      const off = Math.hypot(Math.max(l - cx, 0, cx - l - w), Math.max(t - cy, 0, cy - t - h));
+      if (off < nearest) {
+        nearest = off;
+        at = s;
+      }
+    }
+    const share = at && [(cx - at.el.offsetLeft) / (at.el.offsetWidth || 1), (cy - at.el.offsetTop) / (at.el.offsetHeight || 1)];
     this.zoom = percent;
     this.size();
-    this.host.scrollLeft = sx * ratio - px;
-    this.host.scrollTop = sy * ratio - py;
+    if (at && share) {
+      const [nx, ny] = inGrid();
+      this.host.scrollLeft = nx + at.el.offsetLeft + share[0] * at.el.offsetWidth - toX;
+      this.host.scrollTop = ny + at.el.offsetTop + share[1] * at.el.offsetHeight - toY;
+    }
     this.on.zoom(percent);
     this.redraw();
   }
@@ -290,7 +319,16 @@ export class Sheets {
     this.size();
     this.scrollTo(keep);
     if (box) this.host.scrollLeft = PAD - 6 + (box[0] * this.zoom * UNIT) / 100;
+    this.heldTop = this.host.scrollTop;
     this.update();
+  }
+
+  /// The page after a jump, the view being where the jump left it.
+  private hold(n: number) {
+    this.held = n;
+    this.heldTop = this.host.scrollTop;
+    this.page = n;
+    this.on.page(n);
   }
 
   private scrollTo(p: Place) {
@@ -369,6 +407,16 @@ export class Sheets {
         best = s;
       }
       if (b < top - 3 * height || a > top + 4 * height) this.drop(s);
+    }
+    const end = this.host.scrollHeight - height;
+    if (this.held && Math.abs(top - this.heldTop) < 2) best = this.sheets[this.held - 1];
+    else {
+      this.held = 0;
+      // At either end of a long scroll, the page is the end's, even with
+      // many small pages in the view.
+      const shown = this.shown();
+      if (end > 1 && top <= 1) best = shown[0];
+      else if (end > 1 && top >= end - 1) best = shown[shown.length - 1];
     }
     if (best && best.n !== this.page) {
       this.page = best.n;
@@ -548,8 +596,7 @@ export class Sheets {
     const left = s.el.offsetLeft + Math.min(a, c) * f;
     const right = s.el.offsetLeft + Math.max(a, c) * f;
     if (left < this.host.scrollLeft || right > this.host.scrollLeft + this.host.clientWidth) this.host.scrollLeft = left - PAD;
-    this.page = n;
-    this.on.page(n);
+    this.hold(n);
     if (flash.length) {
       clearTimeout(this.fading);
       const old = [...this.flashed.keys()];
@@ -641,8 +688,7 @@ export class Sheets {
     if (!this.sheets[p.page - 1]) return;
     this.show(p.page);
     this.scrollTo(p);
-    this.page = p.page;
-    this.on.page(p.page);
+    this.hold(p.page);
     this.update();
   }
 
@@ -659,8 +705,7 @@ export class Sheets {
     if (!s) return;
     this.show(s.n);
     this.host.scrollTop = s.el.offsetTop - PAD + (y * this.zoom * UNIT) / 100;
-    this.page = s.n;
-    this.on.page(s.n);
+    this.hold(s.n);
     this.update();
   }
 
@@ -685,8 +730,6 @@ export class Sheets {
     const midX = (left + right) / 2 - r.left;
     const midY = (top + bottom) / 2 - r.top;
     const z = Math.min(400, Math.max(12.5, this.zoom * k));
-    this.setZoom(z, midX, midY);
-    this.host.scrollLeft += midX - r.width / 2;
-    this.host.scrollTop += midY - r.height / 2;
+    this.zoomAt(z, midX, midY, r.width / 2, r.height / 2);
   }
 }

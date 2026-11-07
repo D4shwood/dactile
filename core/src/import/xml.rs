@@ -64,7 +64,10 @@ pub fn parse(xml: &str) -> Result<Element> {
     let mut reader = Reader::from_str(xml);
     let mut stack = vec![Element::default()];
     loop {
-        match reader.read_event().context("reading XML")? {
+        match reader
+            .read_event()
+            .context(crate::lang::l("XML okunamadı", "reading XML"))?
+        {
             Event::Start(e) => stack.push(element(&e)?),
             Event::Empty(e) => {
                 let el = element(&e)?;
@@ -109,18 +112,24 @@ pub fn parse(xml: &str) -> Result<Element> {
             Kid::El(e) => Some(e),
             Kid::Text(_) => None,
         })
-        .context("an empty XML part")
+        .context(crate::lang::l("boş bir XML parçası", "an empty XML part"))
 }
 
 fn element(e: &quick_xml::events::BytesStart) -> Result<Element> {
     let name = e.name().as_ref().to_string();
     let mut attrs = Vec::new();
     for a in e.attributes().with_checks(false) {
-        let a = a.context("reading an XML attribute")?;
+        let a = a.context(crate::lang::l(
+            "bir XML özniteliği okunamadı",
+            "reading an XML attribute",
+        ))?;
         let key = a.key.as_ref().to_string();
         let value = a
             .normalized_value(quick_xml::XmlVersion::Implicit1_0)
-            .context("reading an XML attribute")?;
+            .context(crate::lang::l(
+                "bir XML özniteliği okunamadı",
+                "reading an XML attribute",
+            ))?;
         attrs.push((key, value.into_owned()));
     }
     Ok(Element {

@@ -131,11 +131,44 @@ pub(super) fn poppler(program: &str) -> Command {
 /// user's book.
 struct Scratch(PathBuf);
 
+/// This process's page images.
+fn scratch_dir() -> PathBuf {
+    std::env::temp_dir().join(format!("dactile-ocr-{}", std::process::id()))
+}
+
 impl Scratch {
     fn new() -> Result<Scratch> {
-        let dir = std::env::temp_dir().join(format!("dactile-ocr-{}", std::process::id()));
+        let dir = scratch_dir();
         std::fs::create_dir_all(&dir)?;
         Ok(Scratch(dir))
+    }
+}
+
+/// On quitting: a reading under way doesn't get to clean up after itself.
+pub fn remove_scratch() {
+    let _ = std::fs::remove_dir_all(scratch_dir());
+}
+
+/// On starting: what readings left behind in processes that are gone.
+pub fn sweep_scratch() {
+    // Without `/proc` no one can be told gone.
+    if Path::new("/proc/self").exists() {
+        sweep_in(&std::env::temp_dir(), |pid| {
+            Path::new("/proc").join(pid.to_string()).exists()
+        });
+    }
+}
+
+fn sweep_in(dir: &Path, alive: impl Fn(u32) -> bool) {
+    for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        let name = entry.file_name();
+        let pid = name
+            .to_str()
+            .and_then(|n| n.strip_prefix("dactile-ocr-"))
+            .and_then(|n| n.parse().ok());
+        if pid.is_some_and(|p| !alive(p)) {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
     }
 }
 
@@ -271,6 +304,20 @@ pub(super) fn text(pdf: &Path, job: &Job) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_gone_are_swept() {
+        let root = std::env::temp_dir().join(format!("dactile-sweep-{}", std::process::id()));
+        for name in ["dactile-ocr-1", "dactile-ocr-2", "dactile-ocr-x", "oyunlar"] {
+            std::fs::create_dir_all(root.join(name)).unwrap();
+        }
+        sweep_in(&root, |pid| pid == 2);
+        assert!(!root.join("dactile-ocr-1").exists());
+        assert!(root.join("dactile-ocr-2").exists());
+        assert!(root.join("dactile-ocr-x").exists());
+        assert!(root.join("oyunlar").exists());
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn where_a_bundle_is_looked_for() {

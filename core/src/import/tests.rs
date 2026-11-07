@@ -241,7 +241,8 @@ fn not_a_document() {
     std::fs::create_dir_all(&dir).unwrap();
     let p = dir.join("bozuk.docx");
     std::fs::write(&p, b"not a zip").unwrap();
-    assert!(read(&p).is_err());
+    let said = format!("{:#}", read(&p).unwrap_err());
+    assert!(!said.starts_with("reading"), "{said}");
     assert!(read(&dir.join("oyun.rtf")).is_err());
     let _ = std::fs::remove_dir_all(&dir);
 }

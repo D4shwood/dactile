@@ -1,6 +1,7 @@
 //! The terminal interface: the home screen and the writer.
 
 mod anim;
+mod blink;
 mod board;
 mod files;
 mod home;
@@ -43,6 +44,7 @@ enum Screen {
 /// goes straight to it, and quitting the writer then quits the app.
 pub fn run(start: Start) -> Result<()> {
     let mut cfg = Config::load()?;
+    dactile::import::ocr::sweep_scratch();
     let first_run = !Config::exists();
     let direct = matches!(start, Start::Play(_)) && !first_run;
     let mut screen = match start {
@@ -67,12 +69,16 @@ pub fn run(start: Start) -> Result<()> {
                 Screen::Home(h) => h.animating(&cfg),
                 Screen::Writer(w) => w.animating(),
             };
-            let wait = Duration::from_millis(if moving { 16 } else { 200 });
+            let wait =
+                Duration::from_millis(if moving { 16 } else { 200 }).min(blink::until_change());
             let ev = if event::poll(wait)? {
                 Some(event::read()?)
             } else {
                 None
             };
+            if matches!(ev, Some(Event::Key(_) | Event::Paste(_))) {
+                blink::restart();
+            }
             match &mut screen {
                 Screen::Home(h) => {
                     let action = match ev {
@@ -143,6 +149,7 @@ pub fn run(start: Start) -> Result<()> {
         let _ = w.close();
         let _ = remember(w, &mut cfg);
     }
+    dactile::import::ocr::remove_scratch();
     let _ = execute!(stdout(), DisableBracketedPaste, DisableMouseCapture);
     ratatui::restore();
     result

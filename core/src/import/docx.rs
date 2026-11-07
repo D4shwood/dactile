@@ -85,11 +85,15 @@ fn props(rpr: &Element) -> Style {
 
 pub fn read(bytes: &[u8]) -> Result<Source> {
     let mut zip = super::open_zip(bytes)?;
-    let doc = super::member(&mut zip, "word/document.xml")?
-        .context("no word/document.xml: not a Word document")?;
+    let doc = super::member(&mut zip, "word/document.xml")?.context(crate::lang::l(
+        "word/document.xml yok: bu bir Word belgesi değil",
+        "no word/document.xml: not a Word document",
+    ))?;
     let styles = Styles::read(super::member(&mut zip, "word/styles.xml")?.as_deref())?;
     let root = xml::parse(&doc)?;
-    let body = root.find("w:body").context("no document body")?;
+    let body = root
+        .find("w:body")
+        .context(crate::lang::l("belgenin gövdesi yok", "no document body"))?;
     let mut paras = Vec::new();
     block(body, &styles, &mut paras);
     let (mut title, mut author) = (None, None);

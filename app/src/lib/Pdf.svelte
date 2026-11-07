@@ -8,7 +8,7 @@
   import BottomBar from "./pdf/BottomBar.svelte";
   import Clock from "./pdf/Clock.svelte";
   import Icon from "./pdf/Icon.svelte";
-  import { centimetres, clampZoom, stepOf, stepZoom, Trail, type Mode } from "./pdf/layout";
+  import { centimetres, clampZoom, MAX_COPIES, printProblem, stepOf, stepZoom, Trail, type Mode } from "./pdf/layout";
   import { Lens } from "./pdf/lens";
   import Search from "./pdf/Search.svelte";
   import { Sheets, type Fit, type Place } from "./pdf/sheets";
@@ -55,7 +55,9 @@
   let present = $state(false);
   let clock = $state(false);
   let laser = $state<{ x: number; y: number } | null>(null);
-  let printing = $state<{ first: number; last: number; copies: number } | null>(null);
+  // An empty box is null.
+  let printing = $state<{ first: number | null; last: number | null; copies: number | null } | null>(null);
+  let printNote = $state("");
   let size = $state(0);
   let labels = $state.raw<string[] | null>(null);
   let search: Search | undefined = $state();
@@ -147,7 +149,11 @@
     release?.();
     release = null;
     clearTimeout(following);
-    clearTimeout(saving);
+    // A change made just before closing is kept too.
+    if (saving) {
+      clearTimeout(saving);
+      save();
+    }
   });
 
   // ------------------------------------------------------- SyncTeX
@@ -212,9 +218,12 @@
   /// The choices kept, a moment after the last change.
   function keep() {
     clearTimeout(saving);
-    saving = window.setTimeout(() => {
-      if (o) api.set("viewer", $state.snapshot(o)).catch((e) => say(String(e), true));
-    }, 400);
+    saving = window.setTimeout(save, 400);
+  }
+
+  function save() {
+    saving = 0;
+    if (o) api.set("viewer", $state.snapshot(o)).catch((e) => say(String(e), true));
   }
 
   function apply() {
@@ -312,19 +321,26 @@
   function openPrint() {
     menu = false;
     printing = { first: 1, last: pages, copies: 1 };
+    printNote = "";
   }
 
   async function print() {
     const p = printing;
     if (!p || result?.kind !== "built") return;
-    const first = Math.min(Math.max(1, p.first), pages);
-    const last = Math.min(Math.max(first, p.last), pages);
+    const notes = {
+      first: l(`İlk sayfa 1 ile ${pages} arasında bir tam sayı olmalı.`, `The first page must be a whole number from 1 to ${pages}.`),
+      last: l(`Son sayfa 1 ile ${pages} arasında bir tam sayı olmalı.`, `The last page must be a whole number from 1 to ${pages}.`),
+      order: l("İlk sayfa son sayfadan büyük olamaz.", "The first page can't come after the last."),
+      copies: l(`Kopya sayısı 1 ile ${MAX_COPIES} arasında bir tam sayı olmalı.`, `Copies must be a whole number from 1 to ${MAX_COPIES}.`),
+    };
+    const problem = printProblem(p.first, p.last, p.copies, pages);
+    if (problem) return void (printNote = notes[problem]);
     try {
-      await api.pdfPrint(result.pdf, first, last, Math.max(1, p.copies));
+      await api.pdfPrint(result.pdf, p.first!, p.last!, p.copies!);
       printing = null;
       say(l("Yazıcıya gönderildi.", "Sent to the printer."));
     } catch (e) {
-      say(String(e), true);
+      printNote = String(e);
     }
   }
 
@@ -829,7 +845,8 @@
       <strong>{l("Yazdır", "Print")}</strong>
       <label>{l("İlk sayfa", "First page")} <input type="number" min="1" max={pages} bind:value={printing.first} /></label>
       <label>{l("Son sayfa", "Last page")} <input type="number" min="1" max={pages} bind:value={printing.last} /></label>
-      <label>{l("Kopya", "Copies")} <input type="number" min="1" max="99" bind:value={printing.copies} /></label>
+      <label>{l("Kopya", "Copies")} <input type="number" min="1" max={MAX_COPIES} bind:value={printing.copies} /></label>
+      {#if printNote}<p class="note-print" role="alert">{printNote}</p>{/if}
       <div class="row">
         <button class="word" title={l("Varsayılan yazıcıya gönder", "Send to the default printer")} onclick={print}>{l("Yazdır", "Print")}</button>
         <button class="word" title={l("Vazgeç (Esc)", "Cancel (Esc)")} onclick={() => (printing = null)}>{l("Vazgeç", "Cancel")}</button>
@@ -919,6 +936,11 @@
     border: 1px solid var(--chrome-line);
     border-radius: 6px;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+  }
+  .note-print {
+    max-width: 240px;
+    margin: 0;
+    color: var(--claret);
   }
   .print label {
     display: flex;

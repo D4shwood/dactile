@@ -557,10 +557,7 @@ pub fn draw_palette(
             ..inn
         },
     );
-    f.set_cursor_position(ratatui::layout::Position::new(
-        inn.x + 2 + query.width() as u16,
-        inn.y,
-    ));
+    super::blink::at(f, Position::new(inn.x + 2 + query.width() as u16, inn.y));
 }
 
 // ------------------------------------------------------------------ spelling
@@ -591,7 +588,8 @@ pub fn draw_suggest(
         y,
         width: w,
         height: rows + 2,
-    };
+    }
+    .intersection(area);
     float(f, r);
     f.render_widget(panel(word), r);
     let lines: Vec<Line> = items

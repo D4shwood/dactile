@@ -18,6 +18,8 @@ use std::time::{Duration, Instant};
 
 /// Never more runs than this, whatever the log says.
 const MAX_RUNS: usize = 3;
+/// Never more copies than this in one print.
+const MAX_COPIES: usize = 99;
 /// A run that takes longer than this is stuck.
 const TIMEOUT: Duration = Duration::from_secs(180);
 
@@ -447,17 +449,29 @@ pub fn print(pdf: &Path, first: usize, last: usize, copies: usize) -> anyhow::Re
             }
         })?;
     if !out.status.success() {
-        anyhow::bail!("lp: {}", String::from_utf8_lossy(&out.stderr).trim());
+        anyhow::bail!(
+            "{}: {}",
+            lang::l("Yazdırılamadı", "Could not print"),
+            lp_reason(&String::from_utf8_lossy(&out.stderr))
+        );
     }
     Ok(())
 }
 
+/// `lp` starts its own messages with its name.
+fn lp_reason(stderr: &str) -> &str {
+    let text = stderr.trim();
+    text.strip_prefix("lp:").unwrap_or(text).trim()
+}
+
+/// The window checks these too; here they hold whatever it sends.
 fn print_args(first: usize, last: usize, copies: usize) -> Vec<String> {
+    let first = first.max(1);
     vec![
         "-n".into(),
-        copies.max(1).to_string(),
+        copies.clamp(1, MAX_COPIES).to_string(),
         "-P".into(),
-        format!("{first}-{last}"),
+        format!("{first}-{}", last.max(first)),
     ]
 }
 
@@ -584,6 +598,17 @@ mod tests {
     fn what_lp_is_told() {
         assert_eq!(print_args(2, 5, 3), ["-n", "3", "-P", "2-5"]);
         assert_eq!(print_args(1, 1, 0), ["-n", "1", "-P", "1-1"]);
+        assert_eq!(print_args(0, 0, 1000), ["-n", "99", "-P", "1-1"]);
+        assert_eq!(print_args(12, 3, 1), ["-n", "1", "-P", "12-12"]);
+    }
+
+    #[test]
+    fn lp_says_its_name_once() {
+        assert_eq!(
+            lp_reason("lp: Error - no default destination\n"),
+            "Error - no default destination"
+        );
+        assert_eq!(lp_reason("no paper"), "no paper");
     }
 
     #[test]
