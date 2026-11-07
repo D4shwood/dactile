@@ -542,3 +542,56 @@ fn a_note_with_a_stop_in_it() {
     let d = shape::shape(&plain::read(text, false), Lang::Tr);
     assert_eq!(d.counts().lines, 3, "{:#?}", d.people);
 }
+
+/// A PDF of one empty page: nothing in it to read as text.
+const BLANK_PDF: &str = "%PDF-1.4
+1 0 obj <</Type/Catalog/Pages 2 0 R>> endobj
+2 0 obj <</Type/Pages/Kids[3 0 R]/Count 1>> endobj
+3 0 obj <</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>> endobj
+trailer <</Root 1 0 R>>
+%%EOF
+";
+
+#[test]
+fn read_as_leaves_a_document_with_text_alone() {
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    let dir = std::env::temp_dir().join(format!("dactile-read-as-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("oyun.txt");
+    std::fs::write(&file, "SELİN: Merhaba.\n").unwrap();
+    let asked = AtomicUsize::new(0);
+    let progress = |_: usize, _: usize| {
+        asked.fetch_add(1, Ordering::Relaxed);
+    };
+    let stop = AtomicBool::new(false);
+    let job = ocr::Job {
+        progress: &progress,
+        stop: &stop,
+    };
+    let src = read_as(&file, false, &job).unwrap();
+    assert_eq!(src.paras.len(), 1);
+    assert_eq!(asked.load(Ordering::Relaxed), 0);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+/// Stopped before it starts, so that no Tesseract runs: the error tells
+/// which way the reading went.
+#[test]
+fn read_as_goes_to_the_images_where_a_pdf_has_no_text() {
+    let dir = std::env::temp_dir().join(format!("dactile-read-as-pdf-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("taranmis.pdf");
+    std::fs::write(&file, BLANK_PDF).unwrap();
+    let stop = std::sync::atomic::AtomicBool::new(true);
+    let job = ocr::Job {
+        progress: &|_, _| {},
+        stop: &stop,
+    };
+    let e = read_as(&file, false, &job).unwrap_err();
+    assert_eq!(
+        e.downcast_ref::<pdf::NoText>().is_some(),
+        !ocr::ready(),
+        "{e:#}"
+    );
+    std::fs::remove_dir_all(&dir).unwrap();
+}

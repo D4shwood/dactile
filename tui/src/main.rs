@@ -130,18 +130,27 @@ fn main() -> Result<()> {
     }
 }
 
-/// The book read from its images, as far as it has got on stderr.
-fn read_ocr(file: &std::path::Path) -> Result<dactile::import::Source> {
-    let stop = std::sync::atomic::AtomicBool::new(false);
-    let progress = |done: usize, total: usize| eprint!("\rOCR {done}/{total}");
-    let src = dactile::import::read_ocr(
+/// The document read, from its images if need be, as far as it has got on
+/// stderr.
+fn read_book(file: &std::path::Path, force: bool) -> Result<dactile::import::Source> {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let stop = AtomicBool::new(false);
+    let shown = AtomicBool::new(false);
+    let progress = |done: usize, total: usize| {
+        shown.store(true, Ordering::Relaxed);
+        eprint!("\rOCR {done}/{total}");
+    };
+    let src = dactile::import::read_as(
         file,
+        force,
         &dactile::import::ocr::Job {
             progress: &progress,
             stop: &stop,
         },
     );
-    eprintln!();
+    if shown.load(Ordering::Relaxed) {
+        eprintln!();
+    }
     src
 }
 
@@ -151,17 +160,8 @@ fn import(
     ocr: bool,
     play: Option<String>,
 ) -> Result<()> {
-    use dactile::import::ocr::ready;
-    use dactile::import::pdf::NoText;
     let cfg = dactile::config::Config::load()?;
-    let src = if ocr {
-        read_ocr(file)?
-    } else {
-        match dactile::import::read(file) {
-            Err(e) if e.downcast_ref::<NoText>().is_some() && ready() => read_ocr(file)?,
-            other => other?,
-        }
-    };
+    let src = read_book(file, ocr)?;
     let picked = play.map(|word| {
         let word = word.to_lowercase();
         src.plays

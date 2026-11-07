@@ -413,7 +413,7 @@ impl Home {
     fn import_step(&mut self, step: super::importing::Step) -> Action {
         use super::importing::Step;
         match step {
-            Step::Stay => Action::Stay,
+            Step::Stay | Step::Again => Action::Stay,
             Step::Done(msg) => {
                 self.importing = None;
                 self.message = msg;

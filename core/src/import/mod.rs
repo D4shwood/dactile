@@ -161,6 +161,18 @@ pub fn read_ocr(path: &Path, job: &ocr::Job) -> Result<Source> {
     read_with(path, Some(job))
 }
 
+/// A document read the way it asks to be: from its page images with `force`
+/// or where a PDF has no text and the tools are there, else as it is.
+pub fn read_as(path: &Path, force: bool, job: &ocr::Job) -> Result<Source> {
+    if force {
+        return read_ocr(path, job);
+    }
+    match read(path) {
+        Err(e) if e.downcast_ref::<pdf::NoText>().is_some() && ocr::ready() => read_ocr(path, job),
+        other => other,
+    }
+}
+
 fn read_with(path: &Path, job: Option<&ocr::Job>) -> Result<Source> {
     let Some(format) = Format::of(path) else {
         bail!(
