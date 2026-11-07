@@ -167,6 +167,29 @@ pub fn fix(notes: &mut Notes, text: &str, i: usize) -> Result<Vec<Change>, Strin
         .collect())
 }
 
+/// The corrections of several notes as one change, and what became of them.
+pub fn fix_many(notes: &mut Notes, text: &str, which: &[usize]) -> crate::people::Made {
+    let (new, done, left) = notes::apply_fixes(text, notes, which);
+    let message = if left > 0 {
+        lang::f(
+            "{} düzeltme uygulandı, {} tanesi açık kaldı. Ctrl+Z geri alır.",
+            "{} corrections applied, {} left open. Ctrl+Z undoes them.",
+            &[&done, &left],
+        )
+    } else {
+        lang::f(
+            "{} düzeltme uygulandı. Ctrl+Z geri alır.",
+            "{} corrections applied. Ctrl+Z undoes them.",
+            &[&done],
+        )
+    };
+    crate::people::Made {
+        change: crate::people::diff(text, &new),
+        cursor: None,
+        message,
+    }
+}
+
 pub fn load(play: &Path) -> Notes {
     Notes::load(play).unwrap_or_default()
 }

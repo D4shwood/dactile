@@ -225,6 +225,18 @@ impl Writer {
                 }
                 true
             }
+            Popup::Guide(at) => {
+                let last = dactile::guide::ENTRIES.len() - 1;
+                match k.code {
+                    KeyCode::Esc | KeyCode::Enter => self.popup = Popup::None,
+                    KeyCode::Up => *at = at.saturating_sub(1),
+                    KeyCode::Down => *at = (*at + 1).min(last),
+                    KeyCode::PageUp => *at = at.saturating_sub(10),
+                    KeyCode::PageDown => *at = (*at + 10).min(last),
+                    _ => {}
+                }
+                true
+            }
             Popup::Help(h) => {
                 // Keys light up here instead of acting; Esc and F1 close.
                 match k.code {

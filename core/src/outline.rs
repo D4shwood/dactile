@@ -2,6 +2,7 @@
 //! who appears in each scene and how much is said there.
 
 use crate::cast::Cast;
+use crate::lang;
 use crate::lex::{self, Block, Kind, Section};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -201,6 +202,15 @@ fn ic_words(text: &str, range: std::ops::Range<usize>, cast: &Cast) -> usize {
             _ => 0,
         })
         .sum()
+}
+
+/// A play's acts in words: a play without one has a single act.
+pub fn acts_text(n: usize) -> String {
+    if n == 0 {
+        lang::l("Tek Perde", "One act").to_string()
+    } else {
+        lang::f("{} perde", "{} acts", &[&n])
+    }
 }
 
 /// 1 → "I", 4 → "IV", 0 → "" (as LaTeX's `\Roman`).

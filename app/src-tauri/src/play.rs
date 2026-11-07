@@ -60,6 +60,9 @@ pub struct Settings {
     pub animations: bool,
     pub page_zoom: u16,
     pub ribbon_folded: bool,
+    pub ribbon_height: u16,
+    pub pdf_width: u16,
+    pub cover_last: std::collections::BTreeMap<String, String>,
     pub viewer: config::Viewer,
 }
 
@@ -96,6 +99,9 @@ pub fn settings(cfg: &Config) -> Settings {
         animations: cfg.animations,
         page_zoom: cfg.page_zoom,
         ribbon_folded: cfg.ribbon_folded,
+        ribbon_height: cfg.ribbon_height,
+        pdf_width: cfg.pdf_width,
+        cover_last: cfg.cover_last.clone(),
         viewer: cfg.viewer.clone(),
     }
 }
@@ -210,7 +216,12 @@ pub fn preview(path: &Path) -> anyhow::Result<Preview> {
 }
 
 /// A new play from template `index`, in the plays folder: its path.
-pub fn create(cfg: &Config, index: usize, title: &str) -> anyhow::Result<PathBuf> {
+pub fn create(
+    cfg: &Config,
+    index: usize,
+    title: &str,
+    details: &std::collections::BTreeMap<String, String>,
+) -> anyhow::Result<PathBuf> {
     let title = title.trim();
     anyhow::ensure!(
         !title.is_empty(),
@@ -221,7 +232,13 @@ pub fn create(cfg: &Config, index: usize, title: &str) -> anyhow::Result<PathBuf
     let t = all
         .get(index)
         .ok_or_else(|| anyhow::anyhow!("no template {index}"))?;
-    let text = templates::make(t, title, &cfg.author, lang_of(cfg))?;
+    let mut text = templates::make(t, title, &cfg.author, lang_of(cfg))?;
+    for (name, value) in details {
+        let value = dactile::tex::escape_text(value.trim());
+        if let Some(e) = dactile::info::fill(&text, name, &value) {
+            text = dactile::tex::apply(&text, &[e]);
+        }
+    }
     let dir = cfg.plays_dir();
     std::fs::create_dir_all(&dir)?;
     let path = library::free_path(&dir, &library::file_name(title));
@@ -443,6 +460,11 @@ fn change(cfg: &mut Config, key: &str, value: &serde_json::Value) -> anyhow::Res
         "surprise" => cfg.surprise = value.as_str().unwrap_or("").to_string(),
         "page_zoom" => cfg.page_zoom = value.as_u64().unwrap_or(100).clamp(50, 300) as u16,
         "ribbon_folded" => cfg.ribbon_folded = value.as_bool().unwrap_or(false),
+        "ribbon_height" => cfg.ribbon_height = value.as_u64().unwrap_or(0).min(400) as u16,
+        "pdf_width" => cfg.pdf_width = value.as_u64().unwrap_or(0).min(4000) as u16,
+        "cover_last" => {
+            cfg.cover_last = serde_json::from_value(value.clone()).unwrap_or_default();
+        }
         "author" => cfg.author = value.as_str().unwrap_or("").to_string(),
         "plays_dir" => cfg.plays_dir = value.as_str().unwrap_or("~/Oyunlar").to_string(),
         "lang" => cfg.lang = value.as_str().unwrap_or("auto").to_string(),

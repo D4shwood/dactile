@@ -182,7 +182,7 @@ impl Writer {
                 }
             }
             // Drawn below: it keeps where its caps are, for the mouse.
-            Popup::Help(_) => {}
+            Popup::Help(_) | Popup::Guide(_) => {}
             // Folded, the buttons drop over the text.
             Popup::Ribbon(nav) => {
                 if self.ribbon_folded && nav.on_btns {
@@ -220,6 +220,9 @@ impl Writer {
         if let Popup::Help(h) = &mut self.popup {
             keys::draw_help(f, area, &self.keyboard, h);
         }
+        if let Popup::Guide(at) = self.popup {
+            keys::draw_guide(f, body, at);
+        }
         if let Some(before) = before {
             anim::unroll(f.buffer_mut(), &before, self.popup_born, POPUP_OPENS);
         }
@@ -230,7 +233,7 @@ impl Writer {
     pub(super) fn draw_map(&mut self, f: &mut Frame, area: Rect) {
         self.map_hits.clear();
         let sheet = self.sheet();
-        if sheet.x < 22 || self.strip_shown() {
+        if sheet.x < 16 || self.strip_shown() {
             return;
         }
         let o = &self.doc.outline;
@@ -348,6 +351,7 @@ impl Writer {
                 | Popup::Split(_)
                 | Popup::Palette(..)
                 | Popup::Help(_)
+                | Popup::Guide(_)
                 | Popup::Form(_)
                 | Popup::Search(..)
                 | Popup::Ribbon(_)

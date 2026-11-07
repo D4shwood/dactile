@@ -7,13 +7,15 @@
   import { openSearchPanel } from "@codemirror/search";
   import { api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Files, type Look, type Made, type Memo, type Summary, type NoteCard, type Opened, type PlaySettings, type Preview, type Settings } from "./api";
   import { focus, setCards, setDim, setFocus } from "./focus";
-  import { blockAt, currentView, extensions, insertSnippet, typeBackslash, openCover, pickNote, setNotes, setSource, setView } from "./editor";
+  import { blockAt, currentView, extensions, insertSnippet, typeBackslash, coverClicked, openCover, pickNote, wrapSelection, setNotes, setSource, setView } from "./editor";
   import { BACKSTAGE, type Act } from "./ribbon";
   import { closeMenu, nextWord, recheck, showMenu, spelling } from "./spelling";
   import { completion, openMenu } from "./completion";
   import { kept } from "./session";
   import { caretAt, mouse } from "./mouse";
   import HeadingForm from "./HeadingForm.svelte";
+  import CoverForm from "./CoverForm.svelte";
+  import { findLang } from "./find";
   import Cast from "./Cast.svelte";
   import Casting from "./Casting.svelte";
   import Memorize from "./Memorize.svelte";
@@ -21,12 +23,14 @@
   import { setSummaries, summaries } from "./summaries";
   import CharacterFormView from "./CharacterForm.svelte";
   import Ribbon from "./Ribbon.svelte";
+  import Keys from "./Keys.svelte";
+  import Guide from "./Guide.svelte";
   import Pdf from "./Pdf.svelte";
   import Board from "./Board.svelte";
   import Notes from "./Notes.svelte";
   import FileList from "./FileList.svelte";
   import LookForm from "./LookForm.svelte";
-  import { applyLook, pickLook } from "./look";
+  import { applyLook, installedFonts, pickLook } from "./look";
   import Temporary from "./Temporary.svelte";
 
   let {
@@ -46,6 +50,58 @@
   // Taken once: from here on the writer keeps them, and saves them.
   const first = untrack(() => settings);
   let folded = $state(first.ribbon_folded);
+  let ribbonHeight = $state(first.ribbon_height || 0);
+  let pdfWidth = $state(first.pdf_width || 0);
+  /// While the PDF's edge is dragged.
+  let pdfDrag = $state(0);
+  const pdfShown = $derived(pdfDrag || pdfWidth);
+  let coverLast = $state(first.cover_last ?? {});
+  let coverForm = $state<"details" | "look" | null>(null);
+  const openCoverForm = (tab: "details" | "look") => {
+    board = false;
+    coverForm = tab;
+  };
+  coverClicked.run = () => openCoverForm("details");
+  findLang.tr = untrack(() => tr);
+
+  function dragPdf(e: PointerEvent) {
+    const edge = e.currentTarget as HTMLElement;
+    const body = edge.parentElement!;
+    edge.setPointerCapture(e.pointerId);
+    const move = (m: PointerEvent) => {
+      const box = body.getBoundingClientRect();
+      const most = Math.max(320, box.width - 360);
+      pdfDrag = Math.round(Math.min(most, Math.max(320, box.right - m.clientX)));
+    };
+    const up = () => {
+      edge.removeEventListener("pointermove", move);
+      edge.removeEventListener("pointerup", up);
+      if (pdfDrag) {
+        pdfWidth = pdfDrag;
+        api.set("pdf_width", pdfWidth);
+      }
+      pdfDrag = 0;
+      requestAnimationFrame(() => view.requestMeasure());
+    };
+    edge.addEventListener("pointermove", move);
+    edge.addEventListener("pointerup", up);
+    e.preventDefault();
+  }
+
+  async function writeCover(f: import("./api").CoverForm) {
+    coverForm = null;
+    const kept = Object.fromEntries(
+      ["editedby", "copyrightnotice", "address", "email", "telephone"]
+        .map((k) => [k, (f.fields[k] ?? "").trim()])
+        .filter(([, v]) => v),
+    );
+    if (Object.keys(kept).length) {
+      coverLast = { ...coverLast, ...kept };
+      api.set("cover_last", coverLast);
+    }
+    await castCall(() => api.coverWrite(view.state.doc.toString(), f));
+    view.focus();
+  }
   let zoom = $state(Math.min(300, Math.max(50, first.page_zoom || 100)));
   let theme = $state(first.theme || "paper");
   /// The rest of the look; the page's zoom and theme have keys of their own.
@@ -55,8 +111,9 @@
   let sceneAlign = $state("center");
   let typewriter = $state(false);
   /// What stands beside the page.
-  let side = $state<"" | "pdf" | "notes" | "cast" | "files" | "look">("");
+  let side = $state<"" | "pdf" | "notes" | "cast" | "files" | "look" | "guide">("");
   let pdf: Pdf | undefined = $state();
+  let notesPanel: ReturnType<typeof Notes> | undefined = $state();
   let files = $state<Files | null>(null);
   /// The temporary folder's warning, put away for this play.
   let tempSeen = $state(false);
@@ -476,6 +533,11 @@
     }
   }
 
+  async function noteFixMany(which: number[]) {
+    await castCall(() => api.noteFixMany(view.state.doc.toString(), which));
+    await refreshNotes();
+  }
+
   async function notesPaste(text: string, author: string) {
     try {
       const n = await api.notesPaste(text, author);
@@ -708,8 +770,25 @@
         if (!casting) view.focus();
         break;
       case "cover":
-        board = false;
+        openCoverForm("details");
+        break;
+      case "cover-look":
+        openCoverForm("look");
+        break;
+      case "cover-source":
         openCover(view);
+        break;
+      case "guide":
+        side = side === "guide" ? "" : "guide";
+        break;
+      case "bold":
+        wrapSelection(view, "\\textbf{", "}");
+        break;
+      case "italic":
+        wrapSelection(view, "\\textit{", "}");
+        break;
+      case "underline":
+        wrapSelection(view, "\\underline{", "}");
         break;
       case "keys":
         help = "keys";
@@ -816,7 +895,17 @@
       if (e.key === "k") id = "search";
       if (e.key === "o") id = "cast";
       if (e.key === "'") id = "pdf-show";
+      if (e.key === "N" && e.shiftKey) {
+        e.preventDefault();
+        notesPanel?.focusList();
+        return;
+      }
+      if (e.key === "b") id = "bold";
+      if (e.key === "i") id = "italic";
+      if (e.key === "u") id = "underline";
     }
+    if (e.altKey && !mod && /^[iıİI]$/.test(e.key)) id = "cover";
+    if (e.altKey && !mod && (e.key === "p" || e.key === "P")) id = "cover-source";
     if (e.altKey && !mod && (e.key === "n" || e.key === "N")) id = "note-here";
     if (e.altKey && !mod && (e.key === "s" || e.key === "S")) id = "spelling";
     if (e.altKey && !mod && (e.key === "e" || e.key === "E")) id = "summary";
@@ -966,6 +1055,9 @@
 
 <div class="writer">
   <Ribbon
+    font={look.page_font}
+    fonts={installedFonts(look.page_font)}
+    setFont={(f) => setLook("page_font", f)}
     bind:this={ribbon}
     {tr}
     {folded}
@@ -973,6 +1065,12 @@
     title={`${opened.name}${opened.read_only ? l(" (salt okunur)", " (read only)") : ""} — Dactile`}
     {run}
     file={() => openBackstage("info")}
+    height={ribbonHeight}
+    resized={(h) => {
+      ribbonHeight = h;
+      api.set("ribbon_height", h);
+      requestAnimationFrame(() => view.requestMeasure());
+    }}
   />
 
   {#if files?.temporary && !tempSeen}
@@ -985,7 +1083,7 @@
     />
   {/if}
 
-  <main class="body" class:split={side !== ""}>
+  <main class="body" class:split={side !== ""} style={side === "pdf" && pdfShown ? `--pdf-col:${pdfShown}px` : ""}>
     <div class="left">
       <div class="desk" class:gone={board || casting || memo} class:plain={!sheet} {onwheel}>
         <div class="page" class:source class:typewriter data-scene-align={sceneAlign} style={`--z: ${zoom / 100}`}>
@@ -1017,6 +1115,18 @@
       {/if}
     </div>
     {#if side === "pdf"}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="pdf-edge"
+        style={`right:${pdfShown ? pdfShown + "px" : "max(320px, 40%)"}`}
+        title={l("Sürükle; çift tık: varsayılan", "Drag; double click: its own width")}
+        onpointerdown={dragPdf}
+        ondblclick={() => {
+          pdfWidth = 0;
+          api.set("pdf_width", 0);
+          requestAnimationFrame(() => view.requestMeasure());
+        }}
+      ></div>
       <Pdf bind:this={pdf} {tr} result={built} {building} close={() => ((side = ""), view.focus())} {goto} {say} />
     {:else if side === "files"}
       <aside class="files">
@@ -1029,6 +1139,8 @@
           <div class="list"><FileList {tr} {files} open={leave} reload={loadFiles} /></div>
         {/if}
       </aside>
+    {:else if side === "guide"}
+      <Guide {tr} close={() => (side = "")} />
     {:else if side === "look"}
       <aside class="files">
         <div class="head">
@@ -1067,6 +1179,9 @@
         add={noteAdd}
         reply={noteReply}
         fix={noteFix}
+        fixMany={noteFixMany}
+        back={() => view.focus()}
+        bind:this={notesPanel}
         paste={notesPaste}
         fromFile={notesFromFile}
         close={() => openNotes(false)}
@@ -1198,6 +1313,22 @@
     />
   {/if}
 
+  {#if coverForm}
+    <CoverForm
+      {tr}
+      text={view.state.doc.toString()}
+      last={coverLast}
+      tab={coverForm}
+      readOnly={opened.read_only}
+      done={writeCover}
+      source={() => {
+        coverForm = null;
+        openCover(view);
+      }}
+      cancel={() => ((coverForm = null), view.focus())}
+    />
+  {/if}
+
   {#if headingForm}
     <HeadingForm
       {tr}
@@ -1211,36 +1342,11 @@
 
   {#if help}
     <div class="modal" role="dialog" tabindex="-1" onclick={() => (help = "")} onkeydown={() => {}}>
-      <div class="sheet">
+      <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+      <div class="sheet" class:wide={help === "keys"} onclick={(e) => e.stopPropagation()}>
         {#if help === "keys"}
           <h2>{l("Tuşlar", "Keys")}</h2>
-          <table>
-            <tbody>
-              <tr><td>Alt</td><td>{l("şerit harfleri: Alt E A bir eylem ekler", "ribbon letters: Alt N A adds an action")}</td></tr>
-              <tr><td>Ctrl+S</td><td>{l("kaydet (kendiliğinden de kaydeder)", "save (it saves on its own too)")}</td></tr>
-              <tr><td>F5</td><td>{l("PDF derle", "build the PDF")}</td></tr>
-              <tr><td>F12</td><td>{l("PDF paneli", "the PDF panel")}</td></tr>
-              <tr><td>Ctrl+G</td><td>{l("pano", "the board")}</td></tr>
-              <tr><td>Ctrl + / − / 0, Ctrl+{l("tekerlek", "wheel")}</td><td>{l("sayfayı büyüt / küçült", "zoom the page")}</td></tr>
-              <tr><td>Enter</td><td>{l("replik sonunda: karşı tarafın repliği", "at a line's end: the other speaker's line")}</td></tr>
-              <tr><td>Tab</td><td>{l("konuşmacıdan hemen sonra: sıradaki kişi", "right after the speaker: the next one")}</td></tr>
-              <tr><td>\</td><td>{l("bloğu kaynak olarak aç, makro yaz", "open the block as source, write a macro")}</td></tr>
-              <tr><td>Alt+E</td><td>{l("sahnenin özeti (PDF'e girmez)", "the scene's summary (never printed)")}</td></tr>
-              <tr><td>Alt+B / Alt+J</td><td>{l("sahneyi imleçte böl / sonrakiyle birleştir", "split the scene at the cursor / join it with the next")}</td></tr>
-              <tr><td>Ctrl+O</td><td>{l("kişiler paneli", "the cast panel")}</td></tr>
-              <tr><td>Ctrl+K</td><td>{l("karakterler, komutlar, makrolar menüsü", "the menu of characters, commands, macros")}</td></tr>
-              <tr><td>Alt+S</td><td>{l("sıradaki yazım hatası ve önerileri", "the next misspelt word and its suggestions")}</td></tr>
-              <tr><td>Ctrl+N</td><td>{l("notlar paneli", "the notes panel")}</td></tr>
-              <tr><td>Alt+N</td><td>{l("seçili yere ya da kelimeye not", "a note on the selection or the word")}</td></tr>
-              <tr><td>F4</td><td>{l("sahne odağı: öteki sahneler tek satır", "scene focus: the other scenes one line each")}</td></tr>
-              <tr><td>F8</td><td>{l("imleçteki blok dışını soldur", "dim all but the cursor's block")}</td></tr>
-              <tr><td>F9</td><td>{l("dağıtım, sahne tablosu, sayılar, oyuncu kopyaları, ezber", "casting, the scene table, the numbers, actors' copies, memorizing")}</td></tr>
-              <tr><td>F7</td><td>{l("kâğıt sayfa ya da pencere boyu metin", "a paper sheet, or the text across the window")}</td></tr>
-              <tr><td>F2</td><td>{l("bütün kaynak", "all of the source")}</td></tr>
-              <tr><td>F6</td><td>{l("tema", "theme")}</td></tr>
-              <tr><td>Ctrl+F1</td><td>{l("şeridi katla", "fold the ribbon")}</td></tr>
-            </tbody>
-          </table>
+          <Keys {tr} close={() => (help = "")} />
         {:else}
           <h2>Dactile</h2>
           <p>{l("Tiyatro oyunu yazmak için masaüstü uygulaması. Terminal sürümü: Dactile Light.", "A desktop app for writing stage plays. The terminal one: Dactile Light.")}</p>
@@ -1269,8 +1375,29 @@
     min-height: 0;
     overflow: hidden;
   }
+  .body {
+    position: relative;
+  }
   .body.split {
-    grid-template-columns: minmax(0, 1fr) minmax(320px, 40%);
+    grid-template-columns: minmax(0, 1fr) var(--pdf-col, minmax(320px, 40%));
+  }
+  .pdf-edge {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 6;
+    width: 7px;
+    margin-right: -3px;
+    cursor: col-resize;
+    touch-action: none;
+  }
+  .pdf-edge:hover {
+    background: var(--chrome-line);
+  }
+  :global(.cm-panels.cm-panels-top) {
+    position: relative;
+    border: 0 !important;
+    background: transparent !important;
   }
   .files {
     display: flex;
@@ -1833,14 +1960,11 @@
     min-width: 420px;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
   }
+  .sheet.wide {
+    max-width: min(760px, 94vw);
+  }
   .sheet h2 {
     margin-top: 0;
     color: var(--accent-ink);
-  }
-  .sheet td:first-child {
-    font-family: var(--mono);
-    font-size: 12px;
-    padding-right: 18px;
-    white-space: nowrap;
   }
 </style>

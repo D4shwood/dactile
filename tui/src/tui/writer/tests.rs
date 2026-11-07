@@ -463,3 +463,12 @@ fn a_draft_from_the_files_opens_after_this_play_closes() {
     assert_eq!(w.open_next.as_deref(), Some(draft.as_path()));
     assert!(w.quit);
 }
+
+#[test]
+fn the_margin_lists_the_scenes_in_an_ordinary_terminal() {
+    let mut o = open("margin");
+    o.w.animations = false;
+    let mut t = Terminal::new(TestBackend::new(100, 40)).unwrap();
+    t.draw(|f| o.w.draw(f)).unwrap();
+    assert!(!o.w.map_hits.is_empty());
+}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Keys from "./Keys.svelte";
   // The start screen, as a word processor's "New" page: a column on the
   // left, tiles for a new play along the top, the plays below with a
   // preview of the one picked.
@@ -23,6 +24,15 @@
   let files = $state<Files | null>(null);
   let making = $state<TemplateCard | null>(null);
   let title = $state("");
+  /// Asked of a new play, beside its title; all may stay empty.
+  let details = $state<Record<string, string>>({});
+  const DETAILS: [string, string, string][] = [
+    ["editedby", "Düzenleyen", "Edited by"],
+    ["copyrightnotice", "Telif", "Copyright"],
+    ["address", "Adres", "Address"],
+    ["email", "E-posta", "Email"],
+    ["telephone", "Telefon", "Telephone"],
+  ];
   let error = $state("");
   let filter = $state("");
 
@@ -82,13 +92,16 @@
   function startNew(t: TemplateCard) {
     making = t;
     title = "";
+    details = {};
     error = "";
   }
 
   async function create() {
     if (!making) return;
     try {
-      open(await api.create(making.index, title));
+      const filled = Object.fromEntries(Object.entries(details).filter(([, v]) => v.trim()));
+      if (Object.keys(filled).length) await api.set("cover_last", { ...home.settings.cover_last, ...filled });
+      open(await api.create(making.index, title, filled));
     } catch (e) {
       error = String(e);
     }
@@ -396,6 +409,14 @@
           <button class="primary" disabled={!title.trim()}>{l("Oluştur", "Create")}</button>
           <button type="button" class="plain" onclick={() => (making = null)}>{l("Vazgeç", "Cancel")}</button>
           {#if error}<span class="error">{error}</span>{/if}
+          <div class="details">
+            {#each DETAILS as [k, t, e]}
+              <label>{l(t, e)}<input value={details[k] ?? ""} oninput={(ev) => (details[k] = ev.currentTarget.value)} /></label>
+            {/each}
+            {#if Object.values(home.settings.cover_last ?? {}).some((v) => v.trim())}
+              <button type="button" class="plain" onclick={() => (details = { ...home.settings.cover_last, ...Object.fromEntries(Object.entries(details).filter(([, v]) => v.trim())) })}>{l("Son girilenleri kullan", "Use the last ones")}</button>
+            {/if}
+          </div>
         </form>
       {/if}
     {/if}
@@ -472,7 +493,7 @@
               oncontextmenu={(e) => rightClick(p, e)}
             >
               <span class="t">{p.title}{#if p.draft}<em> · {p.draft}</em>{/if}{#if p.book}<em> · {l("kitap", "book")}</em>{/if}</span>
-              <span class="m">{p.acts} {l("perde", "acts")} · {p.scenes} {l("sahne", "scenes")} · ~{p.minutes} {l("dk", "min")}</span>
+              <span class="m">{p.acts ? `${p.acts} ${l("perde", "acts")}` : l("Tek Perde", "One act")} · {p.scenes} {l("sahne", "scenes")} · ~{p.minutes} {l("dk", "min")}</span>
               <span class="d">{ago(p.modified)}{p.elsewhere ? " · " + l("dışarıda", "elsewhere") : ""}</span>
             </button>
           {/each}
@@ -566,13 +587,7 @@
 
     {#if section === "keys"}
       <h1>{l("Tuşlar", "Keys")}</h1>
-      <p>{l("Yazarken F1 bütün listeyi gösterir. Birkaçı:", "While writing, F1 shows them all. A few:")}</p>
-      <ul class="keys">
-        <li><kbd>Alt</kbd> {l("şeridin harfleri; iki harf her şeyi yapar", "the ribbon's letters; two letters do anything")}</li>
-        <li><kbd>F5</kbd> {l("PDF derle ve yanda göster", "build the PDF and show it beside")}</li>
-        <li><kbd>Ctrl+G</kbd> {l("pano: sahneleri sürükle bırak", "the board: drag scenes around")}</li>
-        <li><kbd>Ctrl +/−</kbd> {l("sayfayı büyüt, küçült", "zoom the page")}</li>
-      </ul>
+      <Keys {tr} />
     {/if}
   </main>
 </div>
@@ -889,6 +904,7 @@
   .make {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 10px;
     margin: 18px 0 0;
     padding: 12px 14px;
@@ -1052,14 +1068,22 @@
   .settings .primary {
     justify-self: start;
   }
-  .keys {
-    line-height: 2;
+  .make .details {
+    flex-basis: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 8px 10px;
+    margin-top: 8px;
   }
-  kbd {
-    font: 12px var(--mono);
-    background: var(--chrome-2);
-    border: 1px solid var(--chrome-line);
-    border-radius: 3px;
-    padding: 1px 6px;
+  .make .details label {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 12px;
+    color: var(--chrome-muted);
+  }
+  .make .details input {
+    min-width: 0;
+    width: 100%;
   }
 </style>

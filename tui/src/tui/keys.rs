@@ -4,6 +4,7 @@
 use super::popup::{fit, float, inner, panel};
 use super::theme::{self, BEIGE, CLARET, FAINT, FG, MUTED, WARN};
 use dactile::cast;
+use dactile::keys::{self, BINDS, Bind, Cat, FKEYS, Only, rows};
 use dactile::lang;
 use ratatui::Frame;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -13,368 +14,13 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use unicode_width::UnicodeWidthStr;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Cat {
-    File,
-    Edit,
-    Panel,
-    View,
-    Write,
-}
-
-impl Cat {
-    const ALL: [Cat; 5] = [Cat::Write, Cat::Panel, Cat::View, Cat::Edit, Cat::File];
-
-    fn color(self) -> Color {
-        match self {
-            Cat::File => CLARET,
-            Cat::Edit => BEIGE,
-            Cat::Panel => Color::Rgb(0x6f, 0x93, 0xb8),
-            Cat::View => Color::Rgb(0x86, 0xa8, 0x6e),
-            Cat::Write => WARN,
-        }
-    }
-
-    fn name(self) -> &'static str {
-        match self {
-            Cat::File => lang::l("dosya", "file"),
-            Cat::Edit => lang::l("düzenleme", "editing"),
-            Cat::Panel => lang::l("pencereler", "panels"),
-            Cat::View => lang::l("görünüm", "view"),
-            Cat::Write => lang::l("yazarken", "writing"),
-        }
-    }
-}
-
-/// A key and what it does.
-pub struct Bind {
-    /// The key cap: "O", "F3", "\\", "Tab".
-    pub cap: &'static str,
-    pub ctrl: bool,
-    pub alt: bool,
-    pub cat: Cat,
-    pub tr: &'static str,
-    pub en: &'static str,
-}
-
-const fn b(
-    cap: &'static str,
-    ctrl: bool,
-    alt: bool,
-    cat: Cat,
-    tr: &'static str,
-    en: &'static str,
-) -> Bind {
-    Bind {
-        cap,
-        ctrl,
-        alt,
-        cat,
-        tr,
-        en,
-    }
-}
-
-/// Every key of the writer, the one list the keyboard and the short list
-/// both read.
-pub const BINDS: &[Bind] = &[
-    b(
-        "\\",
-        false,
-        false,
-        Cat::Write,
-        "öneri menüsü: karakterler, komutlar",
-        "suggestions: characters, commands",
-    ),
-    b(
-        "#",
-        false,
-        false,
-        Cat::Write,
-        "satır başında: #sahne, #önsahne, #perde, #önsöz, #notlar",
-        "at a line's start: #sahne, #prologue, #perde, #önsöz, #notlar",
-    ),
-    b(
-        ":",
-        false,
-        false,
-        Cat::Write,
-        "SELİN: yazınca SELİN'in repliği olur",
-        "typing SELİN: makes it SELİN's line",
-    ),
-    b(
-        "(",
-        false,
-        false,
-        Cat::Write,
-        "(( replik içinde yönerge açar: (güler)",
-        "(( opens a direction inside a line: (laughs)",
-    ),
-    b(
-        "Tab",
-        false,
-        false,
-        Cat::Write,
-        "boş satırda sıradaki konuşanı yazar",
-        "on an empty line, writes who speaks next",
-    ),
-    b(
-        "⌫",
-        false,
-        false,
-        Cat::Write,
-        "bir makronun içine girince satırın kaynağı açılır",
-        "into a macro: the line shows its source",
-    ),
-    b(
-        "P",
-        true,
-        false,
-        Cat::Panel,
-        "komut paleti: her şeyi adıyla bul ve yap",
-        "command palette: find anything by name and do it",
-    ),
-    b(
-        "O",
-        true,
-        false,
-        Cat::Panel,
-        "kişiler: düzenle, kart, sıra, yeni, sil",
-        "the cast: edit, card, order, new, delete",
-    ),
-    b(
-        "N",
-        true,
-        false,
-        Cat::Panel,
-        "notlar yanda: AI'ın, atölyenin, senin; uygula, çiz, cevapla",
-        "notes beside: an AI's, a workshop's, yours; apply, tick, reply",
-    ),
-    b(
-        "N",
-        false,
-        true,
-        Cat::Panel,
-        "seçili söze ya da imleçteki kelimeye not",
-        "a note on the selection or the word at the cursor",
-    ),
-    b(
-        "G",
-        true,
-        false,
-        Cat::Panel,
-        "sahne şeridi yazının yanında; iki kez: pano (liste, kartlar, taşı)",
-        "the scene strip beside the writing; twice: the board (list, cards, move)",
-    ),
-    b(
-        "E",
-        false,
-        true,
-        Cat::Panel,
-        "imlecin sahnesinin özeti (PDF'e girmez)",
-        "the cursor's scene's summary (never printed)",
-    ),
-    b(
-        "B",
-        false,
-        true,
-        Cat::Edit,
-        "sahneyi imlecin satırından ikiye böl",
-        "split the scene in two at the cursor's line",
-    ),
-    b(
-        "J",
-        false,
-        true,
-        Cat::Edit,
-        "sahneyi sonrakiyle birleştir",
-        "join the scene with the next one",
-    ),
-    b(
-        "K",
-        true,
-        false,
-        Cat::Panel,
-        "karakter ya da komut ara",
-        "search characters and commands",
-    ),
-    b(
-        "F",
-        true,
-        false,
-        Cat::Panel,
-        "bul ve değiştir",
-        "find and replace",
-    ),
-    // Alt with the key that types "i": İ on a Turkish keyboard, I on a US one.
-    b(
-        "İ",
-        false,
-        true,
-        Cat::Panel,
-        "oyun bilgisi: başlık, yazar, taslak/final",
-        "cover details: title, author, draft/final",
-    ),
-    b(
-        "S",
-        false,
-        true,
-        Cat::Panel,
-        "imleçteki kelime için yazım önerileri",
-        "spelling suggestions for the word at the cursor",
-    ),
-    b(
-        "P",
-        false,
-        true,
-        Cat::Panel,
-        "kişi tanımlarını ve oyun bilgisini kaynakta aç",
-        "show the cast and cover lines of the source",
-    ),
-    b("F1", false, false, Cat::View, "bu ekran", "this screen"),
-    b(
-        "F2",
-        false,
-        false,
-        Cat::View,
-        "bütün oyun kaynak olarak",
-        "the whole play as source",
-    ),
-    b(
-        "F3",
-        false,
-        false,
-        Cat::View,
-        "daktilo: imleç satırı ortada",
-        "typewriter: the cursor's line in the middle",
-    ),
-    b(
-        "F4",
-        false,
-        false,
-        Cat::View,
-        "sahne odağı: diğer sahneler kapanır",
-        "scene focus: the other scenes fold",
-    ),
-    b(
-        "F5",
-        false,
-        false,
-        Cat::File,
-        "PDF'i derle (arka planda, tek geçiş)",
-        "build the PDF (in the background, one pass)",
-    ),
-    b(
-        "O",
-        false,
-        true,
-        Cat::File,
-        "PDF'i görüntüleyicide aç",
-        "open the PDF in the viewer",
-    ),
-    b(
-        "L",
-        false,
-        true,
-        Cat::File,
-        "son derlemenin logunu aç",
-        "open the last build's log",
-    ),
-    b(
-        "F8",
-        false,
-        false,
-        Cat::View,
-        "imleç dışını soldur; Shift+F8: imleçteki rolün replikleri parlak, kalanı soluk",
-        "dim all but the cursor's line; Shift+F8: the cursor's role lit, the rest faint",
-    ),
-    b(
-        "F10",
-        false,
-        false,
-        Cat::File,
-        "şerit: sekmelerde ve düğmelerde harfler, ya da oklar; ^F1 katlar; fareyle de",
-        "the ribbon: letters on tabs and buttons, or the arrows; ^F1 folds it; by mouse too",
-    ),
-    b(
-        "F9",
-        false,
-        false,
-        Cat::Panel,
-        "dağıtım: oyuncular, sahne/rol tablosu, sayılar",
-        "casting: actors, the scene/role table, numbers",
-    ),
-    b(
-        "F6",
-        false,
-        false,
-        Cat::View,
-        "tema: kâğıt, sepya, gece, yüksek kontrast, koyu",
-        "theme: paper, sepia, night, high contrast, dark",
-    ),
-    b(
-        "F7",
-        false,
-        false,
-        Cat::View,
-        "sayfa görünümü: A4 yapraklar, sayfa numaraları",
-        "page view: A4 sheets, page numbers",
-    ),
-    b("Z", true, false, Cat::Edit, "geri al", "undo"),
-    b("Y", true, false, Cat::Edit, "yinele", "redo"),
-    b("C", true, false, Cat::Edit, "kopyala", "copy"),
-    b("X", true, false, Cat::Edit, "kes", "cut"),
-    b(
-        "V",
-        true,
-        false,
-        Cat::Edit,
-        "yapıştır; satır başında 'AD: …' satırları replik olur",
-        "paste; at a line's start 'NAME: …' lines become lines",
-    ),
-    b(
-        "A",
-        true,
-        false,
-        Cat::Edit,
-        "oyunun hepsini seç",
-        "select the whole play",
-    ),
-    b(
-        "S",
-        true,
-        false,
-        Cat::File,
-        "kaydet (zaten kendiliğinden kaydeder)",
-        "save (it saves by itself anyway)",
-    ),
-    b("Q", true, false, Cat::File, "çık", "quit"),
-];
-
-impl Bind {
-    /// The cap on `layout`'s keyboard.
-    fn cap(&self, layout: &str) -> &'static str {
-        if layout == "us" && self.cap == "İ" {
-            "I"
-        } else {
-            self.cap
-        }
-    }
-
-    fn what(&self) -> &'static str {
-        if lang::is_tr() { self.tr } else { self.en }
-    }
-
-    fn combo(&self, layout: &str) -> String {
-        let mut s = String::new();
-        if self.ctrl {
-            s.push_str("Ctrl+");
-        }
-        if self.alt {
-            s.push_str("Alt+");
-        }
-        s.push_str(self.cap(layout));
-        s
+fn color(c: Cat) -> Color {
+    match c {
+        Cat::File => CLARET,
+        Cat::Edit => BEIGE,
+        Cat::Panel => Color::Rgb(0x6f, 0x93, 0xb8),
+        Cat::View => Color::Rgb(0x86, 0xa8, 0x6e),
+        Cat::Write => WARN,
     }
 }
 
@@ -465,33 +111,10 @@ pub fn pressed(k: KeyEvent, layout: &str) -> Option<Pressed> {
 }
 
 /// The letter rows of a layout: Turkish Q, Turkish F, or US.
-fn rows(layout: &str) -> [&'static [&'static str]; 3] {
-    match layout {
-        "f" => [
-            &["F", "G", "Ğ", "I", "O", "D", "R", "N", "H", "P", "Q", "W"],
-            &["U", "İ", "E", "A", "Ü", "T", "K", "M", "L", "Y", "Ş", "X"],
-            &["J", "Ö", "V", "C", "Ç", "Z", "S", "B"],
-        ],
-        "us" => [
-            &["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
-            &["A", "S", "D", "F", "G", "H", "J", "K", "L"],
-            &["Z", "X", "C", "V", "B", "N", "M"],
-        ],
-        _ => [
-            &["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "Ğ", "Ü"],
-            &["A", "S", "D", "F", "G", "H", "J", "K", "L", "Ş", "İ"],
-            &["Z", "X", "C", "V", "B", "N", "M", "Ö", "Ç"],
-        ],
-    }
-}
-
-const FKEYS: [&str; 12] = [
-    "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
-];
-const SPECIAL: [&str; 10] = ["Ctrl", "Alt", "Tab", "\\", "#", "(", ":", "⌫", "⏎", "Esc"];
-
 fn binds_on<'a>(cap: &'a str, layout: &'a str) -> impl Iterator<Item = &'static Bind> + 'a {
-    BINDS.iter().filter(move |b| b.cap(layout) == cap)
+    BINDS
+        .iter()
+        .filter(move |b| b.only.fits(Only::Light) && b.cap(layout) == cap)
 }
 
 /// Rows the keyboard needs: five rows of caps three high, a legend, two
@@ -528,12 +151,13 @@ pub fn draw_help(f: &mut Frame, area: Rect, layout: &str, help: &mut Help) {
     };
     let mut y = inn.y;
     let letters = rows(layout);
+    let special = keys::special(Only::Light);
     let lines: [(&[&str], u16); 5] = [
         (&FKEYS, 0),
         (letters[0], 1),
         (letters[1], 2),
         (letters[2], 4),
-        (&SPECIAL, 0),
+        (&special, 0),
     ];
     for (caps, indent) in lines {
         let mut x = inn.x + indent;
@@ -571,11 +195,11 @@ pub fn draw_help(f: &mut Frame, area: Rect, layout: &str, help: &mut Help) {
         ));
         lx += w;
         let on = cat == Some(c);
-        legend.push(Span::styled("■ ", Style::default().fg(c.color())));
+        legend.push(Span::styled("■ ", Style::default().fg(color(c))));
         legend.push(Span::styled(
             format!("{}   ", c.name()),
             Style::default()
-                .fg(if on { c.color() } else { MUTED })
+                .fg(if on { color(c) } else { MUTED })
                 .add_modifier(if on {
                     Modifier::BOLD
                 } else {
@@ -597,14 +221,14 @@ pub fn draw_help(f: &mut Frame, area: Rect, layout: &str, help: &mut Help) {
             let c = cat.unwrap_or(Cat::Write);
             let combos: Vec<String> = BINDS
                 .iter()
-                .filter(|b| b.cat == c)
+                .filter(|b| b.cat == c && b.only.fits(Only::Light))
                 .map(|b| b.combo(layout))
                 .collect();
             vec![
                 Line::from(vec![
                     Span::styled(
                         format!("{}  ", c.name()),
-                        Style::default().fg(c.color()).add_modifier(Modifier::BOLD),
+                        Style::default().fg(color(c)).add_modifier(Modifier::BOLD),
                     ),
                     Span::styled(
                         fit(&combos.join("   "), inn.width as usize - 14),
@@ -635,7 +259,7 @@ pub fn draw_help(f: &mut Frame, area: Rect, layout: &str, help: &mut Help) {
                     Span::styled(
                         format!("{}  ", b.combo(layout)),
                         Style::default()
-                            .fg(b.cat.color())
+                            .fg(color(b.cat))
                             .add_modifier(Modifier::BOLD),
                     ),
                     Span::styled(
@@ -693,12 +317,88 @@ pub fn draw_help(f: &mut Frame, area: Rect, layout: &str, help: &mut Help) {
     );
 }
 
+/// Help > Commands: the commands down the right side; the chosen one's
+/// explanation and example at the foot.
+pub fn draw_guide(f: &mut Frame, area: Rect, at: usize) {
+    use dactile::guide::{ENTRIES, Group};
+    let w = 46.min(area.width);
+    let r = Rect {
+        x: area.x + area.width - w,
+        width: w,
+        ..area
+    };
+    float(f, r);
+    f.render_widget(
+        panel(lang::l(
+            "komutlar — ↑↓ seç, Esc kapat",
+            "commands — ↑↓ choose, Esc closes",
+        )),
+        r,
+    );
+    let inn = inner(r);
+    let width = inn.width as usize;
+    let chosen = &ENTRIES[at];
+    let mut foot = vec![Line::from(Span::styled(
+        chosen.name,
+        Style::default().fg(CLARET).add_modifier(Modifier::BOLD),
+    ))];
+    for l in super::board::wrap(chosen.what(), width) {
+        foot.push(Line::from(Span::styled(l, Style::default().fg(FG))));
+    }
+    if !chosen.example.is_empty() {
+        foot.push(Line::from(Span::styled(
+            fit(chosen.example, width),
+            Style::default().fg(BEIGE),
+        )));
+    }
+    let foot_h = (foot.len() as u16).min(inn.height / 2);
+    let list_h = inn.height.saturating_sub(foot_h + 1) as usize;
+    let mut lines = Vec::new();
+    let mut here = 0;
+    for g in Group::ALL {
+        lines.push(Line::from(Span::styled(
+            g.name(),
+            Style::default().fg(MUTED).add_modifier(Modifier::BOLD),
+        )));
+        for (i, e) in ENTRIES.iter().enumerate().filter(|(_, e)| e.group == g) {
+            if i == at {
+                here = lines.len();
+            }
+            let style = if i == at {
+                Style::default().fg(CLARET).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(FG)
+            };
+            let lead = if i == at { "▸ " } else { "  " };
+            lines.push(Line::from(Span::styled(format!("{lead}{}", e.name), style)));
+        }
+    }
+    let top = here
+        .saturating_sub(list_h / 2)
+        .min(lines.len().saturating_sub(list_h));
+    f.render_widget(
+        Paragraph::new(lines.split_off(top)).style(theme::base()),
+        Rect {
+            height: list_h as u16,
+            ..inn
+        },
+    );
+    f.render_widget(
+        Paragraph::new(foot).style(theme::base()),
+        Rect {
+            y: inn.y + inn.height - foot_h,
+            height: foot_h,
+            ..inn
+        },
+    );
+}
+
 /// One key cap: coloured by what it does, lit when pressed.
 fn draw_cap(f: &mut Frame, r: Rect, cap: &str, layout: &str, lit: bool) {
     let cat = binds_on(cap, layout).next().map(|b| b.cat);
     let modifier = matches!(cap, "Ctrl" | "Alt" | "Esc");
     let color = match cat {
-        Some(c) => c.color(),
+        Some(c) => color(c),
         None if modifier => MUTED,
         None => FAINT,
     };
@@ -745,9 +445,12 @@ fn draw_list(f: &mut Frame, area: Rect) {
     for c in Cat::ALL {
         lines.push(Line::from(Span::styled(
             format!(" {}", c.name()),
-            Style::default().fg(c.color()).add_modifier(Modifier::BOLD),
+            Style::default().fg(color(c)).add_modifier(Modifier::BOLD),
         )));
-        for b in BINDS.iter().filter(|b| b.cat == c) {
+        for b in BINDS
+            .iter()
+            .filter(|b| b.cat == c && b.only.fits(Only::Light))
+        {
             lines.push(Line::from(vec![
                 Span::styled(
                     format!("  {:<10}", b.combo("q")),
@@ -776,20 +479,6 @@ fn draw_list(f: &mut Frame, area: Rect) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn every_bound_cap_is_on_the_keyboard() {
-        for layout in ["q", "f", "us"] {
-            let letters = rows(layout);
-            for b in BINDS {
-                let cap = b.cap(layout);
-                let on = FKEYS.contains(&cap)
-                    || SPECIAL.contains(&cap)
-                    || letters.iter().any(|r| r.contains(&cap));
-                assert!(on, "{cap} not on the {layout} keyboard");
-            }
-        }
-    }
 
     #[test]
     fn keys_land_on_caps() {

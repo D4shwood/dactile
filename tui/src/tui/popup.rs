@@ -113,6 +113,10 @@ pub enum FormKind {
     Card(String),
     /// The cover details and draft/final.
     Info,
+    /// Which part of the cover or cast page to restyle.
+    CoverPart,
+    /// How a part looks: its command and name.
+    PartLook(String, String),
     Find,
     /// Home screen: a new play, opening a file, the settings.
     NewPlay,

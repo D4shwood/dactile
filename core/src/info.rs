@@ -207,7 +207,7 @@ fn style_line(
         }
         let name = tex::group(text, c.span.end)?;
         let keys = tex::group(text, name.span.end)?;
-        (name.inner.trim() == part).then(|| (c.span.start..keys.span.end, keys.inner_span))
+        (name.inner.trim() == part).then_some((c.span.start..keys.span.end, keys.inner_span))
     })
 }
 
@@ -239,7 +239,7 @@ pub fn set_part_look(text: &str, command: &str, part: &str, look: &PartLook) -> 
     let line = look.line();
     match style_line(text, command, part) {
         Some((all, _)) if line.is_empty() => Some(remove_line(text, all)),
-        Some((_, keys)) => (text[keys.clone()] != line).then(|| Edit::new(keys, line)),
+        Some((_, keys)) => (text[keys.clone()] != line).then_some(Edit::new(keys, line)),
         None if line.is_empty() => None,
         None => add_line(text, &format!("\\{command}{{{part}}}{{{line}}}")),
     }

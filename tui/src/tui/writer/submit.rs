@@ -166,6 +166,32 @@ impl Writer {
                     by_lines: false,
                 });
             }
+            FormKind::CoverPart => {
+                let chosen = form.get("Öğe");
+                let (command, list, name) = match chosen.split_once(": ") {
+                    Some(("Kişiler", n)) => ("caststyle", &info::CAST_PARTS[..], n),
+                    Some((_, n)) => ("coverstyle", &info::COVER_PARTS[..], n),
+                    None => ("coverstyle", &info::COVER_PARTS[..], chosen),
+                };
+                if let Some((part, _)) = list.iter().find(|(_, n)| *n == name) {
+                    self.popup = Popup::Form(self.part_look_form(command, part));
+                }
+            }
+            FormKind::PartLook(command, part) => {
+                let look = info::PartLook {
+                    align: form.get("Hiza").to_string(),
+                    size: form.get("Boyut").to_string(),
+                    style: form.get("Stil").to_string(),
+                    before: form.get("Üst boşluk").to_string(),
+                    after: form.get("Alt boşluk").to_string(),
+                };
+                if let Some(e) = info::set_part_look(&self.buf.text, &command, &part, &look)
+                    && self.editable()
+                {
+                    let t = dactile::tex::apply(&self.buf.text, &[e]);
+                    self.replace_text(t);
+                }
+            }
             FormKind::Info => {
                 let mut t = self.buf.text.clone();
                 for (cmd, label) in info::FIELDS {
@@ -180,6 +206,18 @@ impl Writer {
                     .find(|f| f.label.starts_with("Final"))
                     .is_some_and(Field::on);
                 if let Some(e) = info::set_final(&t, fin) {
+                    t = dactile::tex::apply(&t, &[e]);
+                }
+                let flag = |name: &str| {
+                    form.fields
+                        .iter()
+                        .find(|f| f.label.starts_with(name))
+                        .is_some_and(Field::on)
+                };
+                if let Some(e) = info::set_cast_own_page(&t, flag("Kişiler ayrı")) {
+                    t = dactile::tex::apply(&t, &[e]);
+                }
+                if let Some(e) = info::set_latin_cast(&t, flag("Latince")) {
                     t = dactile::tex::apply(&t, &[e]);
                 }
                 let side = form.get(lang::l("Sahne başlıkları", "Scene headings"));

@@ -19,6 +19,12 @@ export interface Group {
   tr: string;
   en: string;
   btns: Btn[];
+  /// Small buttons, icons only, two to a column.
+  small?: boolean;
+  /// The font list sits above the buttons.
+  font?: boolean;
+  /// Stays at the right edge, however narrow the window.
+  end?: boolean;
 }
 
 export interface Tab {
@@ -32,7 +38,7 @@ const k = (id: string): Act => ({ do: "key", id });
 const ins = (snippet: string, block = true): Act => ({ do: "insert", snippet, block });
 const soon: Act = { do: "soon" };
 const b = (tr: string, en: string, icon: string, key: string, act: Act): Btn => ({ tr, en, icon, key, act });
-const g = (tr: string, en: string, btns: Btn[]): Group => ({ tr, en, btns });
+const g = (tr: string, en: string, btns: Btn[], how: Partial<Group> = {}): Group => ({ tr, en, btns, ...how });
 
 export const FILE_TAB = 0;
 
@@ -43,19 +49,28 @@ export const TABS: Tab[] = [
     en: "Home",
     tip: ["G", "H"],
     groups: [
-      g("Kayıt", "Save", [
-        b("Kaydet", "Save", "▣", "Ctrl+S", k("save")),
-        b("PDF derle", "Build PDF", "⎙", "F5", k("build")),
-      ]),
+      g("Kayıt", "Save", [b("Kaydet", "Save", "▣", "Ctrl+S", k("save"))], { small: true }),
       g("Geri al", "Undo", [
         b("Geri al", "Undo", "↶", "Ctrl+Z", k("undo")),
         b("Yinele", "Redo", "↷", "Ctrl+Y", k("redo")),
-      ]),
+      ], { small: true }),
       g("Pano", "Clipboard", [
         b("Yapıştır", "Paste", "⎗", "Ctrl+V", k("paste")),
-        b("Hepsini seç", "Select all", "▤", "Ctrl+A", k("select-all")),
         b("Kes", "Cut", "✂", "Ctrl+X", k("cut")),
         b("Kopyala", "Copy", "⎘", "Ctrl+C", k("copy")),
+        b("Hepsini seç", "Select all", "▤", "Ctrl+A", k("select-all")),
+      ], { small: true }),
+      g("Yazı", "Text", [
+        b("Kalın", "Bold", "𝐁", "Ctrl+B", k("bold")),
+        b("İtalik", "Italic", "𝐼", "Ctrl+I", k("italic")),
+        b("Altı çizili", "Underline", "U̲", "Ctrl+U", k("underline")),
+      ], { small: true, font: true }),
+      g("Yönerge", "Directions", [
+        b("Eylem", "Action", "⁋", "", ins("\\action{‸}")),
+        b("Sahne yönergesi", "Stage direction", "⌖", "", ins("\\stagedir{‸}")),
+        b("Replik içi", "Inside a line", "❨", "((", ins("\\ic{‸}", false)),
+        b("Es", "Pause", "⋯", "", ins("\\beat‸")),
+        b("Dipnot", "Footnote", "†", "", ins("\\dipnot{‸}", false)),
       ]),
       g("Düzenleme", "Editing", [
         b("Bul", "Find", "⌕", "Ctrl+F", k("find")),
@@ -63,11 +78,13 @@ export const TABS: Tab[] = [
         b("Ara", "Search", "⌘", "Ctrl+K", k("search")),
         b("Komutlar", "Commands", "≡", "Ctrl+P", k("commands")),
       ]),
-      // Last in its tab: the letters before it stay the terminal app's.
-      g("Dosyalar", "Files", [
-        b("Dosyalarım", "My files", "▱", "", k("files")),
+      g("Sayfa", "Page", [b("Kapak ve kişiler", "Cover and cast", "▧", "", k("cover-look"))]),
+      // At the far right: what makes the play's files.
+      g("Derleme", "Build", [
+        b("PDF derle", "Build PDF", "⎙", "F5", k("build")),
         b("Word olarak ver", "Export to Word", "⇱", "", k("docx")),
-      ]),
+        b("Dosyalarım", "My files", "▱", "", k("files")),
+      ], { end: true }),
     ],
   },
   {
@@ -83,13 +100,6 @@ export const TABS: Tab[] = [
       g("Kişi", "People", [
         b("Karakter", "Character", "☺", "", k("new-character")),
         b("Kişiler", "Cast", "⁂", "Ctrl+O", k("cast")),
-      ]),
-      g("Yönerge", "Directions", [
-        b("Eylem", "Action", "⁋", "", ins("\\action{‸}")),
-        b("Sahne yönergesi", "Stage direction", "⌖", "", ins("\\stagedir{‸}")),
-        b("Replik içi", "Inside a line", "❨", "((", ins("\\ic{‸}", false)),
-        b("Es", "Pause", "⋯", "", ins("\\beat‸")),
-        b("Dipnot", "Footnote", "†", "", ins("\\dipnot{‸}", false)),
       ]),
       g("Bölüm", "Sections", [
         b("Önsöz", "Preface", "¶", "#önsöz", ins("#önsöz\n\n‸")),
@@ -175,7 +185,7 @@ export const TABS: Tab[] = [
     groups: [
       g("Yardım", "Help", [
         b("Tuşlar", "Keys", "⌨", "F1", k("keys")),
-        b("Komutlar", "Commands", "≡", "Ctrl+P", k("commands")),
+        b("Komutlar", "Commands", "≡", "", k("guide")),
         b("Sürüm", "Version", "ⓘ", "", k("about")),
       ]),
     ],

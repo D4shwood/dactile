@@ -16,6 +16,8 @@
     add,
     reply,
     fix,
+    fixMany,
+    back,
     paste,
     fromFile,
     close,
@@ -34,6 +36,9 @@
     add: (author: string, body: string) => void;
     reply: (i: number, author: string, text: string) => void;
     fix: (i: number) => void;
+    fixMany: (which: number[]) => void;
+    /// To the text, from the list.
+    back: () => void;
     paste: (text: string, author: string) => void;
     fromFile: () => void;
     close: () => void;
@@ -50,6 +55,56 @@
       show === "archive" ? c.archived : !c.archived && (show === "all" || c.state === "open"),
     ),
   );
+  const fixable = (list: NoteCard[]) => list.filter((c) => c.fixable && c.state === "open");
+  const fixableAll = $derived(fixable(shown));
+  const inGroup = (g: string) => fixable(shown.filter((c) => c.group === g));
+
+  let list: HTMLElement | undefined = $state();
+  export function focusList() {
+    list?.focus();
+    if (picked === null && shown.length) pick(shown[0].i);
+  }
+
+  /// As in Dactile Light: the arrows move, u applies, g its part, U all.
+  function keys(e: KeyboardEvent) {
+    if (e.ctrlKey || e.altKey || e.metaKey) return;
+    const at = shown.findIndex((c) => c.i === picked);
+    const c = shown[at];
+    const step = (d: number) => {
+      const next = shown[Math.max(0, Math.min(shown.length - 1, at + d))];
+      if (next) pick(next.i);
+    };
+    const acts: Record<string, () => void> = {
+      ArrowUp: () => step(-1),
+      ArrowDown: () => step(1),
+      PageUp: () => step(-8),
+      PageDown: () => step(8),
+      Home: () => shown[0] && pick(shown[0].i),
+      End: () => shown.length && pick(shown[shown.length - 1].i),
+      Escape: back,
+      Enter: back,
+      n: () => (draft = draft ?? ""),
+      U: () => fixableAll.length && fixMany(fixableAll.map((x) => x.i)),
+    };
+    if (c) {
+      acts.u = () => c.fixable && c.state === "open" && fix(c.i);
+      acts.g = () => {
+        const part = inGroup(c.group);
+        if (part.length) fixMany(part.map((x) => x.i));
+      };
+      acts.r = () => ((replying = c.i), (replyText = ""));
+      acts.a = () => set(c.i, c.archived ? "unarchive" : "archive");
+      acts.h = () => set(c.i, c.state === "hidden" ? "open" : "hidden");
+      acts[" "] = () => set(c.i, c.state === "done" ? "open" : "done");
+    }
+    const act = acts[e.key];
+    if (act) {
+      e.preventDefault();
+      e.stopPropagation();
+      act();
+    }
+  }
+
   const counts = $derived({
     open: cards.filter((c) => !c.archived && c.state === "open").length,
     all: cards.filter((c) => !c.archived).length,
@@ -75,6 +130,15 @@
     <button class:on={show === "all"} onclick={() => (show = "all")}>{l("Hepsi", "All")} {counts.all}</button>
     <button class:on={show === "archive"} onclick={() => (show = "archive")}>{l("Arşiv", "Archive")} {counts.archive}</button>
   </nav>
+
+  {#if fixableAll.length}
+    <div class="applyall">
+      <button onclick={() => fixMany(fixableAll.map((x) => x.i))}>
+        {l(`Tümünü uygula (${fixableAll.length})`, `Apply all (${fixableAll.length})`)}
+      </button>
+      <kbd>U</kbd>
+    </div>
+  {/if}
 
   {#if draft !== null}
     <form
@@ -117,7 +181,8 @@
     </form>
   {/if}
 
-  <div class="list">
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_static_element_interactions -->
+  <div class="list" tabindex="0" bind:this={list} onkeydown={keys}>
     {#if !shown.length}
       <p class="empty">
         {show === "open"
@@ -127,7 +192,14 @@
     {/if}
     {#each shown as c, k (c.i)}
       {#if c.group && c.group !== shown[k - 1]?.group}
-        <h4>{c.group}</h4>
+        <h4>
+          <span>{c.group}</span>
+          {#if inGroup(c.group).length}
+            <button onclick={() => fixMany(inGroup(c.group).map((x) => x.i))}>
+              {l(`Bu kısmı uygula (${inGroup(c.group).length})`, `Apply this part (${inGroup(c.group).length})`)}
+            </button>
+          {/if}
+        </h4>
       {/if}
       <div
         class="note"
@@ -349,5 +421,40 @@
   .row {
     display: flex;
     gap: 6px;
+  }
+  h4 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  h4 button,
+  .applyall button {
+    padding: 2px 8px;
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--chrome-fg);
+    background: var(--chrome-2);
+    border: 1px solid var(--chrome-line);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .applyall {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--chrome-line);
+  }
+  .applyall kbd {
+    font-size: 11px;
+    color: var(--chrome-muted);
+  }
+  .list:focus {
+    outline: none;
+    box-shadow: inset 0 0 0 1px var(--accent-ink);
   }
 </style>

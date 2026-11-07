@@ -367,6 +367,17 @@ impl Writer {
                 self.pick_shown_note();
             }
             KeyCode::Char('u') if has => self.apply_note(sel),
+            // Its part, and all that are shown.
+            KeyCode::Char('g') if has => {
+                let group = self.notes.list[sel].group.clone();
+                let part: Vec<usize> = shown
+                    .iter()
+                    .copied()
+                    .filter(|&i| self.notes.list[i].group == group)
+                    .collect();
+                self.apply_notes(&part);
+            }
+            KeyCode::Char('U') => self.apply_notes(&shown),
             KeyCode::Char('r') if has => self.popup = Popup::Form(self.reply_form(sel)),
             KeyCode::Char('e') if has => self.popup = Popup::Form(self.edit_note_form(sel)),
             KeyCode::Char('n') => self.new_note(),
@@ -504,6 +515,24 @@ impl Writer {
     }
 
     /// `u`: the note's corrections made, the note done.
+    /// The corrections of these notes, in one undo.
+    fn apply_notes(&mut self, which: &[usize]) {
+        if !self.editable() {
+            return;
+        }
+        let (new, done, left) = dnotes::apply_fixes(&self.buf.text, &mut self.notes, which);
+        if done > 0 {
+            self.replace_text(new);
+            self.save_notes();
+        }
+        let msg = lang::f(
+            "{} düzeltme uygulandı, {} tanesi açık kaldı (^Z geri alır).",
+            "{} corrections applied, {} left open (^Z undoes them).",
+            &[&done, &left],
+        );
+        self.say(&msg, false);
+    }
+
     fn apply_note(&mut self, i: usize) {
         let note = self.notes.list[i].clone();
         let edits = match dnotes::checked_fixes(&self.buf.text, &note) {

@@ -16,9 +16,13 @@ pub enum PAct {
     Memorize,
     NotesPdf,
     Docx,
+    /// Which part of the cover or cast page to restyle.
+    CoverLook,
     NotesPaste,
     NotesFile,
     About,
+    /// The Help tab: what the commands do, beside the writing.
+    Guide,
     SaveTemplate,
     /// A snippet on a line of its own, or at the cursor; `‸` is where the
     /// cursor goes.

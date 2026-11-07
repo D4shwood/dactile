@@ -99,10 +99,7 @@ pub fn tabs() -> Vec<Tab> {
                 g(
                     "Kayıt",
                     "Save",
-                    vec![
-                        b("Kaydet", "Save", "▣", "^S", k(Char('s'), c)),
-                        b("PDF derle", "Build PDF", "⎙", "F5", k(F(5), n)),
-                    ],
+                    vec![b("Kaydet", "Save", "▣", "^S", k(Char('s'), c))],
                 ),
                 g(
                     "Geri al",
@@ -117,9 +114,59 @@ pub fn tabs() -> Vec<Tab> {
                     "Clipboard",
                     vec![
                         b("Yapıştır", "Paste", "⎗", "^V", k(Char('v'), c)),
-                        b("Hepsini seç", "Select all", "▤", "^A", k(Char('a'), c)),
                         b("Kes", "Cut", "✂", "^X", k(Char('x'), c)),
                         b("Kopyala", "Copy", "⎘", "^C", k(Char('c'), c)),
+                        b("Hepsini seç", "Select all", "▤", "^A", k(Char('a'), c)),
+                    ],
+                ),
+                g(
+                    "Yazı",
+                    "Text",
+                    vec![
+                        b("Kalın", "Bold", "𝐁", "", PAct::InsertInline("\\textbf{‸}")),
+                        b(
+                            "İtalik",
+                            "Italic",
+                            "𝐼",
+                            "",
+                            PAct::InsertInline("\\textit{‸}"),
+                        ),
+                        b(
+                            "Altı çizili",
+                            "Underline",
+                            "U",
+                            "",
+                            PAct::InsertInline("\\underline{‸}"),
+                        ),
+                    ],
+                ),
+                g(
+                    "Yönerge",
+                    "Directions",
+                    vec![
+                        b("Eylem", "Action", "⁋", "", PAct::Insert("\\action{‸}")),
+                        b(
+                            "Sahne yönergesi",
+                            "Stage direction",
+                            "⌖",
+                            "",
+                            PAct::Insert("\\stagedir{‸}"),
+                        ),
+                        b(
+                            "Replik içi",
+                            "Inside a line",
+                            "❨",
+                            "((",
+                            PAct::InsertInline("\\ic{‸}"),
+                        ),
+                        b("Es", "Pause", "⋯", "", PAct::Insert("\\beat‸")),
+                        b(
+                            "Dipnot",
+                            "Footnote",
+                            "†",
+                            "",
+                            PAct::InsertInline("\\dipnot{‸}"),
+                        ),
                     ],
                 ),
                 g(
@@ -130,6 +177,26 @@ pub fn tabs() -> Vec<Tab> {
                         b("Yazım", "Spelling", "✓", "Alt+S", k(Char('s'), a)),
                         b("Ara", "Search", "⌘", "^K", k(Char('k'), c)),
                         b("Komutlar", "Commands", "≡", "^P", k(Char('p'), c)),
+                    ],
+                ),
+                g(
+                    "Sayfa",
+                    "Page",
+                    vec![b(
+                        "Kapak ve kişiler",
+                        "Cover and cast",
+                        "▧",
+                        "",
+                        PAct::CoverLook,
+                    )],
+                ),
+                // At the far right: what makes the play's files.
+                g(
+                    "Derleme",
+                    "Build",
+                    vec![
+                        b("PDF derle", "Build PDF", "⎙", "F5", k(F(5), n)),
+                        b("Word olarak ver", "Export to Word", "⇱", "", PAct::Docx),
                     ],
                 ),
             ],
@@ -160,35 +227,6 @@ pub fn tabs() -> Vec<Tab> {
                     vec![
                         b("Karakter", "Character", "☺", "", PAct::NewCharacter),
                         b("Kişiler", "Cast", "⁂", "^O", k(Char('o'), c)),
-                    ],
-                ),
-                g(
-                    "Yönerge",
-                    "Directions",
-                    vec![
-                        b("Eylem", "Action", "⁋", "", PAct::Insert("\\action{‸}")),
-                        b(
-                            "Sahne yönergesi",
-                            "Stage direction",
-                            "⌖",
-                            "",
-                            PAct::Insert("\\stagedir{‸}"),
-                        ),
-                        b(
-                            "Replik içi",
-                            "Inside a line",
-                            "❨",
-                            "((",
-                            PAct::InsertInline("\\ic{‸}"),
-                        ),
-                        b("Es", "Pause", "⋯", "", PAct::Insert("\\beat‸")),
-                        b(
-                            "Dipnot",
-                            "Footnote",
-                            "†",
-                            "",
-                            PAct::InsertInline("\\dipnot{‸}"),
-                        ),
                     ],
                 ),
                 g(
@@ -350,7 +388,7 @@ pub fn tabs() -> Vec<Tab> {
                 "Help",
                 vec![
                     b("Tuşlar", "Keys", "⌨", "F1", k(F(1), n)),
-                    b("Komutlar", "Commands", "≡", "^P", k(Char('p'), c)),
+                    b("Komutlar", "Commands", "≡", "", PAct::Guide),
                     b("Sürüm", "Version", "ⓘ", "", PAct::About),
                 ],
             )],
@@ -1169,6 +1207,10 @@ impl Writer {
                         "Kim kimi oynuyor, sahne/rol tablosu; oradan her oyuncuya kendi kopyası.",
                         "Who plays whom, the scene/role table; from there each actor's own copy.",
                     ),
+                    PAct::CoverLook => lang::l(
+                        "Kapağın ve kişiler sayfasının bir öğesinin hizası, boyutu, stili ve boşlukları.",
+                        "The alignment, size, style and spacing of a part of the cover or cast page.",
+                    ),
                     PAct::Docx => lang::l(
                         "Oyunu oyunun yanına bir .docx olarak yazar; başkasının belgesi ezilmez.",
                         "Writes the play next to it as a .docx; someone else's document stays.",
@@ -1364,9 +1406,9 @@ mod tests {
         let tabs = tabs();
         let wide = lay_out(&tabs[2], 0, 1, 200);
         assert!(wide.iter().all(|g| !g.compact));
-        let tight = lay_out(&tabs[2], 0, 1, 60);
+        let tight = lay_out(&tabs[2], 0, 1, 30);
         assert!(tight.iter().any(|g| g.compact));
         let last = tight.last().unwrap();
-        assert!(last.x + last.w <= 60);
+        assert!(last.x + last.w <= 30);
     }
 }

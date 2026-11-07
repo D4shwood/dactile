@@ -39,11 +39,31 @@ export interface Look {
   animations: boolean;
 }
 
+export interface PartLook {
+  align: string;
+  size: string;
+  style: string;
+  before: string;
+  after: string;
+}
+
+export interface CoverForm {
+  fields: Record<string, string>;
+  final_copy: boolean;
+  side: string;
+  own_page: boolean;
+  latin: boolean;
+  parts: { command: string; part: string; look: PartLook }[];
+}
+
 export interface Settings extends Look {
   plays_dir: string;
   author: string;
   lang: "tr" | "en";
   ribbon_folded: boolean;
+  ribbon_height: number;
+  pdf_width: number;
+  cover_last: Record<string, string>;
   viewer: Viewer;
 }
 
@@ -207,12 +227,35 @@ export type BuildResult =
   | { kind: "built"; pdf: string; pages: number | null; seconds: number }
   | { kind: "failed"; line: number | null; message: string };
 
+export interface KeyView {
+  cap: string;
+  ctrl: boolean;
+  alt: boolean;
+  cat: string;
+  combo: string;
+  what: string;
+}
+export interface KeysView {
+  rows: string[][];
+  binds: KeyView[];
+  cats: [string, string][];
+}
+export interface GuideGroup {
+  name: string;
+  entries: { name: string; what: string; example: string }[];
+}
+
 export const api = {
+  keys: () => invoke<KeysView>("keys_view"),
+  guide: () => invoke<GuideGroup[]>("guide_view"),
   home: () => invoke<Home>("home"),
   settings: () => invoke<Settings>("settings"),
   set: (key: string, value: unknown) => invoke<void>("set_setting", { key, value }),
   preview: (path: string) => invoke<Preview>("preview", { path }),
-  create: (template: number, title: string) => invoke<string>("create", { template, title }),
+  create: (template: number, title: string, details: Record<string, string>) =>
+    invoke<string>("create", { template, title, details }),
+  coverRead: (text: string) => invoke<CoverForm>("cover_read", { text }),
+  coverWrite: (text: string, form: CoverForm) => invoke<Made>("cover_write", { text, form }),
   example: () => invoke<string>("example"),
   open: (path: string) => invoke<Opened>("open", { path }),
   close: () => invoke<void>("close"),
@@ -232,6 +275,7 @@ export const api = {
   notesPaste: (reply: string, author: string) => invoke<number>("notes_paste", { reply, author }),
   pickText: () => invoke<string | null>("pick_text"),
   noteFix: (text: string, i: number) => invoke<Change[]>("note_fix", { text, i }),
+  noteFixMany: (text: string, which: number[]) => invoke<Made>("note_fix_many", { text, which }),
   noteAuthors: () => invoke<string[]>("note_authors"),
   startup: () => invoke<string | null>("startup"),
   pick: () => invoke<string | null>("pick"),
@@ -405,6 +449,7 @@ export interface Written {
 export type ImportEdit =
   | { kind: "play"; i: number }
   | { kind: "info"; title: string; author: string }
+  | { kind: "detail"; name: string; value: string }
   | { kind: "person"; i: number; name: string; alias: string }
   | { kind: "merge"; from: number; into: number }
   | { kind: "unmerge"; i: number }

@@ -197,7 +197,7 @@ impl Home {
     pub(super) fn start(&mut self, s: Start, cfg: &mut Config) -> Action {
         match s {
             Start::Make(t) => {
-                let mut form = new_play_form();
+                let mut form = new_play_form(cfg);
                 if t.from != From::Blank {
                     form.title = format!("{} — {}", form.title, t.name);
                 }

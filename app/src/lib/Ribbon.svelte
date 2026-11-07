@@ -8,6 +8,11 @@
     dirty,
     run,
     file,
+    height,
+    resized,
+    font,
+    fonts,
+    setFont,
   }: {
     tr: boolean;
     folded: boolean;
@@ -15,7 +20,39 @@
     dirty: boolean;
     run: (a: Act) => void;
     file: () => void;
+    /// The buttons' row in pixels, dragged by hand; 0 is its own.
+    height: number;
+    resized: (h: number) => void;
+    /// The page's font and the list it comes from; empty is the app's own.
+    font: string;
+    fonts: string[];
+    setFont: (f: string) => void;
   } = $props();
+
+  const LOW = 58;
+  const HIGH = 132;
+  const OWN = 92;
+  /// While the edge is dragged.
+  let dragged = $state(0);
+  const rowHeight = $derived(dragged || height || OWN);
+  function dragEdge(e: PointerEvent) {
+    const edge = e.currentTarget as HTMLElement;
+    const startY = e.clientY;
+    const from = rowHeight;
+    edge.setPointerCapture(e.pointerId);
+    const move = (m: PointerEvent) => {
+      dragged = Math.round(Math.min(HIGH, Math.max(LOW, from + m.clientY - startY)));
+    };
+    const up = () => {
+      edge.removeEventListener("pointermove", move);
+      edge.removeEventListener("pointerup", up);
+      if (dragged) resized(dragged);
+      dragged = 0;
+    };
+    edge.addEventListener("pointermove", move);
+    edge.addEventListener("pointerup", up);
+    e.preventDefault();
+  }
 
   let tab = $state(1);
   /// Folded, a tab opens over the page until a button is pressed.
@@ -174,14 +211,26 @@
   </nav>
 
   {#if !folded || peek}
-    <div class="groups" class:over={folded}>
+    <div class="groups" class:over={folded} class:short={rowHeight < 76} style={`height:${rowHeight}px`}>
       {#each TABS[tab].groups as grp, gi}
-        <section class="group">
-          <div class="btns">
+        <section class="group" class:end={grp.end}>
+          {#if grp.font}
+            <select
+              class="font"
+              title={tr ? "Sayfanın yazı tipi: ekranda görünür, PDF'i değiştirmez" : "The page's font: on screen, the PDF keeps its own"}
+              value={font}
+              onchange={(e) => setFont(e.currentTarget.value)}
+            >
+              <option value="">{tr ? "Kendi yazı tipi" : "Its own font"}</option>
+              {#each fonts as f (f)}<option value={f}>{f}</option>{/each}
+            </select>
+          {/if}
+          <div class="btns" class:small={grp.small}>
             {#each grp.btns as btn, bi}
               {@const n = TABS[tab].groups.slice(0, gi).reduce((s, x) => s + x.btns.length, 0) + bi}
               <button
                 class="btn"
+                class:small={grp.small}
                 disabled={btn.act.do === "soon"}
                 title={(btn.act.do === "soon" ? (tr ? "Yakında · " : "Soon · ") : "") +
                   name(btn) +
@@ -189,7 +238,7 @@
                 onclick={() => press(btn)}
               >
                 <span class="icon">{btn.icon}</span>
-                <span class="label">{name(btn)}</span>
+                {#if !grp.small}<span class="label">{name(btn)}</span>{/if}
                 {#if tipMode === "btns"}<span class="tip">{btnTips[n]}</span>{/if}
               </button>
             {/each}
@@ -198,6 +247,15 @@
         </section>
       {/each}
     </div>
+    {#if !folded}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="edge"
+        title={tr ? "Sürükle; çift tık: varsayılan" : "Drag; double click: its own height"}
+        onpointerdown={dragEdge}
+        ondblclick={() => resized(0)}
+      ></div>
+    {/if}
   {/if}
 </header>
 
@@ -333,6 +391,22 @@
     padding: 4px 6px 0;
     background: var(--chrome);
     border-top: 1px solid var(--chrome-line);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .groups.short .gname {
+    display: none;
+  }
+  .edge {
+    height: 5px;
+    margin-bottom: -1px;
+    cursor: row-resize;
+    background: var(--chrome);
+    border-bottom: 1px solid var(--chrome-line);
+    touch-action: none;
+  }
+  .edge:hover {
+    background: var(--chrome-line);
   }
   .groups.over {
     position: absolute;
@@ -345,12 +419,42 @@
     display: flex;
     flex-direction: column;
     padding: 0 6px;
+    flex: none;
     border-right: 1px solid var(--chrome-line);
+  }
+  .group.end {
+    position: sticky;
+    right: -6px;
+    margin-left: auto;
+    background: var(--chrome);
+    border-right: 0;
+    border-left: 1px solid var(--chrome-line);
   }
   .btns {
     flex: 1;
     display: flex;
     gap: 2px;
+    min-height: 0;
+  }
+  .btns.small {
+    display: grid;
+    grid-template-rows: repeat(2, minmax(0, 30px));
+    grid-auto-flow: column;
+    grid-auto-columns: 30px;
+    align-content: center;
+  }
+  .group:has(.font) .btns.small {
+    grid-template-rows: minmax(0, 30px);
+  }
+  .font {
+    width: 112px;
+    height: 24px;
+    margin-bottom: 2px;
+    font-size: 12px;
+    color: var(--chrome-fg);
+    background: var(--chrome-2);
+    border: 1px solid var(--chrome-line);
+    border-radius: 4px;
   }
   .btn {
     position: relative;
@@ -366,6 +470,13 @@
     border: 1px solid transparent;
     border-radius: 4px;
     cursor: pointer;
+  }
+  .btn.small {
+    min-width: 0;
+    padding: 0;
+  }
+  .btn.small .icon {
+    font-size: 17px;
   }
   .btn:hover:not(:disabled) {
     background: var(--chrome-2);

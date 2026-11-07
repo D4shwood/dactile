@@ -661,6 +661,7 @@ impl Draft {
             return;
         }
         let mut next = self.of_play(at);
+        next.details = self.details.clone();
         let mut left = std::mem::take(&mut self.left);
         left.retain(|d| d.play != Some(at));
         if self.play.is_some() {
@@ -675,7 +676,11 @@ impl Draft {
         picked
             .iter()
             .filter(|&&at| at < self.source.plays.len())
-            .map(|&at| self.of_play(at))
+            .map(|&at| {
+                let mut d = self.of_play(at);
+                d.details = self.details.clone();
+                d
+            })
             .collect()
     }
 

@@ -648,7 +648,15 @@ impl Preview {
                     fields: vec![
                         Field::text("Başlık", &self.draft.title, Vec::new()),
                         Field::text("Yazar", &self.draft.author, Vec::new()),
-                    ],
+                    ]
+                    .into_iter()
+                    .chain(dactile::info::DETAILS.iter().map(|cmd| {
+                        let label = crate::tui::home::detail_label(cmd);
+                        let value = self.draft.details.get(*cmd).map_or("", String::as_str);
+                        let last = cfg.cover_last.get(*cmd).cloned();
+                        Field::text(label, value, last.into_iter().collect())
+                    }))
+                    .collect(),
                     focus: 0,
                     at: 0..0,
                     error: None,
@@ -716,6 +724,10 @@ impl Preview {
             FormKind::ImportInfo => {
                 self.draft.title = form.get("Başlık").to_string();
                 self.draft.author = form.get("Yazar").to_string();
+                for cmd in dactile::info::DETAILS {
+                    let value = form.get(crate::tui::home::detail_label(cmd)).to_string();
+                    self.draft.details.insert(cmd.to_string(), value);
+                }
                 if let Some(at) = self.draft.play {
                     self.draft.source.plays[at].title = self.draft.title.clone();
                 }
@@ -944,9 +956,15 @@ impl Preview {
             ]),
             Line::from(Span::styled(
                 lang::f(
-                    "{} replik · {} yönerge · {} perde · {} sahne · {} düz paragraf",
-                    "{} lines · {} directions · {} acts · {} scenes · {} plain paragraphs",
-                    &[&c.lines, &c.directions, &c.acts, &c.scenes, &c.plain],
+                    "{} replik · {} yönerge · {} · {} sahne · {} düz paragraf",
+                    "{} lines · {} directions · {} · {} scenes · {} plain paragraphs",
+                    &[
+                        &c.lines,
+                        &c.directions,
+                        &dactile::outline::acts_text(c.acts),
+                        &c.scenes,
+                        &c.plain,
+                    ],
                 ),
                 muted,
             )),

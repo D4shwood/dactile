@@ -17,6 +17,7 @@ import {
 } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
+import { findPanel } from "./find";
 import type { Block, Cover, View } from "./api";
 
 // ------------------------------------------------------------------ state
@@ -380,11 +381,8 @@ const pasting = EditorView.domEventHandlers({
     const at = Number(t.dataset.at);
     const cover = view.state.field(page).view?.cover;
     if (cover && t.classList.contains("cm-cover")) {
-      // The cover is not a block: it opens as a whole.
-      view.dispatch({
-        effects: openRaw.of({ from: 0, to: cover.to }),
-        selection: { anchor: 0 },
-      });
+      // The cover is not a block: its form opens.
+      coverClicked.run();
     } else {
       view.dispatch({ effects: openRaw.of(at), selection: { anchor: at } });
     }
@@ -476,7 +474,7 @@ export function extensions(hooks: Hooks): Extension {
     // Our own caret: WebKit's blinks only if the desktop says so.
     drawSelection({ cursorBlinkRate: 1100 }),
     history(),
-    search({ top: true }),
+    search({ top: true, createPanel: findPanel }),
     highlightSelectionMatches(),
     typing,
     pasting,
@@ -510,6 +508,21 @@ export function currentView(state: EditorState) {
 
 /// Inserts a snippet with `‸` for the cursor: on a line of its own after
 /// the cursor's line (`block`), or right at the cursor. Never in the cover.
+/// The selection between `open` and `close`; with none, the cursor between them.
+export function wrapSelection(view: EditorView, open: string, close: string) {
+  const { from, to } = view.state.selection.main;
+  view.dispatch({
+    changes: [
+      { from, insert: open },
+      { from: to, insert: close },
+    ],
+    selection: { anchor: from + open.length, head: to + open.length },
+    effects: openRaw.of(from),
+    userEvent: "input",
+  });
+  view.focus();
+}
+
 export function insertSnippet(view: EditorView, s: string, block: boolean) {
   const state = view.state;
   const pos = state.selection.main.head;
@@ -545,6 +558,9 @@ export function insertSnippet(view: EditorView, s: string, block: boolean) {
 }
 
 /// The cover opened as its source, the cursor at its start.
+/// What a click on the cover does: set by the writer.
+export const coverClicked = { run: () => {} };
+
 export function openCover(view: EditorView) {
   const cover = view.state.field(page).view?.cover;
   if (!cover) return;

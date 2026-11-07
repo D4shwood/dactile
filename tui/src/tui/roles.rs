@@ -333,12 +333,12 @@ pub fn stats_lines(doc: &Doc, data: &Data, wpm: u32, width: u16) -> Vec<Line<'st
         Span::styled(lang::l("Oyun", "The play"), head),
         Span::styled(
             lang::f(
-                "   ≈ {} · {} kelime konuşulur · {} perde · {} sahne",
-                "   ≈ {} · {} words spoken · {} acts · {} scenes",
+                "   ≈ {} · {} kelime konuşulur · {} · {} sahne",
+                "   ≈ {} · {} words spoken · {} · {} scenes",
                 &[
                     &timing::format(secs),
                     &total,
-                    &doc.outline.acts.len(),
+                    &dactile::outline::acts_text(doc.outline.acts.len()),
                     &doc.outline.scenes.len(),
                 ],
             ),

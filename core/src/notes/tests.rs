@@ -307,3 +307,32 @@ fn a_correction_never_breaks_the_play() {
         Err(Refused::NotFound)
     );
 }
+
+#[test]
+fn corrections_go_in_together() {
+    let text =
+        "\\documentclass{tiyatro}\n\\begin{document}\nKar yağdı, taş durdu.\n\\end{document}\n";
+    let note = |t: &str| Note {
+        state: State::Open,
+        archived: false,
+        line: None,
+        author: "Atölye".into(),
+        text: t.into(),
+        replies: Vec::new(),
+        group: String::new(),
+    };
+    let mut n = Notes {
+        list: vec![
+            note("“Kar” → Yağmur"),
+            note("“taş” → kaya"),
+            note("“yok böyle” → var"),
+            note("yalnızca bir yorum"),
+        ],
+    };
+    let (out, done, left) = apply_fixes(text, &mut n, &[0, 1, 2, 3]);
+    assert!(out.contains("Yağmur yağdı, kaya durdu."));
+    assert_eq!((done, left), (2, 1));
+    assert_eq!(n.list[0].state, State::Done);
+    assert_eq!(n.list[2].state, State::Open);
+    assert_eq!(n.list[3].state, State::Open);
+}

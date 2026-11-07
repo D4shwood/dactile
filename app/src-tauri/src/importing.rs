@@ -243,6 +243,11 @@ pub enum Edit {
         title: String,
         author: String,
     },
+    /// A cover detail, for every play of the volume.
+    Detail {
+        name: String,
+        value: String,
+    },
     Person {
         i: usize,
         name: String,
@@ -315,6 +320,9 @@ pub fn edit(d: &mut Draft, e: Edit) -> Result<(), String> {
             if let Some(at) = d.play {
                 d.source.plays[at].title = d.title.clone();
             }
+        }
+        Edit::Detail { name, value } => {
+            d.details.insert(name, value);
         }
         Edit::Person { i, name, alias } => {
             known(i)?;

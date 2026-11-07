@@ -143,6 +143,29 @@
     close();
   }
 
+  const DETAILS: [string, string, string][] = [
+    ["editedby", "Düzenleyen", "Edited by"],
+    ["copyrightnotice", "Telif", "Copyright"],
+    ["address", "Adres", "Address"],
+    ["email", "E-posta", "Email"],
+    ["telephone", "Telefon", "Telephone"],
+  ];
+  /// Asked here for every play of the import; all may stay empty.
+  let details = $state<Record<string, string>>({});
+  let last = $state<Record<string, string>>({});
+  void api.settings().then((s) => (last = s.cover_last ?? {}));
+  function setDetail(k: string, value: string) {
+    details[k] = value;
+    void edit({ kind: "detail", name: k, value });
+    if (value.trim()) {
+      last = { ...last, [k]: value.trim() };
+      void api.set("cover_last", last);
+    }
+  }
+  function useLast() {
+    for (const [k, v] of Object.entries(last)) if (!details[k]?.trim()) setDetail(k, v);
+  }
+
   const PAGES: [string, string, string][] = [
     ["play", "Oyun", "Play"],
     ["cover", "Kapak", "Cover"],
@@ -404,12 +427,21 @@
             {l("Yazar", "Author")}
             <input value={s.author} onchange={(e) => edit({ kind: "info", title: s.title, author: name(e) })} />
           </label>
+          {#each DETAILS as [k, t, e]}
+            <label>
+              {l(t, e)}
+              <input value={details[k] ?? ""} onchange={(ev) => setDetail(k, ev.currentTarget.value)} />
+            </label>
+          {/each}
+          {#if Object.values(last).some((v) => v.trim())}
+            <button type="button" class="plain" onclick={useLast}>{l("Son girilenleri kullan", "Use the last ones")}</button>
+          {/if}
         </div>
       {/key}
       <ul class="stats">
         <li><b>{s.lines}</b> {l("replik", "lines")}</li>
         <li><b>{s.directions}</b> {l("yönerge", "directions")}</li>
-        <li><b>{s.acts}</b> {l("perde", "acts")}</li>
+        <li>{#if s.acts}<b>{s.acts}</b> {l("perde", "acts")}{:else}<b>{l("Tek Perde", "One act")}</b>{/if}</li>
         <li><b>{s.scenes}</b> {l("sahne", "scenes")}</li>
         {#if s.plain}<li class="warn"><b>{s.plain}</b> {l("düz paragraf", "plain paragraphs")}</li>{/if}
       </ul>

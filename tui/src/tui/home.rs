@@ -727,7 +727,20 @@ impl Home {
                     "tr" => Lang::Tr,
                     _ => lang::system(),
                 };
+                let details: Vec<(&str, String)> = dactile::info::DETAILS
+                    .iter()
+                    .map(|cmd| (*cmd, detail(&form, cmd).to_string()))
+                    .collect();
                 let made = dactile::templates::make(&self.new_from, &title, &cfg.author, lang)
+                    .map(|mut text| {
+                        for (cmd, value) in &details {
+                            let value = dactile::tex::escape_text(value);
+                            if let Some(e) = dactile::info::fill(&text, cmd, &value) {
+                                text = dactile::tex::apply(&text, &[e]);
+                            }
+                        }
+                        text
+                    })
                     .and_then(|text| {
                         path.parent()
                             .map_or(Ok(()), std::fs::create_dir_all)
@@ -1793,9 +1806,13 @@ impl Home {
                 about.push(format!("{} {d}", lang::l("taslak", "draft")));
             }
             about.push(lang::f(
-                "{} perde · {} sahne · ≈ {}",
-                "{} acts · {} scenes · ≈ {}",
-                &[&p.acts, &p.scenes, &timing::format(p.secs)],
+                "{} · {} sahne · ≈ {}",
+                "{} · {} scenes · ≈ {}",
+                &[
+                    &outline::acts_text(p.acts),
+                    &p.scenes,
+                    &timing::format(p.secs),
+                ],
             ));
             if p.elsewhere {
                 about.push(config::tilde(&p.path));
@@ -1960,9 +1977,9 @@ fn draw_card(f: &mut Frame, area: Rect, p: &Play, theme_name: &str) {
     lines.push(Line::from(""));
     let fact = |s: String| center(s, base.fg(pal.muted));
     lines.push(fact(lang::f(
-        "{} perde · {} sahne",
-        "{} acts · {} scenes",
-        &[&p.acts, &p.scenes],
+        "{} · {} sahne",
+        "{} · {} scenes",
+        &[&outline::acts_text(p.acts), &p.scenes],
     )));
     lines.push(fact(lang::f(
         "{} kişi · {} kelime",
@@ -2012,14 +2029,39 @@ fn resolve_path(s: &str, cfg: &Config) -> PathBuf {
     }
 }
 
-fn new_play_form() -> Form {
+/// A cover detail's label in the forms that ask for it.
+pub(super) fn detail_label(cmd: &str) -> &'static str {
+    dactile::info::FIELDS
+        .iter()
+        .find(|(c, _)| *c == cmd)
+        .map_or("", |(_, label)| label)
+}
+
+fn detail<'a>(form: &'a Form, cmd: &str) -> &'a str {
+    form.get(detail_label(cmd))
+}
+
+/// The cover details, empty, each offering what was last written.
+pub(super) fn detail_fields(cfg: &Config) -> Vec<Field> {
+    dactile::info::DETAILS
+        .iter()
+        .map(|cmd| {
+            let last = cfg.cover_last.get(*cmd).cloned();
+            Field::text(detail_label(cmd), "", last.into_iter().collect())
+        })
+        .collect()
+}
+
+fn new_play_form(cfg: &Config) -> Form {
+    let mut fields = vec![
+        Field::text("Başlık", "", Vec::new()),
+        Field::text("Dosya", "", Vec::new()),
+    ];
+    fields.extend(detail_fields(cfg));
     Form {
         kind: FormKind::NewPlay,
         title: lang::l("yeni oyun", "new play").into(),
-        fields: vec![
-            Field::text("Başlık", "", Vec::new()),
-            Field::text("Dosya", "", Vec::new()),
-        ],
+        fields,
         focus: 0,
         at: 0..0,
         error: None,

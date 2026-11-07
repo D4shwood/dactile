@@ -801,6 +801,30 @@ pub enum Refused {
     Breaks { what: String, line: usize },
 }
 
+/// The corrections of notes `which`, one after the other, each checked on the
+/// text the one before left: the new text, how many went in, and how many
+/// were left open because they would break the play or found nothing. A note
+/// with no correction is passed over.
+pub fn apply_fixes(text: &str, notes: &mut Notes, which: &[usize]) -> (String, usize, usize) {
+    let mut text = text.to_string();
+    let (mut done, mut left) = (0, 0);
+    for &i in which {
+        let Some(note) = notes.list.get(i).filter(|n| n.state == State::Open) else {
+            continue;
+        };
+        match checked_fixes(&text, note) {
+            Ok(edits) => {
+                text = crate::tex::apply(&text, &edits);
+                notes.list[i].state = State::Done;
+                done += 1;
+            }
+            Err(Refused::Nothing) => {}
+            Err(_) => left += 1,
+        }
+    }
+    (text, done, left)
+}
+
 /// The note's corrections, only if the play comes out of them as sound as
 /// it went in: no brace left open or astray, no command or character TeX
 /// would stop at that wasn't there before, every speech, direction and

@@ -3,6 +3,7 @@
 
 pub mod casting;
 pub mod complete;
+pub mod cover;
 pub mod importing;
 pub mod notes;
 pub mod people;
@@ -77,9 +78,14 @@ fn preview(path: String) -> Res<Preview> {
 }
 
 #[tauri::command]
-fn create(app: Shared, template: usize, title: String) -> Res<String> {
+fn create(
+    app: Shared,
+    template: usize,
+    title: String,
+    details: std::collections::BTreeMap<String, String>,
+) -> Res<String> {
     let a = app.lock().unwrap();
-    play::create(&a.cfg, template, &title)
+    play::create(&a.cfg, template, &title, &details)
         .map(|p| p.display().to_string())
         .map_err(err)
 }
@@ -243,6 +249,14 @@ fn note_fix(app: Shared, text: String, i: usize) -> Res<Vec<Change>> {
 }
 
 #[tauri::command]
+fn note_fix_many(app: Shared, text: String, which: Vec<usize>) -> Res<people::Made> {
+    let mut a = app.lock().unwrap();
+    let made = notes::fix_many(&mut a.notes, &text, &which);
+    a.keep_notes()?;
+    Ok(made)
+}
+
+#[tauri::command]
 fn note_authors(app: Shared) -> Vec<String> {
     app.lock().unwrap().notes.authors()
 }
@@ -393,6 +407,16 @@ fn docx_export(path: String, text: String) -> Res<String> {
     let out =
         dactile::word::export(std::path::Path::new(&path), &text).map_err(|e| e.to_string())?;
     Ok(out.display().to_string())
+}
+
+#[tauri::command]
+fn cover_read(text: String) -> cover::CoverForm {
+    cover::read(&text)
+}
+
+#[tauri::command]
+fn cover_write(text: String, form: cover::CoverForm) -> people::Made {
+    cover::write(&text, &form)
 }
 
 #[tauri::command]
@@ -837,6 +861,87 @@ fn dev_eval(app: tauri::AppHandle) {
     });
 }
 
+/// The coloured keyboard, in this app's keys and the chosen layout.
+#[tauri::command]
+fn keys_view() -> KeysView {
+    use dactile::keys::{self, BINDS, Cat, FKEYS, Only};
+    let layout = dactile::config::Config::load().map_or("q".to_string(), |c| c.keyboard);
+    let [a, b, c] = keys::rows(&layout);
+    KeysView {
+        rows: vec![
+            FKEYS.to_vec(),
+            a.to_vec(),
+            b.to_vec(),
+            c.to_vec(),
+            keys::special(Only::Desktop),
+        ],
+        binds: BINDS
+            .iter()
+            .filter(|b| b.only.fits(Only::Desktop))
+            .map(|b| KeyView {
+                cap: b.cap(&layout),
+                ctrl: b.ctrl,
+                alt: b.alt,
+                cat: b.cat.id(),
+                combo: b.combo(&layout),
+                what: b.what(),
+            })
+            .collect(),
+        cats: Cat::ALL.iter().map(|c| (c.id(), c.name())).collect(),
+    }
+}
+
+#[derive(serde::Serialize)]
+struct KeysView {
+    rows: Vec<Vec<&'static str>>,
+    binds: Vec<KeyView>,
+    cats: Vec<(&'static str, &'static str)>,
+}
+
+#[derive(serde::Serialize)]
+struct KeyView {
+    cap: &'static str,
+    ctrl: bool,
+    alt: bool,
+    cat: &'static str,
+    combo: String,
+    what: &'static str,
+}
+
+/// What the commands do, group by group.
+#[tauri::command]
+fn guide_view() -> Vec<GuideGroup> {
+    use dactile::guide::{ENTRIES, Group};
+    Group::ALL
+        .iter()
+        .map(|g| GuideGroup {
+            name: g.name(),
+            entries: ENTRIES
+                .iter()
+                .filter(|e| e.group == *g)
+                .map(|e| GuideEntry {
+                    name: e.name,
+                    what: e.what(),
+                    example: e.example,
+                })
+                .collect(),
+        })
+        .collect()
+}
+
+#[derive(serde::Serialize)]
+struct GuideGroup {
+    name: &'static str,
+    entries: Vec<GuideEntry>,
+}
+
+#[derive(serde::Serialize)]
+struct GuideEntry {
+    name: &'static str,
+    what: &'static str,
+    example: &'static str,
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Wayland desktops match a window to its menu entry by this name alone:
@@ -853,6 +958,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            keys_view,
+            guide_view,
             home,
             settings,
             set_setting,
@@ -910,6 +1017,7 @@ pub fn run() {
             notes_paste,
             pick_text,
             note_fix,
+            note_fix_many,
             note_authors,
             pdf,
             full_screen,
@@ -940,6 +1048,8 @@ pub fn run() {
             scene_split,
             scene_join,
             scene_align_next,
+            cover_read,
+            cover_write,
             docx_export,
         ])
         .run(tauri::generate_context!())

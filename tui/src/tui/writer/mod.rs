@@ -72,6 +72,8 @@ const AUTOSAVE_AFTER: Duration = Duration::from_secs(2);
 const CHECK_EVERY: Duration = Duration::from_secs(2);
 /// Columns left of the text on the page: the draft line numbers.
 const MARGIN: u16 = 7;
+/// The margin the list of acts and scenes likes, left of the page.
+const MAP_W: u16 = 22;
 /// Air right of the text on the page.
 const PAGE_RIGHT: u16 = 3;
 /// The widest the text gets: about a typed page.
@@ -272,6 +274,8 @@ enum Popup {
     Palette(String, usize),
     /// F1: the keyboard, with the key last pressed or pointed at.
     Help(keys::Help),
+    /// Help > Commands: the commands beside the writing, this one chosen.
+    Guide(usize),
     /// Alt+S: spelling suggestions for the word at `range`.
     Suggest(std::ops::Range<usize>, Vec<String>, usize),
     /// F9: the casting, the scene/role table, the numbers (`self.roles`).
@@ -474,7 +478,8 @@ impl Writer {
                 0
             };
         if room >= full + 4 {
-            let x = (room - full) / 2;
+            // Off centre if it must, so the headings fit in the margin.
+            let x = ((room - full) / 2).max((room - full - 2).min(MAP_W));
             Sheet {
                 x,
                 width: full,

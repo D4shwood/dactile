@@ -331,6 +331,7 @@ impl Writer {
             }
             PAct::Board => self.open_board(),
             PAct::NotesPdf => self.notes_pdf(),
+            PAct::CoverLook => self.popup = Popup::Form(self.part_form()),
             PAct::Docx => match dactile::word::export(&self.path, &self.buf.text) {
                 Ok(p) => {
                     let said = lang::f(
@@ -373,6 +374,7 @@ impl Writer {
                     confirmed: false,
                 });
             }
+            PAct::Guide => self.popup = Popup::Guide(0),
             PAct::About => self.say(
                 &lang::f(
                     "Dactile Light {} · tiyatro sınıfı {}",

@@ -745,6 +745,62 @@ impl Writer {
         }
     }
 
+    /// Which part to restyle: `Kapak: Başlık`, `Kişiler: Adlar`.
+    pub(super) fn part_form(&self) -> Form {
+        let cover = info::COVER_PARTS.iter().map(|(_, n)| format!("Kapak: {n}"));
+        let cast = info::CAST_PARTS
+            .iter()
+            .map(|(_, n)| format!("Kişiler: {n}"));
+        let all: Vec<String> = cover.chain(cast).collect();
+        Form {
+            kind: FormKind::CoverPart,
+            title: lang::l("kapak ve kişiler", "cover and cast").into(),
+            fields: vec![Field::text("Öğe", &all[0], all.clone())],
+            focus: 0,
+            at: 0..0,
+            error: None,
+            confirmed: false,
+        }
+    }
+
+    /// How a part looks; what stays empty is the class's own.
+    pub(super) fn part_look_form(&self, command: &str, part: &str) -> Form {
+        let look = info::part_look(&self.buf.text, command, part);
+        let words = |w: &[&str]| w.iter().map(ToString::to_string).collect();
+        Form {
+            kind: FormKind::PartLook(command.to_string(), part.to_string()),
+            title: part.to_string(),
+            fields: vec![
+                Field::text("Hiza", &look.align, words(&["left", "center", "right"])),
+                Field::text(
+                    "Boyut",
+                    &look.size,
+                    words(&[
+                        "tiny", "small", "normal", "large", "Large", "LARGE", "huge", "Huge",
+                    ]),
+                ),
+                Field::text(
+                    "Stil",
+                    &look.style,
+                    words(&[
+                        "normal",
+                        "bold",
+                        "italic",
+                        "bolditalic",
+                        "smallcaps",
+                        "boldsmallcaps",
+                    ]),
+                ),
+                Field::text("Üst boşluk", &look.before, Vec::new()),
+                Field::text("Alt boşluk", &look.after, Vec::new()),
+            ],
+            focus: 0,
+            at: 0..0,
+            error: None,
+            confirmed: false,
+        }
+    }
+
     pub(super) fn info_form(&self) -> Form {
         let mut fields: Vec<Field> = info::FIELDS
             .iter()
@@ -768,6 +824,14 @@ impl Writer {
             lang::l("Sahne başlıkları", "Scene headings"),
             side,
             sides.iter().map(ToString::to_string).collect(),
+        ));
+        fields.push(Field::flag(
+            "Kişiler ayrı sayfada",
+            info::cast_own_page(&self.buf.text),
+        ));
+        fields.push(Field::flag(
+            "Latince başlık (Dramatis Personae)",
+            info::latin_cast(&self.buf.text),
         ));
         Form {
             kind: FormKind::Info,
