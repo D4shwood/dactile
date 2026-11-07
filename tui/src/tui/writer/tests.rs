@@ -42,6 +42,8 @@ fn type_in(w: &mut Writer, s: &str) {
 }
 
 fn screen(w: &mut Writer) -> String {
+    // A window just opened is still unrolling: its foot isn't drawn yet.
+    w.animations = false;
     let mut t = Terminal::new(TestBackend::new(110, 40)).unwrap();
     t.draw(|f| w.draw(f)).unwrap();
     t.backend()
@@ -70,12 +72,14 @@ fn find_one(w: &Writer, needle: &str) -> Option<String> {
 fn find_goes_by_its_options() {
     let mut o = open("find");
     let w = &mut o.w;
-    // By default small and capital are one, the Turkish way.
-    assert_eq!(find_one(w, "AMCA").as_deref(), Some("Amca"));
+    // By default small and capital are one, the Turkish way: the first
+    // is in the cast list's "amcası".
+    assert_eq!(find_one(w, "AMCA").as_deref(), Some("amca"));
     w.find_options.case = true;
     assert_eq!(find_one(w, "AMCA"), None);
+    assert_eq!(find_one(w, "Amca").as_deref(), Some("Amca"));
     w.find_options.case = false;
-    // "taş" in a longer word doesn't count as the word.
+    // "dur" in a longer word doesn't count as the word.
     w.find_options.whole_word = true;
     assert_eq!(find_one(w, "dur"), None);
     assert_eq!(find_one(w, "durdu").as_deref(), Some("durdu"));

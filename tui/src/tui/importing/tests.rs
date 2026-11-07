@@ -151,7 +151,6 @@ fn a_mark_that_drops_a_person_does_not_panic() {
     assert!(p.draft.people.len() < before);
     assert!(p.sel < p.draft.people.len());
     press(&mut p, KeyCode::BackTab);
-    press(&mut p, KeyCode::BackTab);
     assert!(p.view == View::People);
     screen(&p, 100, 30);
     press(&mut p, KeyCode::Char('x'));
@@ -213,15 +212,20 @@ fn a_long_book_marks_in_good_time() {
         })
         .collect();
     let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
-    let mut p = preview(&source(&refs));
+    let src = source(&refs);
+    let at = Instant::now();
+    let mut p = preview(&src);
+    let read = at.elapsed();
     press(&mut p, KeyCode::Tab);
     let at = Instant::now();
     press(&mut p, KeyCode::Char('s'));
     let marked = at.elapsed();
     let at = Instant::now();
     screen(&p, 120, 40);
-    eprintln!("mark {marked:?}, frame {:?}", at.elapsed());
-    assert!(marked < Duration::from_secs(5), "{marked:?}");
+    eprintln!("read {read:?}, mark {marked:?}, frame {:?}", at.elapsed());
+    // A mark reads the play again, no more: against the first reading, as
+    // a debug build on a busy machine has no fixed time.
+    assert!(marked < read * 3, "read {read:?}, mark {marked:?}");
 }
 
 fn volume() -> Source {
