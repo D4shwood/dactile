@@ -557,10 +557,7 @@ pub fn draw_palette(
             ..inn
         },
     );
-    f.set_cursor_position(ratatui::layout::Position::new(
-        inn.x + 2 + query.width() as u16,
-        inn.y,
-    ));
+    super::blink::at(f, Position::new(inn.x + 2 + query.width() as u16, inn.y));
 }
 
 // ------------------------------------------------------------------ spelling

@@ -1,6 +1,7 @@
 //! The terminal interface: the home screen and the writer.
 
 mod anim;
+mod blink;
 mod board;
 mod files;
 mod home;
@@ -68,12 +69,16 @@ pub fn run(start: Start) -> Result<()> {
                 Screen::Home(h) => h.animating(&cfg),
                 Screen::Writer(w) => w.animating(),
             };
-            let wait = Duration::from_millis(if moving { 16 } else { 200 });
+            let wait =
+                Duration::from_millis(if moving { 16 } else { 200 }).min(blink::until_change());
             let ev = if event::poll(wait)? {
                 Some(event::read()?)
             } else {
                 None
             };
+            if matches!(ev, Some(Event::Key(_) | Event::Paste(_))) {
+                blink::restart();
+            }
             match &mut screen {
                 Screen::Home(h) => {
                     let action = match ev {

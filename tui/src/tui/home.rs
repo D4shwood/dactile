@@ -1662,12 +1662,13 @@ impl Home {
             Rect { height: 1, ..area },
         );
         let x = area.x as usize + label.width() + text.width();
-        f.set_cursor_position(ratatui::layout::Position::new(x as u16, area.y));
+        super::blink::at(f, ratatui::layout::Position::new(x as u16, area.y));
     }
 
     /// The plays, two rows each: the title and when, then who and how long.
     /// A play's drafts stand above it as a tree.
     fn draw_list(&mut self, f: &mut Frame, mut area: Rect) {
+        let mut caret = None;
         let shown = self.shown();
         if let Some(q) = &self.filter {
             self.draw_filter(f, area, q, shown.len());
@@ -1766,7 +1767,7 @@ impl Home {
                     head.push(Span::raw(" ".repeat(gap)));
                     let x = area.x as usize + 2 + lead + width(&chars[skip..ed.at]);
                     let y = area.y as usize + (i - start) * per;
-                    f.set_cursor_position(ratatui::layout::Position::new(x as u16, y as u16));
+                    caret = Some(ratatui::layout::Position::new(x as u16, y as u16));
                 }
                 None => {
                     let title = popup::fit(&name, room);
@@ -1817,6 +1818,9 @@ impl Home {
             ]));
         }
         f.render_widget(Paragraph::new(lines).style(theme::base()), area);
+        if let Some(at) = caret {
+            super::blink::at(f, at);
+        }
     }
 }
 

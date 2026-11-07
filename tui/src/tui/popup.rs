@@ -479,10 +479,10 @@ pub fn draw_search(f: &mut Frame, area: Rect, m: &Menu, query: &str) {
             ..inner
         },
     );
-    f.set_cursor_position(Position::new(
-        inner.x + 2 + query.chars().count() as u16,
-        inner.y,
-    ));
+    super::blink::at(
+        f,
+        Position::new(inner.x + 2 + query.chars().count() as u16, inner.y),
+    );
 }
 
 pub fn draw_form(f: &mut Frame, area: Rect, form: &Form) {
@@ -590,7 +590,7 @@ pub fn draw_form(f: &mut Frame, area: Rect, form: &Form) {
         },
     );
     if let Some(c) = cursor {
-        f.set_cursor_position(c);
+        super::blink::at(f, c);
     }
 }
 

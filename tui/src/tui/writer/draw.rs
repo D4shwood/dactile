@@ -506,16 +506,12 @@ impl Writer {
                 }
             }
         }
-        // The cursor, unless a full panel covers the text. On paper the
-        // terminal's own cursor can vanish, so the page draws its own.
-        if let Some(cur) = cursor {
+        // The cursor, unless a full panel covers the text.
+        if let Some(cur) = cursor.filter(|_| super::super::blink::on()) {
             let x = (left + cur.col).min(right.saturating_sub(1));
             let y = area.y + (cur.row - self.shown) as u16;
-            if self.on_paper() {
-                let cell = &mut buf[(x, y)];
+            if let Some(cell) = buf.cell_mut((x, y)) {
                 cell.set_style(Style::default().fg(p.bg).bg(p.fg));
-            } else {
-                f.set_cursor_position(Position::new(x, y));
             }
         }
     }
