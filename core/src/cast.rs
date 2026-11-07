@@ -114,7 +114,9 @@ impl Cast {
                     }
                 }
                 "gizlikarakter" => {
-                    if let Some((script, alias, end)) = two_groups(text, c.span.end) {
+                    // A note left from `\\karakter` says nothing here.
+                    let at = tex::optional(text, c.span.end).map_or(c.span.end, |o| o.span.end);
+                    if let Some((script, alias, end)) = two_groups(text, at) {
                         cast.characters.push(Character {
                             alias: alias.inner.to_string(),
                             script: script.inner.to_string(),
@@ -1139,5 +1141,17 @@ mod tests {
         assert_eq!(title_case("IŞIK"), "Işık");
         assert_eq!(title_case("ÇOBAN"), "Çoban");
         assert_eq!(fold_ascii("ŞÜKRÜ BEY"), "sukrubey");
+    }
+}
+
+#[cfg(test)]
+mod hidden_with_a_note {
+    use super::*;
+
+    #[test]
+    fn a_note_left_on_a_hidden_name_is_no_harm() {
+        let cast = Cast::of_play("\\gizlikarakter[]{HABERCİ}{ha}\n\\begin{document}\n");
+        assert_eq!(cast.characters.len(), 1);
+        assert_eq!(cast.characters[0].alias, "ha");
     }
 }

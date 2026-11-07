@@ -108,8 +108,9 @@
       }
   }
 
-\NewDocumentCommand \gizlikarakter { m m }
-  { \__tiy_declare:nnnnnn { plain } { \BooleanFalse } { } { } {#1} {#2} }
+% A hidden name has no line in the cast: a note left from \karakter is dropped.
+\NewDocumentCommand \gizlikarakter { o m m }
+  { \__tiy_declare:nnnnnn { plain } { \BooleanFalse } { } { } {#2} {#3} }
 
 \NewDocumentCommand \karaktergrubu { O{} +m }
   {
