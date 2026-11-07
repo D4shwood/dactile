@@ -30,6 +30,10 @@ pub enum Importing {
     Picking {
         rx: Receiver<Option<PathBuf>>,
         since: Instant,
+        /// What to ask if no chooser comes up.
+        ask: Option<Box<Form>>,
+        /// What is chosen is opened as it is, not read as a document.
+        open: bool,
     },
     Reading {
         rx: Receiver<Result<Read, String>>,
@@ -81,7 +85,7 @@ pub enum Step {
     /// Gone, with a message.
     Done(Option<(String, bool)>),
     /// No chooser came up: ask for a path.
-    AskPath,
+    Ask(Box<Form>),
     /// Written here: open it.
     Open(PathBuf),
     /// Read the document again from its page images.
@@ -98,27 +102,41 @@ pub fn can_choose() -> bool {
     bus && screen
 }
 
-/// The desktop's chooser, in the background.
+/// The desktop's chooser for a document, in the background.
 pub fn pick() -> Importing {
-    let (tx, rx) = channel();
     let dir = dirs::download_dir()
         .filter(|d| d.is_dir())
         .or_else(dirs::home_dir)
         .unwrap_or_else(|| PathBuf::from("/"));
+    let dialog = rfd::FileDialog::new()
+        .set_title(lang::l("İçe aktarılacak oyun", "A play to import"))
+        .add_filter(
+            lang::l("Oyun belgeleri", "Play documents"),
+            &dactile::import::EXTENSIONS,
+        )
+        .set_directory(dir);
+    choosing(dialog, path_form(), false)
+}
+
+/// The chooser for a `.tex` to open, `form` asking for it where none comes.
+pub fn pick_tex(dir: PathBuf, form: Form) -> Importing {
+    let dialog = rfd::FileDialog::new()
+        .set_title(lang::l("Açılacak oyun", "A play to open"))
+        .add_filter(lang::l("Oyunlar", "Plays"), &["tex"])
+        .set_directory(dir);
+    choosing(dialog, form, true)
+}
+
+fn choosing(dialog: rfd::FileDialog, form: Form, open: bool) -> Importing {
+    let (tx, rx) = channel();
     std::thread::spawn(move || {
-        let chosen = rfd::FileDialog::new()
-            .set_title(lang::l("İçe aktarılacak oyun", "A play to import"))
-            .add_filter(
-                lang::l("Oyun belgeleri", "Play documents"),
-                &dactile::import::EXTENSIONS,
-            )
-            .set_directory(dir)
-            .pick_file();
-        let _ = tx.send(chosen);
+        let _ = tx.send(dialog.pick_file());
     });
     Importing::Picking {
         rx,
         since: Instant::now(),
+        ask: Some(Box::new(form)),
+        open,
     }
 }
 
@@ -206,16 +224,24 @@ impl Importing {
     /// The chooser's or the reader's answer, when it comes.
     pub fn tick(&mut self, lang: lang::Lang) -> Step {
         match self {
-            Importing::Picking { rx, since } => match rx.try_recv() {
+            Importing::Picking {
+                rx,
+                since,
+                ask,
+                open,
+            } => match rx.try_recv() {
+                Ok(Some(path)) if *open => Step::Open(path),
                 Ok(Some(path)) => {
                     *self = read(path, lang);
                     Step::Stay
                 }
                 // Back at once with nothing: no chooser came up.
-                Ok(None) if since.elapsed() < Duration::from_millis(400) => Step::AskPath,
+                Ok(None) if since.elapsed() < Duration::from_millis(400) => {
+                    ask.take().map_or(Step::Done(None), Step::Ask)
+                }
                 Ok(None) => Step::Done(None),
                 Err(std::sync::mpsc::TryRecvError::Empty) => Step::Stay,
-                Err(_) => Step::AskPath,
+                Err(_) => ask.take().map_or(Step::Done(None), Step::Ask),
             },
             Importing::Reading {
                 rx,

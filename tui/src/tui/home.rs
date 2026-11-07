@@ -82,6 +82,8 @@ pub struct Home {
     side_right: u16,
     /// `i`: a document being imported.
     importing: Option<super::importing::Importing>,
+    /// `/`: what the list is searched for, the keys going to it.
+    filter: Option<String>,
 }
 
 struct Page {
@@ -138,6 +140,7 @@ impl Home {
             side_shown: false,
             side_right: 0,
             importing: None,
+            filter: None,
         };
         h.refresh(cfg);
         // On the play worked on last.
@@ -200,11 +203,20 @@ impl Home {
             }
             return Action::Stay;
         }
+        if self.filter.is_some() {
+            return self.filter_key(k);
+        }
         if let Some(a) = self.section_key(k, cfg) {
             return a;
         }
         let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
         match k.code {
+            KeyCode::Char('/') if self.section == Section::Home => {
+                self.filter = Some(String::new())
+            }
+            KeyCode::Char('f') if ctrl && self.section == Section::Home => {
+                self.filter = Some(String::new())
+            }
             KeyCode::Char('?') => self.go_section(Section::Keys, cfg),
             KeyCode::Char('q') | KeyCode::Esc => return Action::Quit,
             KeyCode::Char('c') if ctrl => return Action::Quit,
@@ -377,10 +389,10 @@ impl Home {
     /// Whether the screen is still typing itself out (the name's cursor
     /// blinks at the slow pace).
     /// What the import waits on, when it comes.
-    /// `o`: a .tex by its path.
+    /// `o`: a .tex from the desktop's chooser, or by its path.
     fn open_form(&mut self, cfg: &Config) {
         let dir = format!("{}/", config::tilde(&cfg.plays_dir()));
-        self.form = Some(Form {
+        let form = Form {
             kind: FormKind::OpenPath,
             title: lang::l("dosya aç", "open a file").into(),
             fields: vec![Field::text("Dosya", &dir, Vec::new())],
@@ -388,7 +400,83 @@ impl Home {
             at: 0..0,
             error: None,
             confirmed: false,
-        });
+        };
+        if super::importing::can_choose() {
+            self.importing = Some(super::importing::pick_tex(cfg.plays_dir(), form));
+        } else {
+            self.form = Some(form);
+        }
+    }
+
+    /// The plays the search leaves, all of them without one: `plays` itself
+    /// stays whole, for what a rename finds in it.
+    fn shown(&self) -> Vec<usize> {
+        let Some(q) = &self.filter else {
+            return (0..self.plays.len()).collect();
+        };
+        let q = dactile::cast::lower_tr(q);
+        (0..self.plays.len())
+            .filter(|&i| {
+                let p = &self.plays[i];
+                let all = format!("{} {} {}", p.title, p.author, p.path.display());
+                dactile::cast::lower_tr(&all).contains(&q)
+            })
+            .collect()
+    }
+
+    /// One row up or down the list, as far as the search shows.
+    fn step_sel(&mut self, down: bool) {
+        let shown = self.shown();
+        let at = shown.iter().position(|&i| i == self.sel);
+        let next = match at {
+            Some(n) if down => shown.get(n + 1),
+            Some(n) => n.checked_sub(1).and_then(|n| shown.get(n)),
+            None => shown.first(),
+        };
+        if let Some(&i) = next {
+            self.sel = i;
+        }
+    }
+
+    /// The search changed: the choice stays among what it leaves.
+    fn filtered(&mut self) {
+        let shown = self.shown();
+        if !shown.contains(&self.sel)
+            && let Some(&i) = shown.first()
+        {
+            self.sel = i;
+        }
+    }
+
+    /// A key while the search line is open.
+    fn filter_key(&mut self, k: KeyEvent) -> Action {
+        let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
+        match k.code {
+            KeyCode::Char('c') if ctrl => return Action::Quit,
+            KeyCode::Esc => self.filter = None,
+            KeyCode::Up => self.step_sel(false),
+            KeyCode::Down => self.step_sel(true),
+            KeyCode::Enter => {
+                if self.shown().contains(&self.sel) {
+                    self.filter = None;
+                    return Action::Open(self.plays[self.sel].path.clone());
+                }
+            }
+            KeyCode::Backspace => {
+                if self.filter.as_mut().is_some_and(|q| q.pop().is_none()) {
+                    self.filter = None;
+                }
+                self.filtered();
+            }
+            KeyCode::Char(c) if !ctrl => {
+                if let Some(q) = &mut self.filter {
+                    q.push(c);
+                }
+                self.filtered();
+            }
+            _ => {}
+        }
+        Action::Stay
     }
 
     /// `i`: a document, from the desktop's chooser or by its path.
@@ -419,9 +507,9 @@ impl Home {
                 self.message = msg;
                 Action::Stay
             }
-            Step::AskPath => {
+            Step::Ask(form) => {
                 self.importing = None;
-                self.form = Some(super::importing::path_form());
+                self.form = Some(*form);
                 Action::Stay
             }
             Step::Open(p) => {
@@ -867,7 +955,7 @@ impl Home {
         let side = 3u16.min(area.width / 10);
         let inner_w = area.width.saturating_sub(side * 2);
         // The masthead: the name spaced out, what it is, and a rule.
-        let spaced: String = "DACTILE LIGHT".chars().map(|c| format!("{c} ")).collect();
+        let spaced = masthead(inner_w);
         let folder = config::tilde(&cfg.plays_dir());
         // A typewriter's cursor after the name, blinking.
         let on = (self.born.elapsed().as_millis() / 600).is_multiple_of(2);
@@ -887,6 +975,14 @@ impl Home {
                 height: 1,
             },
         );
+        let tagline = format!(
+            "   {}",
+            lang::l("tiyatro oyunu yazmak için", "for writing stage plays")
+        );
+        // Only as wide as itself, so it leaves the line's left part alone.
+        let label = lang::l("oyunlar  ", "plays  ");
+        let fw = (label.width() + folder.width()) as u16;
+        let (with_tagline, with_folder) = tagline_room(inner_w, tagline.width() as u16, fw);
         f.render_widget(
             Paragraph::new(Line::from(vec![
                 Span::styled(
@@ -894,14 +990,11 @@ impl Home {
                     Style::default().fg(MUTED),
                 ),
                 Span::styled(
-                    self.typed(
-                        &format!(
-                            "   {}",
-                            lang::l("tiyatro oyunu yazmak için", "for writing stage plays")
-                        ),
-                        cfg,
-                        150 + 19 * 28,
-                    ),
+                    if with_tagline {
+                        self.typed(&tagline, cfg, 150 + 19 * 28)
+                    } else {
+                        String::new()
+                    },
                     Style::default().fg(FAINT),
                 ),
             ]))
@@ -913,10 +1006,7 @@ impl Home {
                 height: 1,
             },
         );
-        // Only as wide as itself, so it leaves the line's left part alone.
-        let label = lang::l("oyunlar  ", "plays  ");
-        let fw = (label.width() + folder.width()) as u16;
-        if fw + 40 < inner_w {
+        if with_folder {
             f.render_widget(
                 Paragraph::new(Line::from(vec![
                     Span::styled(label, Style::default().fg(FAINT)),
@@ -1461,18 +1551,49 @@ impl Home {
         }
     }
 
+    /// The search line over the list, with the terminal's cursor in it.
+    fn draw_filter(&self, f: &mut Frame, area: Rect, q: &str, found: usize) {
+        let label = lang::l("Ara: ", "Search: ");
+        let room = (area.width as usize).saturating_sub(label.width() + 12);
+        let text = popup::fit(q, room);
+        let count = lang::f("  {} oyun", "  {} plays", &[&found]);
+        let line = Line::from(vec![
+            Span::styled(label, Style::default().fg(MUTED)),
+            Span::styled(text.clone(), Style::default().fg(FG)),
+            Span::styled(count, Style::default().fg(FAINT)),
+        ]);
+        f.render_widget(
+            Paragraph::new(line).style(theme::base()),
+            Rect { height: 1, ..area },
+        );
+        let x = area.x as usize + label.width() + text.width();
+        f.set_cursor_position(ratatui::layout::Position::new(x as u16, area.y));
+    }
+
     /// The plays, two rows each: the title and when, then who and how long.
     /// A play's drafts stand above it as a tree.
-    fn draw_list(&mut self, f: &mut Frame, area: Rect) {
+    fn draw_list(&mut self, f: &mut Frame, mut area: Rect) {
+        let shown = self.shown();
+        if let Some(q) = &self.filter {
+            self.draw_filter(f, area, q, shown.len());
+            area.y += 1;
+            area.height = area.height.saturating_sub(1);
+        }
         let per = 3usize;
         let rows = (area.height as usize / per).max(1);
-        let start = self.sel.saturating_sub(rows.saturating_sub(1));
-        self.hits.list = (start..self.plays.len().min(start + rows))
-            .map(|i| (area.y + ((i - start) * per) as u16, per as u16, i))
+        let at = shown.iter().position(|&i| i == self.sel).unwrap_or(0);
+        let start = at.saturating_sub(rows.saturating_sub(1));
+        self.hits.list = shown
+            .iter()
+            .enumerate()
+            .skip(start)
+            .take(rows)
+            .map(|(n, &i)| (area.y + ((n - start) * per) as u16, per as u16, i))
             .collect();
         let guide = Style::default().fg(FAINT);
         let mut lines = Vec::new();
-        for (i, p) in self.plays.iter().enumerate().skip(start).take(rows) {
+        for &i in shown.iter().skip(start).take(rows) {
+            let p = &self.plays[i];
             let sel = i == self.sel;
             let w = area.width as usize;
             // The lines down the left, the tree growing upward: one per
@@ -1616,9 +1737,35 @@ fn page_width(w: u16) -> u16 {
     }
 }
 
+/// The name for a line `w` wide: spaced out if it fits.
+fn masthead(w: u16) -> String {
+    const NAME: &str = "DACTILE LIGHT";
+    let spaced: String = NAME.chars().map(|c| format!("{c} ")).collect();
+    // The cursor stands after it.
+    if spaced.width() < w as usize {
+        spaced
+    } else if NAME.width() < w as usize {
+        format!("{NAME} ")
+    } else {
+        popup::fit(NAME, (w as usize).saturating_sub(1))
+    }
+}
+
+/// Whether the tagline's second half and the plays folder fit on a line
+/// `w` wide beside "Dynamic Stagewright". The folder goes first of the two:
+/// the words about the app say nothing new.
+fn tagline_room(w: u16, tagline: u16, folder: u16) -> (bool, bool) {
+    const NAME: u16 = 19;
+    const GAP: u16 = 2;
+    let both = NAME + tagline + GAP + folder <= w;
+    let with_folder = NAME + GAP + folder <= w;
+    (both || !with_folder && NAME + tagline <= w, with_folder)
+}
+
 fn draw_keys(f: &mut Frame, area: Rect) {
-    let keys: [(&str, &str, &str); 14] = [
+    let keys: [(&str, &str, &str); 15] = [
         ("⏎", "oyunu aç", "open the play"),
+        ("/", "oyunlarda ara", "search the plays"),
         (
             "n",
             "yeni: şablonlar; iki kez boş oyun",
@@ -1882,5 +2029,89 @@ mod tests {
         assert_eq!(fork_name(p, "26.10.2026"), "kar-masali-26.10.2026.tex");
         assert_eq!(fork_name(p, "İkinci el"), "kar-masali-ikinci-el.tex");
         assert_eq!(fork_name(p, ""), "kar-masali-2.tex");
+    }
+
+    #[test]
+    fn the_masthead_fits_whatever_the_width() {
+        assert_eq!(masthead(80).width(), 26);
+        for w in 1..=40 {
+            assert!(masthead(w).width() < w as usize + 1, "{w}");
+        }
+        assert_eq!(masthead(24).trim_end(), "DACTILE LIGHT");
+    }
+
+    #[test]
+    fn the_tagline_and_the_folder_do_not_meet() {
+        // At 80 columns, 74 wide: a folder that leaves no room for the words.
+        assert_eq!(tagline_room(74, 28, 30), (false, true));
+        assert_eq!(tagline_room(120, 28, 30), (true, true));
+        assert_eq!(tagline_room(50, 28, 40), (true, false));
+        assert_eq!(tagline_room(30, 28, 40), (false, false));
+        for w in 0..130 {
+            let (words, folder) = tagline_room(w, 28, 30);
+            let used = 19 + if words { 28 } else { 0 } + if folder { 32 } else { 0 };
+            assert!(used <= w.max(19), "{w}");
+        }
+    }
+
+    fn shelf(tag: &str) -> (Home, Config, PathBuf) {
+        let dir = std::env::temp_dir().join(format!("dactile-home-{tag}-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        for title in ["Kar Masalı", "Işık Oyunu", "Deniz Feneri"] {
+            let tex = library::template(title, "Örnek Yazar", Lang::Tr);
+            std::fs::write(dir.join(library::file_name(title)), tex).unwrap();
+        }
+        let cfg = Config {
+            plays_dir: dir.to_string_lossy().into_owned(),
+            ..Config::default()
+        };
+        (Home::new(&cfg, false), cfg, dir)
+    }
+
+    fn press(h: &mut Home, cfg: &mut Config, code: KeyCode) -> Action {
+        h.key(KeyEvent::new(code, KeyModifiers::NONE), cfg)
+    }
+
+    #[test]
+    fn the_search_narrows_the_view_and_leaves_the_plays_whole() {
+        let (mut h, mut cfg, dir) = shelf("search");
+        press(&mut h, &mut cfg, KeyCode::Char('/'));
+        // Turkish lower case: I is ı.
+        for c in "ışık".chars() {
+            press(&mut h, &mut cfg, KeyCode::Char(c));
+        }
+        assert_eq!(h.shown().len(), 1);
+        assert_eq!(h.plays.len(), 3);
+        assert_eq!(h.plays[h.sel].title, "Işık Oyunu");
+        for _ in 0..4 {
+            press(&mut h, &mut cfg, KeyCode::Backspace);
+        }
+        assert_eq!(h.shown().len(), 3);
+        press(&mut h, &mut cfg, KeyCode::Char('z'));
+        press(&mut h, &mut cfg, KeyCode::Char('z'));
+        assert!(h.shown().is_empty());
+        // Nothing found: ⏎ opens nothing, and the keys are the search's.
+        assert!(matches!(
+            press(&mut h, &mut cfg, KeyCode::Enter),
+            Action::Stay
+        ));
+        press(&mut h, &mut cfg, KeyCode::Esc);
+        assert!(h.filter.is_none());
+        assert_eq!(h.shown().len(), 3);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_search_finds_by_author_and_opens_the_choice() {
+        let (mut h, mut cfg, dir) = shelf("open");
+        press(&mut h, &mut cfg, KeyCode::Char('/'));
+        for c in "feneri".chars() {
+            press(&mut h, &mut cfg, KeyCode::Char(c));
+        }
+        let Action::Open(p) = press(&mut h, &mut cfg, KeyCode::Enter) else {
+            panic!("nothing opened");
+        };
+        assert!(p.to_string_lossy().contains("deniz-feneri"));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }

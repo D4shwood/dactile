@@ -704,10 +704,8 @@ impl Home {
         let MouseEventKind::Down(MouseButton::Left) = m.kind else {
             if self.section == Section::Home && self.form.is_none() {
                 match m.kind {
-                    MouseEventKind::ScrollUp => self.sel = self.sel.saturating_sub(1),
-                    MouseEventKind::ScrollDown => {
-                        self.sel = (self.sel + 1).min(self.plays.len().saturating_sub(1))
-                    }
+                    MouseEventKind::ScrollUp => self.step_sel(false),
+                    MouseEventKind::ScrollDown => self.step_sel(true),
                     _ => {}
                 }
             }
