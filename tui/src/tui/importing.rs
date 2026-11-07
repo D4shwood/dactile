@@ -11,7 +11,7 @@ use super::theme::{BEIGE, CLARET, FAINT, FG, MUTED, WARN};
 use dactile::config::Config;
 use dactile::import::ocr::{self, Job};
 use dactile::import::pdf::NoText;
-use dactile::import::shape::{Draft, shape, shape_play};
+use dactile::import::shape::{Draft, Summary, shape};
 use dactile::lang;
 use mark::Marking;
 use ratatui::Frame;
@@ -59,6 +59,8 @@ pub struct Read {
 
 #[derive(Clone, Copy, PartialEq)]
 enum View {
+    /// The plays of a volume of several.
+    Volume,
     People,
     Document,
     Play,
@@ -67,8 +69,11 @@ enum View {
 pub struct Preview {
     file: PathBuf,
     draft: Draft,
-    /// The other plays of a volume as they were left, marks and all.
-    left: Vec<Draft>,
+    /// The volume's plays, a line each, and those to write.
+    plays: Vec<Summary>,
+    chosen: Vec<bool>,
+    /// The line on in the volume's list.
+    play_sel: usize,
     ocr: bool,
     /// `o` pressed once: it asks before the marks start over.
     again: bool,
@@ -360,14 +365,21 @@ fn note(f: &mut Frame, area: Rect, s: &str) {
 
 impl Preview {
     fn new(file: PathBuf, read: Read) -> Preview {
+        let plays = read.draft.summaries();
         Preview {
             file,
             ocr: read.ocr,
             again: false,
-            view: View::People,
+            view: if plays.len() > 1 {
+                View::Volume
+            } else {
+                View::People
+            },
             doc: Marking::new(&read.draft),
             draft: read.draft,
-            left: Vec::new(),
+            chosen: vec![true; plays.len()],
+            plays,
+            play_sel: 0,
             sel: 0,
             merging: None,
             form: None,
@@ -380,15 +392,32 @@ impl Preview {
     fn next_play(&mut self) {
         let d = &self.draft;
         let at = d.play.map_or(0, |p| p + 1) % d.source.plays.len();
-        let next = match self.left.iter().position(|p| p.play == Some(at)) {
-            Some(i) => self.left.swap_remove(i),
-            None => shape_play(&d.source, d.lang, at),
-        };
-        self.left.push(std::mem::replace(&mut self.draft, next));
+        self.open_play(at);
+    }
+
+    fn open_play(&mut self, at: usize) {
+        self.draft.go_to_play(at);
         self.doc.refresh(&self.draft);
         self.doc.go_to_play(&self.draft);
         self.sel = 0;
         self.merging = None;
+    }
+
+    /// The volume changed: its list, and the document, again.
+    fn volume_changed(&mut self) {
+        let was = self.chosen.len();
+        self.plays = self.draft.summaries();
+        if self.plays.len() != was {
+            self.chosen = vec![true; self.plays.len()];
+        }
+        self.play_sel = self.play_sel.min(self.plays.len().saturating_sub(1));
+        self.doc.refresh(&self.draft);
+        self.doc.go_to_play(&self.draft);
+        self.sel = 0;
+        self.merging = None;
+        if self.plays.len() < 2 && self.view == View::Volume {
+            self.view = View::People;
+        }
     }
 
     /// Marking reads the play again, and the list of people can shrink.
@@ -398,11 +427,22 @@ impl Preview {
     }
 
     fn next_view(&mut self, on: bool) {
+        let volume = self.draft.source.plays.len() > 1;
+        if volume && self.view == View::Volume {
+            self.plays = self.draft.summaries();
+        }
         self.view = match (self.view, on) {
+            (View::Volume, true) => View::People,
+            (View::Volume, false) => View::Play,
             (View::People, true) | (View::Play, false) => View::Document,
-            (View::Document, true) | (View::People, false) => View::Play,
+            (View::Document, true) => View::Play,
+            (View::People, false) | (View::Play, true) if volume => View::Volume,
+            (View::People, false) => View::Play,
             (View::Play, true) | (View::Document, false) => View::People,
         };
+        if self.view == View::Volume {
+            self.plays = self.draft.summaries();
+        }
     }
 
     fn key(&mut self, k: KeyEvent, cfg: &Config) -> Step {
@@ -459,6 +499,40 @@ impl Preview {
             KeyCode::Down if self.view == View::People => {
                 self.sel = (self.sel + 1).min(n.saturating_sub(1))
             }
+            KeyCode::Up if self.view == View::Volume => {
+                self.play_sel = self.play_sel.saturating_sub(1)
+            }
+            KeyCode::Down if self.view == View::Volume => {
+                self.play_sel = (self.play_sel + 1).min(self.plays.len().saturating_sub(1))
+            }
+            KeyCode::Char(' ') if self.view == View::Volume => {
+                if let Some(on) = self.chosen.get_mut(self.play_sel) {
+                    *on = !*on;
+                }
+            }
+            KeyCode::Enter if self.view == View::Volume => {
+                self.open_play(self.play_sel);
+                self.view = View::People;
+            }
+            KeyCode::Char('w') if self.view == View::Volume => return self.write_chosen(cfg),
+            KeyCode::Char('x') if self.view == View::Volume => {
+                self.draft.drop_play(self.play_sel);
+                self.volume_changed();
+            }
+            KeyCode::Char('y') if self.view == View::Document => {
+                let at = self.doc.at();
+                let first = self.draft.source.paras[at].text();
+                let first = first.lines().next().unwrap_or("").to_string();
+                self.form = Some(Form {
+                    kind: FormKind::ImportPlay(at),
+                    title: lang::l("burada yeni oyun başlıyor", "a new play starts here").into(),
+                    fields: vec![Field::text("Ad", &first, Vec::new())],
+                    focus: 0,
+                    at: 0..0,
+                    error: None,
+                    confirmed: false,
+                });
+            }
             KeyCode::Enter if self.merging.is_some() => {
                 let from = self.merging.take().unwrap_or(self.sel);
                 if from != self.sel {
@@ -487,7 +561,7 @@ impl Preview {
                 }
             }
             _ if self.view == View::Play => self.doc.play_key(k),
-            _ if n == 0 => {}
+            _ if self.view == View::Volume || n == 0 => {}
             KeyCode::Char('m') => {
                 if self.draft.people[self.sel].merged_into.is_some() {
                     self.draft.unmerge(self.sel);
@@ -542,6 +616,13 @@ impl Preview {
             FormKind::ImportInfo => {
                 self.draft.title = form.get("Başlık").to_string();
                 self.draft.author = form.get("Yazar").to_string();
+                if let Some(at) = self.draft.play {
+                    self.draft.source.plays[at].title = self.draft.title.clone();
+                }
+            }
+            FormKind::ImportPlay(i) => {
+                self.draft.add_play(i, form.get("Ad"))?;
+                self.volume_changed();
             }
             _ => {}
         }
@@ -571,39 +652,120 @@ impl Preview {
             };
             Span::styled(format!("{name}  "), style)
         };
-        Line::from(vec![
+        let mut tabs = Vec::new();
+        if self.draft.source.plays.len() > 1 {
+            tabs.push(tab(View::Volume, lang::l("Cilt", "Volume")));
+        }
+        tabs.extend([
             tab(View::People, lang::l("Kişiler", "People")),
             tab(View::Document, lang::l("Belge", "Document")),
             tab(View::Play, lang::l("Oyun", "Play")),
             Span::styled("(Tab)", Style::default().fg(FAINT)),
-        ])
+        ]);
+        Line::from(tabs)
     }
 
     /// The play, in the plays folder under its title's file name.
     fn write(&mut self, cfg: &Config) -> Step {
+        match self.write_play(&self.draft, cfg) {
+            Ok(path) => Step::Open(path),
+            Err(e) => {
+                self.error = Some(e);
+                Step::Stay
+            }
+        }
+    }
+
+    fn write_play(&self, d: &Draft, cfg: &Config) -> Result<PathBuf, String> {
         let stem = self
             .file
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_default();
-        let title = if self.draft.title.trim().is_empty() {
+        let title = if d.title.trim().is_empty() {
             stem
         } else {
-            self.draft.title.clone()
+            d.title.clone()
         };
         let dir = cfg.plays_dir();
-        if let Err(e) = std::fs::create_dir_all(&dir) {
-            self.error = Some(format!("{}: {e}", dir.display()));
+        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        let path = dactile::library::free_path(&dir, &dactile::library::file_name(&title));
+        dactile::file::write_atomic(&path, &d.tex()).map_err(|e| format!("{e:#}"))?;
+        Ok(path)
+    }
+
+    /// The chosen plays of the volume, each under its own name. One that
+    /// can't be written doesn't stop the others.
+    fn write_chosen(&mut self, cfg: &Config) -> Step {
+        let picked: Vec<usize> = (0..self.chosen.len()).filter(|&i| self.chosen[i]).collect();
+        if picked.is_empty() {
+            self.error = Some(lang::l("Hiç oyun seçilmedi.", "No play is chosen.").into());
             return Step::Stay;
         }
-        let path = dactile::library::free_path(&dir, &dactile::library::file_name(&title));
-        match dactile::file::write_atomic(&path, &self.draft.tex()) {
-            Ok(()) => Step::Open(path),
-            Err(e) => {
-                self.error = Some(format!("{e:#}"));
-                Step::Stay
+        let plays = self.draft.plays(&picked);
+        let mut made = 0;
+        let mut failed = Vec::new();
+        for play in &plays {
+            match self.write_play(play, cfg) {
+                Ok(_) => made += 1,
+                Err(e) => failed.push(format!("{}: {e}", play.title)),
             }
         }
+        if failed.is_empty() {
+            return Step::Done(Some((
+                lang::f("{} oyun oluşturuldu.", "{} plays made.", &[&made]),
+                false,
+            )));
+        }
+        self.error = Some(lang::f(
+            "{} oyun oluşturuldu, olmayanlar: {}",
+            "{} plays made, not these: {}",
+            &[&made, &failed.join("; ")],
+        ));
+        Step::Stay
+    }
+
+    /// The volume's list, under the head.
+    fn volume_lines(&self, room: usize) -> Vec<Line<'static>> {
+        let first = self.play_sel.saturating_sub(room.saturating_sub(1));
+        self.plays
+            .iter()
+            .enumerate()
+            .skip(first)
+            .take(room)
+            .map(|(i, p)| {
+                let on = self.chosen.get(i).copied().unwrap_or(false);
+                let pages = match &p.pages {
+                    Some((a, b)) if a == b => a.clone(),
+                    Some((a, b)) => format!("{a}–{b}"),
+                    None => String::new(),
+                };
+                let guess = if p.sure {
+                    ""
+                } else {
+                    lang::l("  tahmin", "  guess")
+                };
+                let row = format!(
+                    "{} [{}] {:<34} {:>9}  {:>5} {}  {:>3} {}{guess}",
+                    if i == self.play_sel { ">" } else { " " },
+                    if on { "x" } else { " " },
+                    p.title.chars().take(34).collect::<String>(),
+                    pages,
+                    p.lines,
+                    lang::l("replik", "lines"),
+                    p.people,
+                    lang::l("kişi", "people"),
+                );
+                let style = if i == self.play_sel {
+                    Style::default().fg(BEIGE).add_modifier(Modifier::BOLD)
+                } else if on {
+                    Style::default().fg(FG)
+                } else {
+                    Style::default().fg(FAINT)
+                };
+                Line::from(Span::styled(row, style))
+            })
+            .collect()
     }
 
     fn draw(&self, f: &mut Frame, area: Rect) {
@@ -666,6 +828,12 @@ impl Preview {
             .max()
             .unwrap_or(4)
             .clamp(4, 24);
+        if self.view == View::Volume {
+            let room = (inner.height as usize)
+                .saturating_sub(lines.len() + 3)
+                .max(1);
+            lines.extend(self.volume_lines(room));
+        }
         if self.view == View::People {
             lines.push(Line::from(Span::styled(
                 format!(
@@ -742,7 +910,7 @@ impl Preview {
         }
         f.render_widget(Paragraph::new(lines), inner);
         match self.view {
-            View::People => {}
+            View::Volume | View::People => {}
             View::Document => self.doc.draw_doc(f, body),
             View::Play => self.doc.draw_play(f, body),
         }
@@ -759,12 +927,19 @@ impl Preview {
             )
         } else {
             let mut s = match self.view {
+                View::Volume => lang::l(
+                    "↑↓ · Space seç · ⏎ oyuna bak · w seçilenleri oluştur · x oyun değil · Esc vazgeç",
+                    "↑↓ · Space choose · ⏎ look at the play · w make the chosen · x not a play · Esc cancel",
+                )
+                .to_string(),
                 View::People => lang::l(
                     "⏎ içe aktar · e ad · a kısaltma · m birleştir/ayır · x karakter değil · t başlık · Esc vazgeç",
                     "⏎ import · e name · a alias · m merge/split · x not a character · t title · Esc cancel",
                 )
                 .to_string(),
-                View::Document => self.doc.help(),
+                View::Document => {
+                    self.doc.help() + lang::l(" · y burada yeni oyun", " · y a new play here")
+                }
                 View::Play => lang::l(
                     "↑↓ kaydır · ⏎ içe aktar · t başlık · Esc vazgeç",
                     "↑↓ scroll · ⏎ import · t title · Esc cancel",

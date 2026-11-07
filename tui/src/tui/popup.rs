@@ -124,6 +124,8 @@ pub enum FormKind {
     ImportPerson(usize),
     /// The title and author in the import's preview.
     ImportInfo,
+    /// The name of a new play of a volume, starting at this paragraph.
+    ImportPlay(usize),
     /// A copy of this play under a new title.
     Copy(std::path::PathBuf),
     /// A new draft of this play, next to it.

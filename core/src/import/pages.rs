@@ -825,7 +825,10 @@ pub fn play_range(src: &Source, at: usize) -> Range<usize> {
 /// What each paragraph is with one play of a volume in view: the rest is
 /// the book's.
 pub fn labels_of_play(src: &Source, at: usize) -> Vec<Page> {
-    let Range { start: from, end: to } = play_range(src, at);
+    let Range {
+        start: from,
+        end: to,
+    } = play_range(src, at);
     let body = src
         .paras
         .iter()

@@ -50,6 +50,9 @@ enum Cmd {
         /// Which play of a volume of several, by a word of its title.
         #[arg(long)]
         play: Option<String>,
+        /// Every play of a volume of several, each under its own name.
+        #[arg(long, conflicts_with_all = ["play", "out"])]
+        all: bool,
     },
     /// Builds a play's PDF next to it, in one XeLaTeX run.
     Pdf {
@@ -98,7 +101,14 @@ fn main() -> Result<()> {
             out,
             ocr,
             play,
-        }) => import(&file, out, ocr, play),
+            all,
+        }) => {
+            if all {
+                import_all(&file, ocr)
+            } else {
+                import(&file, out, ocr, play)
+            }
+        }
         Some(Cmd::Install) => {
             for line in install::install()? {
                 println!("{line}");
@@ -152,6 +162,24 @@ fn read_book(file: &std::path::Path, force: bool) -> Result<dactile::import::Sou
         eprintln!();
     }
     src
+}
+
+/// Every play of a volume in the plays folder; nothing there is written over.
+fn import_all(file: &std::path::Path, ocr: bool) -> Result<()> {
+    let cfg = dactile::config::Config::load()?;
+    let src = read_book(file, ocr)?;
+    anyhow::ensure!(src.plays.len() > 1, "bu dosyada birden çok oyun bulunmadı");
+    let draft = dactile::import::shape::shape(&src, cfg_lang(&cfg));
+    let all: Vec<usize> = (0..src.plays.len()).collect();
+    std::fs::create_dir_all(cfg.plays_dir())?;
+    for play in draft.plays(&all) {
+        let name = dactile::library::file_name(&play.title);
+        let path = dactile::library::free_path(&cfg.plays_dir(), &name);
+        dactile::file::write_atomic(&path, &play.tex())?;
+        let c = play.counts();
+        println!("{} ({} replik)", path.display(), c.lines);
+    }
+    Ok(())
 }
 
 fn import(

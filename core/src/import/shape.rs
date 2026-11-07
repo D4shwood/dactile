@@ -661,7 +661,10 @@ impl Draft {
     pub fn add_play(&mut self, i: usize, title: &str) -> Result<usize, &'static str> {
         let title = title.trim();
         if title.is_empty() {
-            return Err(crate::lang::l("Oyunun adı boş olamaz.", "The play needs a name."));
+            return Err(crate::lang::l(
+                "Oyunun adı boş olamaz.",
+                "The play needs a name.",
+            ));
         }
         if i >= self.source.paras.len() {
             return Err("no such paragraph");

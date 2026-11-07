@@ -238,11 +238,15 @@ fn volume() -> Source {
     src.plays = vec![
         Volume {
             title: "Birinci Oyun".into(),
+            start: 0,
             from: 1,
+            sure: true,
         },
         Volume {
             title: "İkinci Oyun".into(),
+            start: 7,
             from: 8,
+            sure: true,
         },
     ];
     src
@@ -275,9 +279,13 @@ fn marking_keeps_the_play_of_a_volume() {
 fn marks_stay_with_their_play_when_v_goes_away_and_back() {
     let mut p = preview(&volume());
     press(&mut p, KeyCode::Tab);
+    press(&mut p, KeyCode::Tab);
     press(&mut p, KeyCode::Char('e'));
     let marked = p.draft.labels.clone();
-    assert_ne!(marked, shape_play(&volume(), Lang::Tr, 0).labels);
+    assert_ne!(
+        marked,
+        dactile::import::shape::shape_play(&volume(), Lang::Tr, 0).labels
+    );
     press(&mut p, KeyCode::Char('v'));
     assert_eq!(p.draft.title, "İkinci Oyun");
     press(&mut p, KeyCode::Char('v'));
@@ -382,4 +390,62 @@ fn the_progress_of_ocr_is_drawn() {
         .map(|c| c.symbol())
         .collect();
     assert!(s.contains("OCR 1/9"), "{s}");
+}
+
+/// Two people, then two others, each after a page of a title.
+fn found_volume() -> Source {
+    let mut paras = Vec::new();
+    for (page, title, who) in [(0, "Kar Masalı", "SELİN"), (5, "Yol", "OZAN")] {
+        paras.push(dactile::import::Para {
+            page: Some(page),
+            ..dactile::import::Para::plain(title)
+        });
+        for i in 0..30 {
+            paras.push(dactile::import::Para {
+                page: Some(page + 1 + i / 10),
+                ..dactile::import::Para::plain(&format!("{who}. Bir söz {i}."))
+            });
+        }
+    }
+    let mut src = source(&[]);
+    src.format = dactile::import::Format::Pdf;
+    src.plays = dactile::import::pages::volume(&paras);
+    src.paras = paras;
+    src
+}
+
+#[test]
+fn a_volume_opens_on_its_plays() {
+    let mut p = preview(&found_volume());
+    assert!(p.view == View::Volume);
+    let s = screen(&p, 100, 30);
+    assert!(
+        s.contains("Kar Masalı")
+            && s.contains("Yol")
+            && (s.contains("tahmin") || s.contains("guess")),
+        "{s}"
+    );
+    press(&mut p, KeyCode::Down);
+    press(&mut p, KeyCode::Char(' '));
+    assert_eq!(p.chosen, [true, false]);
+    press(&mut p, KeyCode::Enter);
+    assert!(p.view == View::People);
+    assert_eq!(p.draft.title, "Yol");
+}
+
+#[test]
+fn what_is_no_play_goes_from_the_list() {
+    let mut p = preview(&found_volume());
+    press(&mut p, KeyCode::Down);
+    press(&mut p, KeyCode::Char('x'));
+    assert!(p.draft.source.plays.is_empty());
+    assert!(p.view == View::People);
+}
+
+#[test]
+fn small_screens_show_a_volume() {
+    let p = preview(&found_volume());
+    for (w, h) in [(20, 5), (40, 8), (80, 12)] {
+        screen(&p, w, h);
+    }
 }

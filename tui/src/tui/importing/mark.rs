@@ -346,6 +346,11 @@ impl Marking {
         false
     }
 
+    /// The first paragraph chosen.
+    pub(super) fn at(&self) -> usize {
+        self.lo()
+    }
+
     pub(super) fn ranging(&self) -> bool {
         self.ranging
     }
