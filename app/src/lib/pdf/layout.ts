@@ -66,6 +66,18 @@ export function centimetres(x: number, y: number): string {
   return `${cm(x)} ${cm(y)}`;
 }
 
+export const MAX_COPIES = 99;
+
+/// What is wrong with a print dialog's numbers, if anything. An empty box
+/// comes as null.
+export function printProblem(first: unknown, last: unknown, copies: unknown, pages: number): "" | "first" | "last" | "order" | "copies" {
+  const whole = (n: unknown, top: number) => Number.isInteger(n) && (n as number) >= 1 && (n as number) <= top;
+  if (!whole(first, pages)) return "first";
+  if (!whole(last, pages)) return "last";
+  if ((first as number) > (last as number)) return "order";
+  return whole(copies, MAX_COPIES) ? "" : "copies";
+}
+
 /// Back and forward through the places jumped from.
 export class Trail<T> {
   past: T[] = [];
