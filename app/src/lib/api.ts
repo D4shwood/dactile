@@ -15,6 +15,7 @@ export interface PlayCard {
   modified: number | null;
   elsewhere: boolean;
   depth: number;
+  book: boolean;
 }
 
 export interface TemplateCard {
@@ -284,7 +285,10 @@ export const api = {
   importDoc: () => invoke<{ text: string; page: string | null }[]>("import_doc"),
   importWrite: () => invoke<string>("import_write"),
   importVolume: () => invoke<PlayLine[]>("import_volume"),
-  importWriteAll: (picked: number[]) => invoke<Written[]>("import_write_all", { picked }),
+  importWriteAll: (picked: number[], book: { title: string; front: boolean } | null) =>
+    invoke<Written[]>("import_write_all", { picked, book }),
+  bookPdf: (path: string) => invoke<string>("book_pdf", { path }),
+  bookGather: (paths: string[], title: string) => invoke<string>("book_gather", { paths, title }),
   importDrop: () => invoke<void>("import_drop"),
   forkStart: (path: string, draft: string | null, today: string) => invoke<FormStart>("fork_start", { path, draft, today }),
   forkFile: (path: string, draft: string) => invoke<string>("fork_file", { path, draft }),

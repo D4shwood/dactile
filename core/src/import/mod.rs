@@ -7,7 +7,7 @@ pub mod ocr;
 mod odt;
 pub mod pages;
 pub mod pdf;
-mod plain;
+pub mod plain;
 pub mod shape;
 mod xml;
 
@@ -147,6 +147,24 @@ pub struct Source {
     pub body_page: Option<usize>,
     /// The plays of a volume of several, in order; else none.
     pub plays: Vec<pages::Volume>,
+}
+
+impl Source {
+    /// What a volume has before its first play, after its contents: an
+    /// introduction, a chronology.
+    pub fn front_matter(&self) -> String {
+        let end = self.plays.first().map_or(0, |p| p.start);
+        let contents = self.paras[..end]
+            .iter()
+            .position(|p| pages::is_contents(&p.text()))
+            .and_then(|i| self.paras[i].page);
+        self.paras[..end]
+            .iter()
+            .filter(|p| !p.foot && p.page > contents)
+            .map(Para::text)
+            .collect::<Vec<_>>()
+            .join("\n\n")
+    }
 }
 
 /// The extensions `read` takes.

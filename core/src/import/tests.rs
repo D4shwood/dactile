@@ -759,3 +759,25 @@ fn a_name_on_the_list_goes_with_the_shorter_one_that_speaks() {
         d.tex()
     );
 }
+
+#[test]
+fn a_group_on_the_list_goes_out_as_a_group() {
+    let text = "I. PERDE\n\nSELİN: Bir.\n\nASKER: İki.\n\nSELİN: Üç.\n\nASKER: Dört.\n";
+    let mut d = shape::shape(&plain::read(text, false), Lang::Tr);
+    d.set_cast("SELİN\n\\chargroup Kapıdakiler\n\\gkarakter ASKER | ilk nöbet\n\\gkarakter HAMAL");
+    let tex = d.tex();
+    assert!(
+        tex.contains("\\karaktergrubu[Kapıdakiler]{\n\t\\gkarakter[ilk nöbet]{ASKER}"),
+        "{tex}"
+    );
+    assert!(tex.contains("\\gkarakter{HAMAL}"), "{tex}");
+    assert_eq!(tex.matches("\\karaktergrubu").count(), 1);
+    let cast = crate::cast::Cast::of_play(&tex);
+    assert_eq!(cast.characters.len(), 3);
+}
+
+#[test]
+fn a_volumes_front_matter_starts_after_its_contents() {
+    let src = volume();
+    assert_eq!(src.front_matter(), "Chronology\n\n1990 Born.");
+}

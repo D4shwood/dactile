@@ -76,6 +76,9 @@ pub struct Preview {
     chosen: Vec<bool>,
     /// The line on in the volume's list.
     play_sel: usize,
+    /// The plays go under one book; what stands before them only if asked.
+    as_book: bool,
+    front: bool,
     /// The line on in the cast list.
     cast_sel: usize,
     ocr: bool,
@@ -384,6 +387,8 @@ impl Preview {
             chosen: vec![true; plays.len()],
             plays,
             play_sel: 0,
+            as_book: true,
+            front: false,
             cast_sel: 0,
             sel: 0,
             merging: None,
@@ -572,6 +577,8 @@ impl Preview {
                 self.view = View::People;
             }
             KeyCode::Char('w') if self.view == View::Volume => return self.write_chosen(cfg),
+            KeyCode::Char('b') if self.view == View::Volume => self.as_book = !self.as_book,
+            KeyCode::Char('f') if self.view == View::Volume => self.front = !self.front,
             KeyCode::Char('x') if self.view == View::Volume => {
                 self.draft.drop_play(self.play_sel);
                 self.volume_changed();
@@ -801,11 +808,38 @@ impl Preview {
             return Step::Stay;
         }
         let plays = self.draft.plays(&picked);
+        let root = if self.as_book {
+            let title = self
+                .file
+                .file_stem()
+                .map(|s| s.to_string_lossy().replace('_', " "))
+                .unwrap_or_default();
+            let text = if self.front {
+                self.draft.source.front_matter()
+            } else {
+                String::new()
+            };
+            let (dir, d) = (cfg.plays_dir(), &self.draft);
+            match dactile::book::make(&dir, &title, &d.author, &text, d.lang) {
+                Ok(root) => Some(root),
+                Err(e) => {
+                    self.error = Some(format!("{e:#}"));
+                    return Step::Stay;
+                }
+            }
+        } else {
+            None
+        };
         let mut made = 0;
         let mut failed = Vec::new();
-        for play in &plays {
-            match self.write_play(play, cfg) {
-                Ok(_) => made += 1,
+        // The list shows the newest on top: the first play is written last.
+        for (at, play) in plays.iter().enumerate().rev() {
+            let done = self.write_play(play, cfg).and_then(|path| match &root {
+                Some(root) => dactile::book::join(root, &path, at).map_err(|e| format!("{e:#}")),
+                None => Ok(()),
+            });
+            match done {
+                Ok(()) => made += 1,
                 Err(e) => failed.push(format!("{}: {e}", play.title)),
             }
         }
@@ -1032,10 +1066,18 @@ impl Preview {
         } else {
             let mut s = match self.view {
                 View::Volume => lang::l(
-                    "↑↓ · Space seç · ⏎ oyuna bak · w seçilenleri oluştur · x oyun değil · Esc vazgeç",
-                    "↑↓ · Space choose · ⏎ look at the play · w make the chosen · x not a play · Esc cancel",
+                    "↑↓ · Space seç · ⏎ oyuna bak · w seçilenleri oluştur · x oyun değil · b kitap · f çevre sayfaları · Esc vazgeç",
+                    "↑↓ · Space choose · ⏎ look at the play · w make the chosen · x not a play · b book · f pages around · Esc cancel",
                 )
-                .to_string(),
+                .to_string()
+                    + &lang::f(
+                        " ({} · {})",
+                        " ({} · {})",
+                        &[
+                            &if self.as_book { lang::l("kitap: evet", "book: yes") } else { lang::l("kitap: hayır", "book: no") },
+                            &if self.front { lang::l("çevre: evet", "around: yes") } else { lang::l("çevre: hayır", "around: no") },
+                        ],
+                    ),
                 View::People => lang::l(
                     "⏎ içe aktar · e ad · a kısaltma · m birleştir/ayır · x karakter değil · t başlık · Esc vazgeç",
                     "⏎ import · e name · a alias · m merge/split · x not a character · t title · Esc cancel",

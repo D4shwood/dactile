@@ -651,6 +651,11 @@ pub(super) fn attach_notes<'a>(paras: &mut [Para], notes: &[&'a Para]) -> Vec<&'
     placed
 }
 
+/// A page's heading that says it is the contents.
+pub(super) fn is_contents(t: &str) -> bool {
+    page_title(t) == Some(Page::Contents)
+}
+
 /// A word of a name in capitals, as a book's cast page has it.
 fn caps_word(w: &str) -> bool {
     let w = w.trim_matches([',', ':', ';', '.']);

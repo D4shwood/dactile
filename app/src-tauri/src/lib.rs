@@ -522,10 +522,48 @@ fn import_volume(app: Shared) -> Res<Vec<importing::PlayLine>> {
 /// The chosen plays of the volume written; the import stays open for the
 /// list of what became of them.
 #[tauri::command]
-fn import_write_all(app: Shared, picked: Vec<usize>) -> Res<Vec<importing::Written>> {
+fn import_write_all(
+    app: Shared,
+    picked: Vec<usize>,
+    book: Option<importing::Book>,
+) -> Res<Vec<importing::Written>> {
     let a = app.lock().unwrap();
     let (file, draft) = a.importing.as_ref().ok_or("no import open")?;
-    Ok(importing::write_all(file, draft, &picked, &a.cfg))
+    Ok(importing::write_all(
+        file,
+        draft,
+        &picked,
+        book.as_ref(),
+        &a.cfg,
+    ))
+}
+
+/// The book as one PDF, a cover and contents before its plays: where it is.
+#[tauri::command]
+async fn book_pdf(app: Shared<'_>, path: String) -> Res<String> {
+    let lang = play::lang_of(&app.lock().unwrap().cfg);
+    tauri::async_runtime::spawn_blocking(move || {
+        dactile::book::pdf(std::path::Path::new(&path), lang)
+            .map(|p| p.display().to_string())
+            .map_err(err)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// These plays as the parts of a new book, in this order: where it is.
+#[tauri::command]
+fn book_gather(app: Shared, paths: Vec<String>, title: String) -> Res<String> {
+    let a = app.lock().unwrap();
+    let first = paths.first().ok_or("no plays")?;
+    let first = std::path::Path::new(first);
+    let dir = first.parent().ok_or("no folder")?;
+    let author = dactile::library::read(first, a.cfg.wpm).map_or(String::new(), |p| p.author);
+    let book = dactile::book::make(dir, &title, &author, "", play::lang_of(&a.cfg)).map_err(err)?;
+    for (at, p) in paths.iter().enumerate() {
+        dactile::book::join(&book, std::path::Path::new(p), at).map_err(err)?;
+    }
+    Ok(book.display().to_string())
 }
 
 #[tauri::command]
@@ -829,6 +867,8 @@ pub fn run() {
             import_write,
             import_volume,
             import_write_all,
+            book_pdf,
+            book_gather,
             import_drop,
             fork_start,
             fork_file,

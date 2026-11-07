@@ -43,6 +43,12 @@ pub struct Sidecar {
     /// The play this one is a draft of: its file name, next to it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent: Option<String>,
+    /// A book: the plays with this one as their parent are its parts.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub book: bool,
+    /// Where this play comes in the book that is its parent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub book_at: Option<usize>,
     /// Which of `castings` is in use.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub casting: usize,

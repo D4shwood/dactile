@@ -32,6 +32,8 @@ pub struct Play {
     pub elsewhere: bool,
     /// The play this one is a draft of.
     pub parent: Option<PathBuf>,
+    /// A book of plays: those under it are its parts.
+    pub book: bool,
 }
 
 /// Whether a file is a play for the class.
@@ -70,6 +72,7 @@ pub fn read(path: &Path, wpm: u32) -> Option<Play> {
             .ok()
             .and_then(|s| s.parent)
             .map(|name| path.with_file_name(name)),
+        book: crate::sidecar::Sidecar::load(path).is_ok_and(|s| s.book),
     })
 }
 
@@ -534,6 +537,7 @@ mod tests {
             modified: Some(SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1000 - age)),
             elsewhere: false,
             parent: None,
+            book: false,
         }
     }
 

@@ -32,6 +32,8 @@ pub struct PlayCard {
     pub elsewhere: bool,
     /// How many plays deep in its family: a draft of a draft is 2.
     pub depth: usize,
+    /// A book of plays: those under it are its parts.
+    pub book: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -113,6 +115,7 @@ pub fn home(cfg: &Config) -> Home {
             modified: secs(p.modified),
             elsewhere: p.elsewhere,
             depth: up.len(),
+            book: p.book,
         })
         .collect();
     let templates = templates::all(lang_of(cfg))

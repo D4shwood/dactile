@@ -194,6 +194,93 @@
     }
   }
 
+  // ------------------------------------- several plays, and the right click
+
+  /// The paths chosen with Shift or Ctrl, past the one on view.
+  let picks = $state<string[]>([]);
+  let anchor = $state<string | null>(null);
+  /// The menu of a right click.
+  let menu = $state<{ x: number; y: number } | null>(null);
+  /// Asking the name of a book to gather the chosen plays under.
+  let gathering = $state<string | null>(null);
+  let arming2 = $state(false);
+  let working = $state("");
+
+  function clickRow(p: PlayCard, e: MouseEvent) {
+    form = null;
+    arming = null;
+    arming2 = false;
+    gathering = null;
+    if (e.shiftKey && anchor) {
+      const a = plays.findIndex((x) => x.path === anchor);
+      const b = plays.indexOf(p);
+      picks = plays.slice(Math.min(a, b), Math.max(a, b) + 1).map((x) => x.path);
+    } else if (e.ctrlKey || e.metaKey) {
+      picks = picks.includes(p.path) ? picks.filter((x) => x !== p.path) : [...picks, p.path];
+      anchor = p.path;
+    } else {
+      picks = [];
+      anchor = p.path;
+    }
+    void choose(p);
+  }
+
+  function rightClick(p: PlayCard, e: MouseEvent) {
+    e.preventDefault();
+    if (!picks.includes(p.path)) {
+      picks = [];
+      anchor = p.path;
+      void choose(p);
+    }
+    form = null;
+    arming = null;
+    menu = { x: Math.min(e.clientX, innerWidth - 230), y: Math.min(e.clientY, innerHeight - 300) };
+  }
+
+  /// A menu's choice: the menu goes, whatever it does.
+  const pick = (run: () => void) => () => {
+    menu = null;
+    run();
+  };
+
+  async function throwPicks() {
+    if (!arming2) {
+      arming2 = true;
+      return;
+    }
+    arming2 = false;
+    try {
+      for (const path of picks) await api.playThrow(path);
+      picks = [];
+      await reload();
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function gather() {
+    if (gathering === null) return;
+    try {
+      const inOrder = plays.filter((p) => picks.includes(p.path)).map((p) => p.path);
+      want = await api.bookGather(inOrder, gathering);
+      gathering = null;
+      picks = [];
+      await reload();
+    } catch (e) {
+      error = String(e);
+    }
+  }
+
+  async function bookPdf(p: PlayCard) {
+    working = l("Kitap derleniyor…", "Building the book…");
+    try {
+      await api.launch(await api.bookPdf(p.path));
+    } catch (e) {
+      error = String(e);
+    }
+    working = "";
+  }
+
   async function restore() {
     try {
       const back = await api.playRestore();
@@ -356,15 +443,32 @@
               {l(`${home.settings.plays_dir} içinde oyun yok. Yukarıdan yeni bir tane başlat.`, `No plays in ${home.settings.plays_dir}. Start one above.`)}
             </p>
           {/if}
+          {#if picks.length > 1}
+            <div class="several">
+              <span>{l(`${picks.length} oyun seçili`, `${picks.length} plays chosen`)}</span>
+              {#if gathering !== null}
+                <input aria-label={l("Kitabın adı", "The book's title")} bind:value={gathering} />
+                <button class="plain" onclick={gather}>{l("Kitap yap", "Make the book")}</button>
+                <button class="plain" onclick={() => (gathering = null)}>{l("Vazgeç", "Cancel")}</button>
+              {:else}
+                <button class="plain" onclick={() => (gathering = "")}>{l("Kitapta topla", "Gather in a book")}</button>
+                <button class="plain" onclick={throwPicks}>{arming2 ? l("Evet, çöpe at", "Yes, to the trash") : l("Çöpe at", "To the trash")}</button>
+                <button class="plain" onclick={() => ((picks = []), (arming2 = false))}>{l("Seçimi bırak", "Clear")}</button>
+              {/if}
+            </div>
+          {/if}
+          {#if working}<p class="muted">{working}</p>{/if}
           {#each plays as p}
             <button
               class="row"
               class:on={chosen?.path === p.path}
+              class:picked={picks.includes(p.path)}
               style:padding-left="{10 + p.depth * 20}px"
-              onclick={() => ((form = null), (arming = null), choose(p))}
+              onclick={(e) => clickRow(p, e)}
               ondblclick={() => open(p.path)}
+              oncontextmenu={(e) => rightClick(p, e)}
             >
-              <span class="t">{p.title}{#if p.draft}<em> · {p.draft}</em>{/if}</span>
+              <span class="t">{p.title}{#if p.draft}<em> · {p.draft}</em>{/if}{#if p.book}<em> · {l("kitap", "book")}</em>{/if}</span>
               <span class="m">{p.acts} {l("perde", "acts")} · {p.scenes} {l("sahne", "scenes")} · ~{p.minutes} {l("dk", "min")}</span>
               <span class="d">{ago(p.modified)}{p.elsewhere ? " · " + l("dışarıda", "elsewhere") : ""}</span>
             </button>
@@ -474,7 +578,71 @@
   <Import {tr} start={importing} {open} close={() => (importing = null)} />
 {/if}
 
+{#if menu && chosen}
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <div class="scrim" onclick={() => (menu = null)} oncontextmenu={(e) => (e.preventDefault(), (menu = null))}></div>
+  <div class="context" role="menu" style:left="{menu.x}px" style:top="{menu.y}px">
+    {#if picks.length > 1}
+      <button role="menuitem" onclick={pick(() => (gathering = ""))}>{l("Kitapta topla", "Gather in a book")}</button>
+      <button role="menuitem" onclick={pick(throwPicks)}>{l(`${picks.length} oyunu çöpe at`, `${picks.length} plays to the trash`)}</button>
+    {:else}
+      {@const p = chosen}
+      <button role="menuitem" onclick={pick(() => open(p.path))}>{l("Aç", "Open")}</button>
+      {#if p.book}
+        <button role="menuitem" onclick={pick(() => bookPdf(p))}>{l("Kitabın PDF'ini oluştur", "Make the book's PDF")}</button>
+      {/if}
+      <button role="menuitem" onclick={pick(() => startForm("fork"))}>{l("Yeni taslak", "New draft")}</button>
+      <button role="menuitem" onclick={pick(() => startForm("copy"))}>{l("Kopya", "Copy")}</button>
+      <button role="menuitem" onclick={pick(() => startForm("rename"))}>{l("Adını değiştir", "Rename")}</button>
+      <button role="menuitem" onclick={pick(() => api.reveal(p.path))}>{l("Dosya gezgininde göster", "Show in the file manager")}</button>
+      <button role="menuitem" onclick={pick(throwAway)}>{l("Çöpe at", "To the trash")}</button>
+    {/if}
+  </div>
+{/if}
+
 <style>
+  .scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+  }
+  .context {
+    position: fixed;
+    z-index: 41;
+    min-width: 210px;
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    background: var(--chrome);
+    border: 1px solid var(--chrome-line);
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  }
+  .context button {
+    all: unset;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .context button:hover,
+  .context button:focus-visible {
+    background: var(--chrome-line);
+  }
+  .several {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 6px 10px;
+    margin-bottom: 6px;
+    border: 1px solid var(--chrome-line);
+    border-radius: 6px;
+  }
+  .row.picked {
+    outline: 1px solid var(--claret);
+    outline-offset: -1px;
+  }
   .folder {
     display: flex;
     gap: 8px;

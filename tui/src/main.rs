@@ -53,7 +53,15 @@ enum Cmd {
         /// Every play of a volume of several, each under its own name.
         #[arg(long, conflicts_with_all = ["play", "out"])]
         all: bool,
+        /// With --all: gathers them under a book of this title.
+        #[arg(long, requires = "all")]
+        book: Option<String>,
+        /// With --book: what stands before the plays comes in too.
+        #[arg(long, requires = "book")]
+        front: bool,
     },
+    /// Builds a book as one PDF: a cover, the contents, its plays.
+    Book { book: PathBuf },
     /// Builds a play's PDF next to it, in one XeLaTeX run.
     Pdf {
         play: PathBuf,
@@ -102,12 +110,19 @@ fn main() -> Result<()> {
             ocr,
             play,
             all,
+            book,
+            front,
         }) => {
             if all {
-                import_all(&file, ocr)
+                import_all(&file, ocr, book.as_deref(), front)
             } else {
                 import(&file, out, ocr, play)
             }
+        }
+        Some(Cmd::Book { book }) => {
+            let cfg = dactile::config::Config::load()?;
+            println!("{}", dactile::book::pdf(&book, cfg_lang(&cfg))?.display());
+            Ok(())
         }
         Some(Cmd::Install) => {
             for line in install::install()? {
@@ -165,17 +180,35 @@ fn read_book(file: &std::path::Path, force: bool) -> Result<dactile::import::Sou
 }
 
 /// Every play of a volume in the plays folder; nothing there is written over.
-fn import_all(file: &std::path::Path, ocr: bool) -> Result<()> {
+fn import_all(file: &std::path::Path, ocr: bool, book: Option<&str>, front: bool) -> Result<()> {
     let cfg = dactile::config::Config::load()?;
     let src = read_book(file, ocr)?;
     anyhow::ensure!(src.plays.len() > 1, "bu dosyada birden çok oyun bulunmadı");
     let draft = dactile::import::shape::shape(&src, cfg_lang(&cfg));
     let all: Vec<usize> = (0..src.plays.len()).collect();
     std::fs::create_dir_all(cfg.plays_dir())?;
-    for play in draft.plays(&all) {
+    let root = match book {
+        Some(title) => {
+            let text = if front {
+                src.front_matter()
+            } else {
+                String::new()
+            };
+            let lang = cfg_lang(&cfg);
+            let root = dactile::book::make(&cfg.plays_dir(), title, &draft.author, &text, lang)?;
+            println!("{}", root.display());
+            Some(root)
+        }
+        None => None,
+    };
+    // The list shows the newest on top: the first play is written last.
+    for (at, play) in draft.plays(&all).iter().enumerate().rev() {
         let name = dactile::library::file_name(&play.title);
         let path = dactile::library::free_path(&cfg.plays_dir(), &name);
         dactile::file::write_atomic(&path, &play.tex())?;
+        if let Some(root) = &root {
+            dactile::book::join(root, &path, at)?;
+        }
         let c = play.counts();
         println!("{} ({} replik)", path.display(), c.lines);
     }

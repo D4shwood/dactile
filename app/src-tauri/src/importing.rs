@@ -90,6 +90,14 @@ pub struct Written {
     pub error: Option<String>,
 }
 
+/// The chosen plays as parts of one book.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Book {
+    pub title: String,
+    /// What stands before the plays comes in too.
+    pub front: bool,
+}
+
 /// Stops the reading under way.
 pub static STOP: AtomicBool = AtomicBool::new(false);
 
@@ -377,22 +385,60 @@ pub fn volume(d: &Draft) -> Vec<PlayLine> {
 
 /// These plays of the volume, each under its own name: one that can't be
 /// written doesn't stop the others, and nothing there is written over.
-pub fn write_all(file_from: &Path, d: &Draft, picked: &[usize], cfg: &Config) -> Vec<Written> {
-    d.plays(picked)
+pub fn write_all(
+    file_from: &Path,
+    d: &Draft,
+    picked: &[usize],
+    book: Option<&Book>,
+    cfg: &Config,
+) -> Vec<Written> {
+    let root = book.and_then(|b| {
+        let front = if b.front {
+            d.source.front_matter()
+        } else {
+            String::new()
+        };
+        dactile::book::make(&cfg.plays_dir(), &b.title, &d.author, &front, d.lang).ok()
+    });
+    // The list shows the newest on top: the first play is written last.
+    let plays = d.plays(picked);
+    let mut out: Vec<Written> = plays
         .iter()
-        .map(|play| match write(file_from, play, cfg) {
-            Ok(path) => Written {
-                title: play.title.clone(),
-                path: Some(path.display().to_string()),
+        .enumerate()
+        .rev()
+        .map(|(at, play)| {
+            let made = write(file_from, play, cfg).and_then(|path| {
+                if let Some(root) = &root {
+                    dactile::book::join(root, &path, at)?;
+                }
+                Ok(path)
+            });
+            match made {
+                Ok(path) => Written {
+                    title: play.title.clone(),
+                    path: Some(path.display().to_string()),
+                    error: None,
+                },
+                Err(e) => Written {
+                    title: play.title.clone(),
+                    path: None,
+                    error: Some(format!("{e:#}")),
+                },
+            }
+        })
+        .collect();
+    out.reverse();
+    if let (Some(root), Some(b)) = (&root, book) {
+        out.insert(
+            0,
+            Written {
+                title: b.title.clone(),
+                path: Some(root.display().to_string()),
                 error: None,
             },
-            Err(e) => Written {
-                title: play.title.clone(),
-                path: None,
-                error: Some(format!("{e:#}")),
-            },
-        })
-        .collect()
+        );
+    }
+    out
 }
 
 #[cfg(test)]

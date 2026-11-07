@@ -56,6 +56,12 @@
   let chosen = $state<boolean[]>([]);
   let written = $state<Written[] | null>(null);
   let writing = $state(false);
+  /// The plays go under one book; what stands before them only if asked.
+  let asBook = $state(true);
+  let front = $state(false);
+  let bookTitle = $state(
+    untrack(() => (start.file.split("/").pop() ?? "").replace(/\.[^.]*$/, "").replaceAll("_", " ")),
+  );
   const count = $derived(chosen.filter(Boolean).length);
 
   async function list() {
@@ -86,7 +92,8 @@
   async function writeAll() {
     writing = true;
     try {
-      written = await api.importWriteAll(chosen.flatMap((on, i) => (on ? [i] : [])));
+      const picked = chosen.flatMap((on, i) => (on ? [i] : []));
+      written = await api.importWriteAll(picked, asBook ? { title: bookTitle, front } : null);
       error = "";
     } catch (err) {
       error = String(err);
@@ -334,6 +341,17 @@
             `${volume.length} plays were found in this book. Choose those to take; click a play's name to look it over.`,
           )}
         </p>
+        <div class="bookopts">
+          <label><input type="checkbox" bind:checked={asBook} /> {l("Tek kitap altında topla", "Gather them under one book")}</label>
+          {#if asBook}
+            <input class="naming" aria-label={l("Kitabın adı", "The book's title")} bind:value={bookTitle} />
+            <label
+              title={l("Girişi, kronolojiyi ve oyunlardan önce gelen öteki sayfaları kitabın kendi dosyasına alır", "Takes the introduction, the chronology and the other pages before the plays into the book's own file")}
+            >
+              <input type="checkbox" bind:checked={front} /> {l("Çevre sayfalarını da al", "Take the pages around them too")}
+            </label>
+          {/if}
+        </div>
         <table>
           <thead>
             <tr>
@@ -512,8 +530,8 @@
             )}
           </p>
           <pre class="muted syntax">{l(
-              "AD | hakkında not\nLİSTEDEKİ AD = REPLİKTEKİ AD | not\n+ yalnızca toplu anılanlar\n# yorum",
-              "NAME | a note on them\nNAME ON THE LIST = NAME OVER THE LINES | note\n+ those named only in a group\n# a comment",
+              "AD | hakkında not\nLİSTEDEKİ AD = REPLİKTEKİ AD | not\n\\chargroup Grubun adı\n\\gkarakter AD | not\n+ yalnızca toplu anılanlar\n# yorum",
+              "NAME | a note on them\nNAME ON THE LIST = NAME OVER THE LINES | note\n\\chargroup The group's name\n\\gkarakter NAME | note\n+ those named only in a group\n# a comment",
             )}</pre>
           <textarea aria-label={l("Kişi listesi", "Cast list")} spellcheck="false" bind:value={castText}></textarea>
           <div class="castfoot">
@@ -548,6 +566,13 @@
 </div>
 
 <style>
+  .bookopts {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin: 8px 0 12px;
+  }
   .castlist {
     flex: 1;
     min-height: 0;

@@ -73,6 +73,8 @@ pub struct Draft {
     pub cast_list: Option<String>,
     /// Who that list has, in its order.
     order: Vec<String>,
+    /// Its groups: what is said of each, and who is in it.
+    groups: Vec<(String, Vec<String>)>,
     /// Which play of a volume this is.
     pub play: Option<usize>,
     /// The volume's other plays as they were left, corrections and all.
@@ -1026,6 +1028,7 @@ fn shape_as(src: &Source, lang: Lang, labels: Vec<Page>) -> Draft {
         left: Vec::new(),
         cast_list: None,
         order: Vec::new(),
+        groups: Vec::new(),
         title,
         author,
         people: sh.people,
@@ -1220,8 +1223,8 @@ impl Draft {
     }
 
     /// The cast a person a line, to edit: `NAME | what is said of them`,
-    /// `NAME ON THE LIST = NAME OVER THEIR LINES`, and `+ those named only in
-    /// a group`.
+    /// `NAME ON THE LIST = NAME OVER THEIR LINES`, `+ those named only in a
+    /// group`, and `\\chargroup Who they are` with `\\gkarakter NAME` lines.
     pub fn cast_text(&self) -> String {
         if let Some(t) = &self.cast_list {
             return t.clone();
@@ -1266,7 +1269,9 @@ impl Draft {
             }
         }
         self.order.clear();
+        self.groups.clear();
         let mut others = Vec::new();
+        let mut in_group = false;
         for line in text.lines().map(str::trim) {
             if line.is_empty() || line.starts_with('#') {
                 continue;
@@ -1275,6 +1280,23 @@ impl Draft {
                 others.push(group.trim().to_string());
                 continue;
             }
+            if let Some(desc) = ["\\chargroup", "\\karaktergrubu"]
+                .iter()
+                .find_map(|c| line.strip_prefix(c))
+            {
+                let desc = desc.trim().trim_matches(['[', ']', '{', '}']).trim();
+                self.groups.push((desc.to_string(), Vec::new()));
+                in_group = true;
+                continue;
+            }
+            let member = ["\\gkarakter", "\\gcharacter"]
+                .iter()
+                .find_map(|c| line.strip_prefix(c));
+            if member.is_some() && !in_group {
+                self.groups.push((String::new(), Vec::new()));
+            }
+            in_group = member.is_some();
+            let line = member.map_or(line, str::trim);
             let (name, said) = match line.split_once('|') {
                 Some((n, s)) => (n.trim(), Some(s.trim()).filter(|s| !s.is_empty())),
                 None => (line, None),
@@ -1315,8 +1337,15 @@ impl Draft {
             if let Some(f) = full {
                 self.people[i].full = Some(f.to_string());
             }
-            self.order.push(key(&self.people[i].name));
+            let k = key(&self.people[i].name);
+            if member.is_some()
+                && let Some((_, who)) = self.groups.last_mut()
+            {
+                who.push(k.clone());
+            }
+            self.order.push(k);
         }
+        self.groups.retain(|(_, who)| !who.is_empty());
         self.others = others.join(" ");
     }
 
@@ -1630,8 +1659,36 @@ impl Draft {
     pub fn tex(&self) -> String {
         let t = crate::library::template(&self.title, &self.author, self.lang);
         let mut decls = String::new();
-        for i in self.cast() {
+        let cast = self.cast();
+        let mut grouped = vec![false; self.groups.len()];
+        for &i in &cast {
             let p = &self.people[i];
+            let k = key(&p.name);
+            if let Some(g) = self.groups.iter().position(|(_, who)| who.contains(&k)) {
+                if !std::mem::replace(&mut grouped[g], true) {
+                    let (desc, who) = &self.groups[g];
+                    decls.push_str(&format!(
+                        "\\karaktergrubu[{}]{{\n",
+                        escape_pasted(desc, false)
+                    ));
+                    for &j in &cast {
+                        let m = &self.people[j];
+                        if who.contains(&key(&m.name)) {
+                            let say = m.desc.as_deref().or(m.full.as_deref());
+                            let say = say.map_or(String::new(), |s| {
+                                format!("[{}]", escape_pasted(s, false))
+                            });
+                            decls.push_str(&format!(
+                                "\t\\gkarakter{say}{{{}}}{{{}}}\n",
+                                escape_pasted(&m.name, false),
+                                m.alias
+                            ));
+                        }
+                    }
+                    decls.push_str("}\n");
+                }
+                continue;
+            }
             let script = escape_pasted(&p.name, false);
             let desc = escape_pasted(p.desc.as_deref().unwrap_or(""), false);
             let full = p
