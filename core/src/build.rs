@@ -138,7 +138,7 @@ pub fn build(play: &Path) -> Result<Built, Failed> {
         .ok_or_else(|| failed("no file name".into()))?;
     let log_path = play.with_extension("log");
     // A table of contents is one run behind, like the casts without Dactile.
-    let toc = text.contains("\\tableofcontents");
+    let toc = text.contains("\\tableofcontents") || crate::info::contents_page(&text);
     let path = format!(".:{}:", classes.display());
     let mut runs = 0;
     loop {

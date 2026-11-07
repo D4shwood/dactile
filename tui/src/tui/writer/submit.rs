@@ -217,6 +217,9 @@ impl Writer {
                 if let Some(e) = info::set_cast_own_page(&t, flag("Kişiler ayrı")) {
                     t = dactile::tex::apply(&t, &[e]);
                 }
+                if let Some(e) = info::set_contents_page(&t, flag("Kapaktan sonra")) {
+                    t = dactile::tex::apply(&t, &[e]);
+                }
                 if let Some(e) = info::set_latin_cast(&t, flag("Latince")) {
                     t = dactile::tex::apply(&t, &[e]);
                 }

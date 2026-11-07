@@ -842,6 +842,10 @@ impl Writer {
             info::cast_own_page(&self.buf.text),
         ));
         fields.push(Field::flag(
+            "Kapaktan sonra içindekiler",
+            info::contents_page(&self.buf.text),
+        ));
+        fields.push(Field::flag(
             "Latince başlık (Dramatis Personae)",
             info::latin_cast(&self.buf.text),
         ));

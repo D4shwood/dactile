@@ -143,6 +143,22 @@ pub fn set_latin_cast(text: &str, on: bool) -> Option<Edit> {
     }
 }
 
+/// Whether a contents page follows the cover, under either name.
+pub fn contents_page(text: &str) -> bool {
+    tex::commands(text, source::split(text).preamble)
+        .iter()
+        .any(|c| CONTENTS.contains(&c.name))
+}
+
+pub fn set_contents_page(text: &str, on: bool) -> Option<Edit> {
+    let cmds = tex::commands(text, source::split(text).preamble);
+    match (cmds.iter().find(|c| CONTENTS.contains(&c.name)), on) {
+        (None, true) => add_line(text, "\\icindekiler"),
+        (Some(c), false) => Some(remove_line(text, c.span.clone())),
+        _ => None,
+    }
+}
+
 /// Where `\kisiler` ends, and whether a `*` lets the play go on under it.
 fn cast_page(text: &str) -> Option<(usize, bool)> {
     let body = source::split(text).body;
@@ -347,6 +363,7 @@ pub fn set_scene_align(text: &str, side: Side) -> Option<Edit> {
     })
 }
 
+const CONTENTS: [&str; 2] = ["icindekiler", "playcontents"];
 const FONT: &str = "playfont";
 const FONT_SIZE: &str = "playfontsize";
 
@@ -430,6 +447,22 @@ mod tests {
     use crate::tex::apply;
 
     const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
+
+    #[test]
+    fn the_contents_line_comes_and_goes() {
+        let plain = "\\documentclass{tiyatro}\n\\title{Kar}\n\\begin{document}\n\\end{document}\n";
+        assert!(!contents_page(plain));
+        assert!(set_contents_page(plain, false).is_none());
+        let with = tex::apply(plain, &[set_contents_page(plain, true).unwrap()]);
+        assert!(contents_page(&with));
+        assert_eq!(
+            tex::apply(&with, &[set_contents_page(&with, false).unwrap()]),
+            plain
+        );
+        assert!(contents_page(
+            &plain.replace("\\title", "\\playcontents\n\\title")
+        ));
+    }
 
     #[test]
     fn the_font_line_comes_and_goes() {

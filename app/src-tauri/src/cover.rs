@@ -22,6 +22,7 @@ pub struct CoverForm {
     pub side: String,
     pub own_page: bool,
     pub latin: bool,
+    pub contents: bool,
     pub parts: Vec<Part>,
 }
 
@@ -49,6 +50,7 @@ pub fn read(text: &str) -> CoverForm {
         side: info::scene_align(text).word().to_string(),
         own_page: info::cast_own_page(text),
         latin: info::latin_cast(text),
+        contents: info::contents_page(text),
         parts: all,
     }
 }
@@ -74,6 +76,7 @@ fn updated(text: &str, form: &CoverForm) -> String {
     put(&|t| info::set_scene_align(t, side));
     put(&|t| info::set_cast_own_page(t, form.own_page));
     put(&|t| info::set_latin_cast(t, form.latin));
+    put(&|t| info::set_contents_page(t, form.contents));
     for p in &form.parts {
         put(&|t| info::set_part_look(t, &p.command, &p.part, &p.look));
     }

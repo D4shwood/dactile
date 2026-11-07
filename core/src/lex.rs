@@ -478,6 +478,8 @@ fn is_known_command(name: &str) -> bool {
         "gizlikarakter",
         "editedby",
         "dramatispersonae",
+        "icindekiler",
+        "playcontents",
         "coverstyle",
         "caststyle",
         "karaktergrubu",

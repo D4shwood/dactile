@@ -205,3 +205,17 @@ xelatex -interaction=nonstopmode -halt-on-error size.tex > /dev/null 2>&1 || { g
 sed 's/\\begin{document}/\\playfontsize{big}\n&/' cover.tex > wrong.tex
 ! xelatex -interaction=nonstopmode -halt-on-error wrong.tex > /dev/null 2>&1 || { echo "FAIL: took a size that isn't one"; exit 1; }
 echo "ok: play font size"
+
+# \icindekiler: its own page after the cover, in the play's words; the play
+# still starts on page 1. Without it, no such page.
+sed 's/\\begin{document}/\\icindekiler\n&/' ornek-oyun.tex > contents.tex
+for pass in 1 2; do xelatex -interaction=nonstopmode -halt-on-error contents.tex > /dev/null 2>&1 || { grep -A6 '^! ' contents.log; echo "FAIL: contents"; exit 1; }; done
+pdftotext -f 2 -l 2 contents.pdf - | grep -q 'İçindekiler' || { echo "FAIL: no contents page"; exit 1; }
+pdftotext -f 2 -l 2 contents.pdf - | grep -q 'Sahne 1' || { echo "FAIL: contents empty"; exit 1; }
+if pdftotext -f 3 -l 3 contents.pdf - | grep -qi 'çindekiler\|ÇINDEKILER'; then echo "FAIL: contents in the next page's head"; exit 1; fi
+if pdftotext -f 1 -l 1 contents.pdf - | grep -q 'İçindekiler'; then echo "FAIL: contents on the cover"; exit 1; fi
+pdftotext -f 3 -l 3 contents.pdf - | grep -qx '1' || { echo "FAIL: the play doesn't start on page 1"; exit 1; }
+if pdftotext ornek-oyun.pdf - | grep -q 'İçindekiler'; then echo "FAIL: contents nobody asked for"; exit 1; fi
+sed 's/\\begin{document}/\\playcontents\n&/' ornek-oyun.tex > contents2.tex
+xelatex -interaction=nonstopmode -halt-on-error contents2.tex > /dev/null 2>&1 || { echo "FAIL: playcontents"; exit 1; }
+echo "ok: contents"

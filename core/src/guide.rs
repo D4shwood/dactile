@@ -279,6 +279,13 @@ pub const ENTRIES: &[Entry] = &[
     ),
     e(
         Cover,
+        "\\icindekiler",
+        "Kapaktan sonra içindekiler sayfası: perdeler, sahneler, önsöz, notlar. Oyun yine 1. sayfadan başlar. İngilizcesi \\playcontents.",
+        "A contents page after the cover: acts, scenes, preface, notes. The play still starts on page 1. Also \\playcontents.",
+        "",
+    ),
+    e(
+        Cover,
         "\\playfont",
         "Oyunun yazı tipi; PDF ve Word buna uyar. Bilgisayarda yoksa sınıfın yazı tipi kalır.",
         "The play's font, for the PDF and Word alike. If it isn't installed, the class's stays.",

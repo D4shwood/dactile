@@ -110,6 +110,7 @@
 \newcommand \scriptendlocalizedtext { Son }
 \newcommand \draftlocalizedtext { TASLAK }
 \newcommand \editedbylocalizedtext { Düzenleyen }
+\newcommand \contentslocalizedtext { İçindekiler }
 \newcommand \latincasttitlename { Dramatis~Personae }
 \newcommand \beattext { Sus. }
 % \girer{se,oz}: (SELİN ile OZAN girerler.)
@@ -284,6 +285,22 @@
 \cs_new_protected:Npn \__tiy_cover_line:nNn #1#2#3
   { \tl_if_blank:VF #2 { \__tiy_part:nn { cover_#1 } { #3 #2 } } }
 
+% \icindekiler in the preamble: a contents page after the cover. It has no
+% number of its own: the play still starts on page 1.
+\bool_new:N \g__tiy_contents_bool
+\NewDocumentCommand \icindekiler { } { \bool_gset_true:N \g__tiy_contents_bool }
+\NewDocumentCommand \playcontents { } { \bool_gset_true:N \g__tiy_contents_bool }
+\cs_new_protected:Npn \__tiy_contents:
+  {
+    \cs_set:Npn \contentsname { \contentslocalizedtext }
+    \tableofcontents
+    \thispagestyle { empty }
+    \clearpage
+    % Its title stays out of the next page's head.
+    \markboth { } { }
+    \setcounter { page } { 1 }
+  }
+
 \RenewDocumentCommand \maketitle { }
   {
     \begin { titlepage }
@@ -321,4 +338,5 @@
     \__tiy_cover_line:nNn { telephone } \g__tiy_telephone_tl { }
     \__tiy_cover_line:nNn { email } \g__tiy_email_tl { }
     \end { titlepage }
+    \bool_if:NT \g__tiy_contents_bool { \__tiy_contents: }
   }

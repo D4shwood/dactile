@@ -7,6 +7,7 @@ use crate::lang;
 use crate::lex::{self, Inline, Kind};
 use crate::outline::roman;
 use crate::render::{Doc, move_line};
+use crate::shelf;
 use crate::tex;
 use anyhow::Result;
 use std::io::{Cursor, Write};
@@ -187,6 +188,24 @@ fn inline(text: &str, range: Range<usize>, doc: &Doc, dialogue: bool, look: Look
     out
 }
 
+/// The contents: the acts and scenes by name. Word can't know the pages
+/// before it lays them out, so none are given.
+fn contents(text: &str, doc: &Doc) -> String {
+    let title = lang::l("İÇİNDEKİLER", "CONTENTS");
+    let mut out = para("Heading1", "<w:pageBreakBefore/>", &run(title, PLAIN));
+    for u in shelf::units(text, doc) {
+        if u.hidden {
+            continue;
+        }
+        let name = run(&tex::unescape_text(&u.name()), PLAIN);
+        out.push_str(&match u.kind {
+            shelf::UnitKind::Act => para("Normal", "", &name),
+            shelf::UnitKind::Scene => para("Normal", "<w:ind w:left=\"360\"/>", &name),
+        });
+    }
+    out
+}
+
 fn cast_rows(text: &str, cast: &Cast) -> String {
     let full = |c: &cast::Character| c.full.clone().unwrap_or_else(|| c.script.clone());
     let title = if info::latin_cast(text) {
@@ -355,6 +374,9 @@ fn document_xml(text: &str, doc: &Doc, title: &str, author: &str) -> String {
         let said = format!("{}: {}", lang::l("Düzenleyen", "Edited by"), editor.trim());
         out.push_str(&line("Author", &said));
     }
+    if info::contents_page(text) {
+        out.push_str(&contents(text, doc));
+    }
     if !doc.cast.characters.is_empty() {
         out.push_str(&cast_rows(text, &doc.cast));
     }
@@ -455,6 +477,15 @@ pub fn export(play: &Path, text: &str) -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_contents_list_the_acts_and_scenes() {
+        let play = "\\documentclass{tiyatro}\n\\icindekiler\n\\begin{document}\n#perde Kar\n\n#sahne Yol\n\n\\end{document}\n";
+        let doc = Doc::new(play);
+        let out = contents(play, &doc);
+        assert!(out.contains("İÇİNDEKİLER") || out.contains("CONTENTS"));
+        assert!(out.contains("Kar") && out.contains("Yol"));
+    }
 
     #[test]
     fn the_play_font_reaches_the_styles() {

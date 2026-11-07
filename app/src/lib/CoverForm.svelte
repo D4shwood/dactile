@@ -138,6 +138,7 @@
       {/if}
       <label class="tick"><input type="checkbox" bind:checked={form.final_copy} /> {l("Son hâl (final)", "Final copy")}</label>
       <label class="tick"><input type="checkbox" bind:checked={form.own_page} /> {l("Kişiler ayrı sayfada", "Cast on a page of its own")}</label>
+      <label class="tick"><input type="checkbox" bind:checked={form.contents} /> {l("Kapaktan sonra içindekiler", "Contents after the cover")}</label>
       <label class="tick"><input type="checkbox" bind:checked={form.latin} /> {l("Latince başlık: Dramatis Personae", "Latin title: Dramatis Personae")}</label>
       <label class="line">
         {l("Sahne başlıkları", "Scene headings")}

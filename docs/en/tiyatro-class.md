@@ -88,6 +88,9 @@ The cover has `title`, `author`, `editedby`, `draft`, `starred`, `copyright`, `a
 `others`. A wrong name or value stops the build. In Dactile, **Cover and cast** on the
 Home tab writes these lines.
 
+`\icindekiler` (or `\playcontents`) adds a contents page after the cover; the play
+still starts on page 1. In Dactile it is a tick in **Cover details**.
+
 `\kisiler` ends its page; with `\kisiler*` the play starts on the same page.
 `\dramatispersonae` makes the cast title Latin, whatever the play's language.
 

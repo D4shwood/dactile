@@ -277,6 +277,8 @@ const LATEX: &[&str] = &[
     "maketitle",
     "editedby",
     "dramatispersonae",
+    "icindekiler",
+    "playcontents",
     "coverstyle",
     "caststyle",
     "title",

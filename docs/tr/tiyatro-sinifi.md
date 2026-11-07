@@ -88,6 +88,9 @@ Kapakta `title`, `author`, `editedby`, `draft`, `starred`, `copyright`, `address
 `others` ayarlanır. Yanlış ad ya da değer derlemeyi durdurur. Dactile'da Giriş
 sekmesindeki **Kapak ve kişiler** bu satırları yazar.
 
+`\icindekiler` (İngilizcesi `\playcontents`) kapaktan sonra bir içindekiler sayfası
+ekler; oyun yine 1. sayfadan başlar. Dactile'da **Oyun bilgisi** formundan açılır.
+
 `\kisiler` sonunda sayfa kapanır; `\kisiler*` yazılırsa oyun aynı sayfada başlar.
 `\dramatispersonae`, kişiler başlığını oyunun dili ne olursa olsun Latince yapar.
 

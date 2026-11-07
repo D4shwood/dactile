@@ -53,6 +53,7 @@ export interface CoverForm {
   side: string;
   own_page: boolean;
   latin: boolean;
+  contents: boolean;
   parts: { command: string; part: string; look: PartLook }[];
 }
 

@@ -20,7 +20,7 @@
 % look only needs a different theme.
 
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesClass{tiyatro}[2026/11/07 v1.10.0 Dactile stage play class]
+\ProvidesClass{tiyatro}[2026/11/07 v1.11.0 Dactile stage play class]
 
 \newif\iftiyatrodraft
 \tiyatrodrafttrue
