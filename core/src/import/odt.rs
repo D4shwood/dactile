@@ -68,17 +68,20 @@ impl Styles {
 
 pub fn read(bytes: &[u8]) -> Result<Source> {
     let mut zip = super::open_zip(bytes)?;
-    let content = super::member(&mut zip, "content.xml")?
-        .context("no content.xml: not an OpenDocument text")?;
+    let content = super::member(&mut zip, "content.xml")?.context(crate::lang::l(
+        "content.xml yok: bu bir OpenDocument metni değil",
+        "no content.xml: not an OpenDocument text",
+    ))?;
     let mut styles = Styles::default();
     if let Some(s) = super::member(&mut zip, "styles.xml")? {
         styles.add(&xml::parse(&s)?);
     }
     let root = xml::parse(&content)?;
     styles.add(&root);
-    let text = root
-        .find("office:text")
-        .context("no text in the document")?;
+    let text = root.find("office:text").context(crate::lang::l(
+        "belgede metin yok",
+        "no text in the document",
+    ))?;
     let mut paras = Vec::new();
     block(text, &styles, &mut paras);
     let (mut title, mut author) = (None, None);

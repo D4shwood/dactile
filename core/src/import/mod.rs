@@ -184,7 +184,8 @@ fn read_with(path: &Path, job: Option<&ocr::Job>) -> Result<Source> {
             )
         );
     };
-    let bytes = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
+    let bytes = std::fs::read(path)
+        .with_context(|| crate::lang::f("{} okunamadı", "Couldn't read {}", &[&path.display()]))?;
     let mut src = match format {
         Format::Docx => docx::read(&bytes),
         Format::Odt => odt::read(&bytes),
@@ -195,7 +196,7 @@ fn read_with(path: &Path, job: Option<&ocr::Job>) -> Result<Source> {
         Format::Markdown => Ok(plain::read(&text_of(&bytes), true)),
         Format::Text => Ok(plain::read(&text_of(&bytes), false)),
     }
-    .with_context(|| format!("reading {}", path.display()))?;
+    .with_context(|| crate::lang::f("{} okunamadı", "Couldn't read {}", &[&path.display()]))?;
     src.paras = src
         .paras
         .into_iter()
@@ -303,11 +304,14 @@ fn member(zip: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>, name: &str) -> Resu
     let mut f = match zip.by_name(name) {
         Ok(f) => f,
         Err(zip::result::ZipError::FileNotFound) => return Ok(None),
-        Err(e) => return Err(e).with_context(|| format!("opening {name}")),
+        Err(e) => {
+            return Err(e)
+                .with_context(|| crate::lang::f("{} açılamadı", "Couldn't open {}", &[&name]));
+        }
     };
     let mut s = String::new();
     f.read_to_string(&mut s)
-        .with_context(|| format!("reading {name}"))?;
+        .with_context(|| crate::lang::f("{} okunamadı", "Couldn't read {}", &[&name]))?;
     Ok(Some(s))
 }
 
