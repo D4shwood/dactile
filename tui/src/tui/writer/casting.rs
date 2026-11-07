@@ -140,7 +140,7 @@ impl Writer {
         }
         if p.confirm {
             p.confirm = false;
-            if k.code == KeyCode::Char('x') && castings > 0 {
+            if k.code == KeyCode::Char('x') && castings > 0 && self.editable() {
                 let c = self.sidecar.casting.min(castings - 1);
                 self.sidecar.castings.remove(c);
                 self.sidecar.casting = c.saturating_sub(1);
@@ -169,7 +169,13 @@ impl Writer {
             }
             (roles::Tab::Casting, KeyCode::Char('n')) => self.casting_form(true),
             (roles::Tab::Casting, KeyCode::Char('r')) => self.casting_form(false),
-            (roles::Tab::Casting, KeyCode::Char('x')) if castings > 0 => p.confirm = true,
+            (roles::Tab::Casting, KeyCode::Char('x')) if castings > 0 => {
+                if !self.read_only {
+                    p.confirm = true;
+                } else {
+                    self.editable();
+                }
+            }
             (roles::Tab::Casting, KeyCode::Char('k')) => p.pick = true,
             (roles::Tab::Casting, KeyCode::Char('z')) if n > 0 => {
                 let alias = self.doc.cast.characters[p.sel].alias.clone();
@@ -209,7 +215,7 @@ impl Writer {
             (roles::Tab::Stats, KeyCode::Down) => p.scroll += 1,
             (roles::Tab::Stats, KeyCode::PageUp) => p.scroll = p.scroll.saturating_sub(10),
             (roles::Tab::Stats, KeyCode::PageDown) => p.scroll += 10,
-            (roles::Tab::Stats, KeyCode::Char('w')) => self.wpm_form(),
+            (roles::Tab::Stats, KeyCode::Char('w')) => self.wpm_form(false),
             _ => {}
         }
     }
@@ -287,12 +293,12 @@ impl Writer {
         });
     }
 
-    pub(super) fn wpm_form(&mut self) {
+    pub(super) fn wpm_form(&mut self, settings: bool) {
         if !self.editable() {
             return;
         }
         self.popup = Popup::Form(Form {
-            kind: FormKind::Wpm,
+            kind: FormKind::Wpm(settings),
             title: lang::l(
                 "bu oyunun konuşma hızı (süreler buna göre)",
                 "this play's pace (the times follow it)",

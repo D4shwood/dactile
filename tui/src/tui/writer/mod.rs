@@ -11,8 +11,11 @@ mod palette;
 mod ribbon;
 mod saving;
 mod scenes;
+mod settings;
 mod spelling;
 mod submit;
+#[cfg(test)]
+mod tests;
 mod typing;
 
 use notes::{NOTES_W, NoteMark, NotesView};
@@ -170,6 +173,8 @@ pub struct Writer {
     problems: Vec<Problem>,
     /// Where F5 last stopped for a problem: F5 there again builds anyway.
     stopped_at: Option<usize>,
+    /// The line of the play the last build stopped on, for Alt+G.
+    failed_line: Option<usize>,
     /// Words the play knows: names and words added by hand, lower case.
     known: HashSet<String>,
     spell_cache: HashMap<String, bool>,
@@ -268,6 +273,8 @@ enum Popup {
     Ribbon(ribbon::Nav),
     /// Dosya: its page, the entry chosen.
     Backstage(usize),
+    /// The play's own settings: its pace (0) and its words after.
+    PlaySettings(usize),
 }
 
 impl Writer {
@@ -375,6 +382,7 @@ impl Writer {
             aside_out: None,
             problems: Vec::new(),
             stopped_at: None,
+            failed_line: None,
             known: HashSet::new(),
             spell_cache: HashMap::new(),
             misspelt: Vec::new(),

@@ -301,40 +301,14 @@ pub fn merge(text: &str, from: &str, into: &str) -> Result<Made, String> {
     })
 }
 
-/// Where the preamble says who the list doesn't name, and how.
-fn others_at(text: &str) -> Option<tex::Arg<'_>> {
-    let pre = dactile::source::split(text).preamble;
-    ["\\digerkisiler", "\\othercast"].iter().find_map(|c| {
-        let at = text[pre.clone()].find(c)? + pre.start;
-        tex::group(text, at + c.len())
-    })
-}
-
 /// Those under the cast list, as they read.
 pub fn others(text: &str) -> String {
-    others_at(text).map_or(String::new(), |a| tex::unescape_text(a.inner))
+    dcast::others(text)
 }
 
 /// Those under the cast list put as `words`; none, and the line goes.
 pub fn set_others(text: &str, words: &str) -> Option<Made> {
-    let words = words.split_whitespace().collect::<Vec<_>>().join(" ");
-    if words == others(text) {
-        return None;
-    }
-    let esc = dactile::buffer::escape_pasted(&words, false);
-    let edit = match others_at(text) {
-        Some(a) if words.is_empty() => {
-            let from = text[..a.span.start].rfind('\\').unwrap_or(a.span.start);
-            let end = a.span.end + usize::from(text[a.span.end..].starts_with('\n'));
-            Edit::new(from..end, "")
-        }
-        Some(a) => Edit::new(a.inner_span, esc),
-        None => {
-            let at = dactile::source::split(text).preamble.end;
-            Edit::new(at..at, format!("\\digerkisiler{{{esc}}}\n"))
-        }
-    };
-    let t = tex::apply(text, &[edit]);
+    let t = tex::apply(text, &[dcast::set_others(text, words)?]);
     Some(Made {
         change: diff(text, &t),
         cursor: None,

@@ -462,6 +462,42 @@ pub fn rename_group(cast: &Cast, g: usize, desc: &str) -> Option<Edit> {
     ))
 }
 
+/// Where the preamble says who the list doesn't name, and how.
+fn others_at(text: &str) -> Option<tex::Arg<'_>> {
+    let pre = source::split(text).preamble;
+    ["\\digerkisiler", "\\othercast"].iter().find_map(|c| {
+        let at = text[pre.clone()].find(c)? + pre.start;
+        tex::group(text, at + c.len())
+    })
+}
+
+/// Those under the cast list, as they read.
+pub fn others(text: &str) -> String {
+    others_at(text).map_or(String::new(), |a| tex::unescape_text(a.inner))
+}
+
+/// Those under the cast list put as `words`; none, and the line goes. No
+/// edit: they read so already.
+pub fn set_others(text: &str, words: &str) -> Option<Edit> {
+    let words = words.split_whitespace().collect::<Vec<_>>().join(" ");
+    if words == others(text) {
+        return None;
+    }
+    let esc = crate::buffer::escape_pasted(&words, false);
+    Some(match others_at(text) {
+        Some(a) if words.is_empty() => {
+            let from = text[..a.span.start].rfind('\\').unwrap_or(a.span.start);
+            let end = a.span.end + usize::from(text[a.span.end..].starts_with('\n'));
+            Edit::new(from..end, "")
+        }
+        Some(a) => Edit::new(a.inner_span, esc),
+        None => {
+            let at = source::split(text).preamble.end;
+            Edit::new(at..at, format!("\\digerkisiler{{{esc}}}\n"))
+        }
+    })
+}
+
 /// The group goes; its members stay, as rows of the cast table where it was,
 /// with the group's name for a description.
 pub fn dissolve_group(text: &str, cast: &Cast, g: usize) -> Option<Edit> {
@@ -985,6 +1021,21 @@ mod tests {
         let out7 = apply(PLAY, &move_member(&cast, "co", true, PLAY).unwrap());
         let c7 = Cast::of_play(&out7);
         assert_eq!(c7.characters[c7.groups[0].members[0]].alias, "co");
+    }
+
+    #[test]
+    fn others_under_the_list() {
+        let t = "\\documentclass{tiyatro}\n\\begin{document}\nX\n\\end{document}\n";
+        let set = |t: &str, w: &str| apply(t, &[set_others(t, w).unwrap()]);
+        let one = set(t, "Koylu & coban");
+        assert!(
+            one.contains("\\digerkisiler{Koylu \\& coban}\n\\begin{document}"),
+            "{one}"
+        );
+        assert_eq!(others(&one), "Koylu & coban");
+        assert!(set_others(&one, "Koylu & coban").is_none());
+        assert!(set(&one, "Konuklar").contains("\\digerkisiler{Konuklar}"));
+        assert_eq!(set(&one, ""), t);
     }
 
     #[test]

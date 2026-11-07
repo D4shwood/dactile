@@ -16,6 +16,10 @@ impl Writer {
                 self.backstage_key(k);
                 true
             }
+            Popup::PlaySettings(_) => {
+                self.play_settings_key(k);
+                true
+            }
             Popup::Menu(m) => match k.code {
                 KeyCode::Up => {
                     m.up();
@@ -400,13 +404,17 @@ impl Writer {
         match k.code {
             KeyCode::Esc => {
                 self.popup = match form.kind {
-                    FormKind::Actor(_) | FormKind::CastingName(_) | FormKind::Wpm => Popup::Roles,
-                    FormKind::NewMember(_) | FormKind::GroupName(_) | FormKind::MoveTo(_) => {
-                        Popup::Cast(CastPanel {
-                            sel: 0,
-                            by_lines: false,
-                        })
+                    FormKind::Wpm(true) => Popup::PlaySettings(0),
+                    FormKind::Actor(_) | FormKind::CastingName(_) | FormKind::Wpm(false) => {
+                        Popup::Roles
                     }
+                    FormKind::NewMember(_)
+                    | FormKind::GroupName(_)
+                    | FormKind::MoveTo(_)
+                    | FormKind::Others => Popup::Cast(CastPanel {
+                        sel: 0,
+                        by_lines: false,
+                    }),
                     _ => Popup::None,
                 };
                 return;

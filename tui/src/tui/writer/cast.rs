@@ -7,6 +7,45 @@ impl Writer {
         self.sidecar.wpm.unwrap_or(self.default_wpm)
     }
 
+    fn others_form(&mut self) {
+        if !self.editable() {
+            return;
+        }
+        let now = dcast::others(&self.buf.text);
+        self.popup = Popup::Form(Form {
+            kind: FormKind::Others,
+            title: lang::l(
+                "kişiler listesinin altındakiler (boş: satır gider)",
+                "those under the cast list (empty: the line goes)",
+            )
+            .into(),
+            fields: vec![Field::text("Diğer kişiler", &now, Vec::new())],
+            focus: 0,
+            at: 0..0,
+            error: None,
+            confirmed: false,
+        });
+    }
+
+    /// Where `alias` first speaks, the panel gone.
+    fn go_to_first_line(&mut self, alias: &str) {
+        let first = self.doc.blocks[self.doc.body.clone()]
+            .iter()
+            .find(|b| matches!(&b.kind, Kind::Line { alias: a, .. } if a == alias));
+        match first.map(|b| b.span.start) {
+            Some(at) => {
+                self.popup = Popup::None;
+                self.go(at, false);
+                self.snap_forward();
+                self.keep_visible();
+            }
+            None => self.say(
+                lang::l("Bu kişi hiç konuşmuyor.", "This character never speaks."),
+                false,
+            ),
+        }
+    }
+
     pub(super) fn cast_entries(&self, by_lines: bool) -> Vec<Entry> {
         let st = panels::stats(&self.doc, &self.buf.text);
         panels::entries(&self.doc, &st, by_lines)
@@ -48,6 +87,12 @@ impl Writer {
                 }
             }
             KeyCode::Char('o') if ctrl => self.popup = Popup::None,
+            KeyCode::Char('o') => self.others_form(),
+            KeyCode::Char('f') => {
+                if let Some(a) = alias {
+                    self.go_to_first_line(&a);
+                }
+            }
             KeyCode::Up | KeyCode::Down if alt && !by_lines => {
                 // Move the row (a character of the table, or a whole group).
                 let row = match chosen {
@@ -299,6 +344,7 @@ impl Writer {
             PAct::InsertInline(s) => self.insert_snippet(s, false),
             PAct::FoldRibbon => self.fold_ribbon(),
             PAct::Info => self.popup = Popup::Backstage(0),
+            PAct::PlaySettings => self.popup = Popup::PlaySettings(0),
             PAct::SaveTemplate => {
                 let title = self.doc.title(&self.buf.text).unwrap_or_default();
                 self.popup = Popup::Form(Form {

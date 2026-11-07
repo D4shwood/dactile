@@ -131,11 +131,9 @@ impl Writer {
                     self.say(&format!("{e:#}"), true);
                 }
             }
-            KeyCode::Char('o') if alt => {
-                if let Err(e) = build::open(&build::pdf_path(&self.path)) {
-                    self.say(&format!("{e:#}"), true);
-                }
-            }
+            KeyCode::F(12) => self.open_pdf(),
+            KeyCode::Char('o') if alt => self.open_pdf(),
+            KeyCode::Char('g') if alt => self.go_to_failure(),
             KeyCode::F(6) => {
                 self.theme = theme::next_theme(&self.theme).to_string();
                 self.say(
@@ -273,7 +271,7 @@ impl Writer {
                 }
             }
             KeyCode::Enter => {
-                if self.editable() {
+                if self.editable() && !self.answer() {
                     let nl = source::line_ending(&self.buf.text);
                     self.raw_here = false;
                     self.buf.insert(nl);
@@ -283,11 +281,13 @@ impl Writer {
             KeyCode::Backspace => self.backspace(),
             KeyCode::Delete => self.delete(),
             KeyCode::Tab => {
-                if let Some(a) = self.ghost()
-                    && self.editable()
-                {
-                    self.buf.insert(&format!("\\{a} "));
-                    self.edited();
+                if let Some(a) = self.ghost() {
+                    if self.editable() {
+                        self.buf.insert(&format!("\\{a} "));
+                        self.edited();
+                    }
+                } else if self.speech_start().is_some() && self.editable() {
+                    self.next_character();
                 }
             }
             KeyCode::Char(c) if !ctrl && !alt => self.type_char(c),
@@ -595,6 +595,100 @@ impl Writer {
             return None;
         }
         dactile::writing::next_speaker(&self.doc, self.block()?)
+    }
+
+    /// The line of dialogue the cursor is in, with nothing chosen: its
+    /// block, and where the speaker's `\alias` ends.
+    fn speech(&self) -> Option<(usize, usize)> {
+        if self.buf.anchor.is_some() || self.raw_now() {
+            return None;
+        }
+        let b = self.block()?;
+        let block = &self.doc.blocks[b];
+        let Kind::Line { alias, .. } = &block.kind else {
+            return None;
+        };
+        Some((b, block.span.start + 1 + alias.len()))
+    }
+
+    /// As `speech`, with nothing said yet before the cursor.
+    fn speech_start(&self) -> Option<(usize, usize)> {
+        let (b, name) = self.speech()?;
+        let cur = self.buf.cursor;
+        let said = self.buf.text.get(name..cur)?;
+        said.trim().is_empty().then_some((b, name))
+    }
+
+    /// Enter at the end of a line of dialogue: a new line for the one who
+    /// answers; on a line with nothing said, the dialogue ends. Whether it
+    /// was that sort of Enter.
+    fn answer(&mut self) -> bool {
+        let Some((b, name)) = self.speech() else {
+            return false;
+        };
+        let block = &self.doc.blocks[b];
+        let (span, cur) = (block.span.clone(), self.buf.cursor);
+        if cur < name || !self.buf.text[cur..span.end].trim().is_empty() {
+            return false;
+        }
+        if self.buf.text[name..span.end].trim().is_empty() {
+            let at = span.start;
+            self.buf
+                .apply(&[dactile::tex::Edit::new(span, String::new())], at);
+        } else {
+            let next = self.answerer(b);
+            let nl = source::line_ending(&self.buf.text);
+            self.buf.insert(&format!("{nl}\\{next} "));
+        }
+        self.edited();
+        true
+    }
+
+    /// Who answers block `b`: the last other one to speak in its scene, or
+    /// the first other one of the cast.
+    fn answerer(&self, b: usize) -> String {
+        let Kind::Line { alias, .. } = &self.doc.blocks[b].kind else {
+            return String::new();
+        };
+        let before = self.doc.blocks[self.doc.body.start..b]
+            .iter()
+            .rev()
+            .take_while(|x| !matches!(x.kind, Kind::Scene { .. } | Kind::Act { .. }))
+            .find_map(|x| match &x.kind {
+                Kind::Line { alias: a, .. } if a != alias => Some(a.clone()),
+                _ => None,
+            });
+        let cast = &self.doc.cast.characters;
+        before
+            .or_else(|| {
+                cast.iter()
+                    .find(|c| c.alias != *alias)
+                    .map(|c| c.alias.clone())
+            })
+            .unwrap_or_else(|| alias.clone())
+    }
+
+    /// Tab right after the speaker: the next character speaks this line.
+    fn next_character(&mut self) {
+        let Some((b, name)) = self.speech_start() else {
+            return;
+        };
+        let block = &self.doc.blocks[b];
+        let Kind::Line { alias, .. } = &block.kind else {
+            return;
+        };
+        let cast = &self.doc.cast.characters;
+        let Some(i) = cast.iter().position(|c| c.alias == *alias) else {
+            return;
+        };
+        let next = cast[(i + 1) % cast.len()].alias.clone();
+        let start = block.span.start;
+        let cursor = self.buf.cursor + next.len() - alias.len();
+        self.buf.apply(
+            &[dactile::tex::Edit::new(start..name, format!("\\{next}"))],
+            cursor,
+        );
+        self.edited();
     }
 
     pub(super) fn at_blank_line(&self) -> bool {

@@ -342,7 +342,37 @@ impl Writer {
         self.start_aside(move || build::build_aside(&play, &tex, "", &out).map(|b| (b.pdf, 1)));
     }
 
+    pub(super) fn open_pdf(&mut self) {
+        if let Err(e) = build::open(&build::pdf_path(&self.path)) {
+            self.say(&format!("{e:#}"), true);
+        }
+    }
+
+    /// Alt+G: the line the last build stopped on. Never by itself: writing
+    /// goes on during a build.
+    pub(super) fn go_to_failure(&mut self) {
+        let Some(line) = self.failed_line else {
+            self.say(
+                lang::l(
+                    "Satırı bilinen bir hata yok.",
+                    "No build error with a line.",
+                ),
+                false,
+            );
+            return;
+        };
+        let at = line_start(&self.buf.text, line);
+        self.preamble_open |= at < self.doc.parts.body.start;
+        self.buf.cursor = at;
+        self.buf.anchor = None;
+        self.raw_here = true;
+        self.relayout();
+        self.snap_back();
+        self.keep_visible();
+    }
+
     pub(super) fn built(&mut self, result: Result<Built, Failed>) {
+        self.failed_line = result.as_ref().err().and_then(|e| e.line);
         match result {
             Ok(b) => {
                 let pages = b.pages.map_or(String::new(), |n| {
@@ -357,14 +387,21 @@ impl Writer {
                     false,
                 );
             }
-            Err(e) => self.say(
-                &lang::f(
-                    "PDF olmadı: {} (Alt+L log)",
-                    "No PDF: {} (Alt+L: the log)",
-                    &[&e],
-                ),
-                true,
-            ),
+            Err(e) => {
+                let go = if e.line.is_some() {
+                    lang::l("Alt+G satıra gider, ", "Alt+G goes to the line, ")
+                } else {
+                    ""
+                };
+                self.say(
+                    &lang::f(
+                        "PDF olmadı: {} ({}Alt+L log)",
+                        "No PDF: {} ({}Alt+L: the log)",
+                        &[&e, &go],
+                    ),
+                    true,
+                );
+            }
         }
     }
 
@@ -393,5 +430,30 @@ impl Writer {
         }
         let _ = file::snapshot(&self.history, &self.buf.text, true);
         Ok(())
+    }
+}
+
+/// Where line `n` starts, from 1; past the end, the end.
+fn line_start(text: &str, n: usize) -> usize {
+    if n <= 1 {
+        return 0;
+    }
+    text.match_indices('\n')
+        .nth(n - 2)
+        .map_or(text.len(), |(i, _)| i + 1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lines_are_counted_from_one() {
+        let t = "bir\niki\nüç\n";
+        assert_eq!(line_start(t, 0), 0);
+        assert_eq!(line_start(t, 1), 0);
+        assert_eq!(line_start(t, 2), 4);
+        assert_eq!(line_start(t, 3), 8);
+        assert_eq!(line_start(t, 9), t.len());
     }
 }

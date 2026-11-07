@@ -131,9 +131,11 @@ pub fn draw_cast(f: &mut Frame, area: Rect, doc: &Doc, text: &str, side: &Sideca
         .max()
         .unwrap_or(0)
         .max(12);
-    let w = (fixed + desc_w + 6).max(78) as u16;
-    // Header, list, a blank, the chosen one's details, keys.
-    let h = list.len() as u16 + 6;
+    let w = (fixed + desc_w + 6).max(94) as u16;
+    let others = dactile::cast::others(text);
+    // Header, list, a blank, those under the list, the chosen one's details,
+    // keys.
+    let h = list.len() as u16 + 6 + u16::from(!others.is_empty());
     let r = centered(area, w.min(110), h);
     float(f, r);
     let order = if p.by_lines {
@@ -279,11 +281,23 @@ pub fn draw_cast(f: &mut Frame, area: Rect, doc: &Doc, text: &str, side: &Sideca
             },
         );
     }
+    if !others.is_empty() {
+        let label = lang::l("Diğer kişiler: ", "Others: ");
+        f.render_widget(
+            Paragraph::new(fit(&format!("{label}{others}"), inn.width as usize))
+                .style(theme::base().fg(MUTED)),
+            Rect {
+                y: inn.y + inn.height.saturating_sub(3),
+                height: 1,
+                ..inn
+            },
+        );
+    }
     let in_group = matches!(list.get(p.sel), Some(Entry::Character(i)) if doc.cast.characters[*i].group.is_some());
     let keys = if p.by_lines {
         lang::l(
-            "⏎ kart  e düzenle  n yeni  t gruba  m birleştir  b böl  d sil  s sıra  Esc",
-            "⏎ card  e edit  n new  t group  m merge  b split  d delete  s order  Esc",
+            "⏎ kart  e düzenle  n yeni  t gruba  m birleştir  b böl  d sil  f ilk replik  o diğerleri  s sıra  Esc",
+            "⏎ card  e edit  n new  t group  m merge  b split  d delete  f first line  o others  s order  Esc",
         )
     } else if matches!(list.get(p.sel), Some(Entry::Group(_))) {
         lang::l(
@@ -292,13 +306,13 @@ pub fn draw_cast(f: &mut Frame, area: Rect, doc: &Doc, text: &str, side: &Sideca
         )
     } else if in_group {
         lang::l(
-            "⏎ kart  e düzenle  n yeni üye  t başka gruba  Alt+↑↓ sıra  d sil  Esc",
-            "⏎ card  e edit  n new member  t other group  Alt+↑↓ order  d delete  Esc",
+            "⏎ kart  e düzenle  n yeni üye  t başka gruba  Alt+↑↓ sıra  d sil  f ilk replik  o diğerleri  Esc",
+            "⏎ card  e edit  n new member  t other group  Alt+↑↓ order  d delete  f first line  o others  Esc",
         )
     } else {
         lang::l(
-            "⏎ kart  e düzenle  n yeni  g grup  t gruba  m birleştir  b böl  d sil  Esc",
-            "⏎ card  e edit  n new  g group  t to group  m merge  b split  d delete  Esc",
+            "⏎ kart  e düzenle  n yeni  g grup  t gruba  m birleştir  b böl  d sil  f ilk replik  o diğerleri  Esc",
+            "⏎ card  e edit  n new  g group  t to group  m merge  b split  d delete  f first line  o others  Esc",
         )
     };
     keys_line(f, inn, keys);

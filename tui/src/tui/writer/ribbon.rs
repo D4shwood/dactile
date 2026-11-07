@@ -182,6 +182,13 @@ pub fn tabs() -> Vec<Tab> {
                             PAct::InsertInline("\\ic{‸}"),
                         ),
                         b("Es", "Pause", "⋯", "", PAct::Insert("\\beat‸")),
+                        b(
+                            "Dipnot",
+                            "Footnote",
+                            "†",
+                            "",
+                            PAct::InsertInline("\\dipnot{‸}"),
+                        ),
                     ],
                 ),
                 g(
@@ -217,6 +224,7 @@ pub fn tabs() -> Vec<Tab> {
                     vec![
                         b("Sayfa", "Pages", "▯", "F7", k(F(7), n)),
                         b("Kaynak", "Source", "⟨⟩", "F2", k(F(2), n)),
+                        b("PDF", "PDF", "⎙", "F12", k(F(12), n)),
                         b(
                             "Kişi tanımları",
                             "Cast lines",
@@ -380,6 +388,7 @@ pub fn backstage() -> Vec<(&'static str, &'static str, &'static str, PAct)> {
             PAct::SaveTemplate,
         ),
         ("Oyun bilgisi", "Cover details", "Alt+İ", k(Char('i'), a)),
+        ("Oyun ayarları", "Play settings", "", PAct::PlaySettings),
         ("Kapat", "Close", "^Q", k(Char('q'), c)),
     ]
 }
@@ -1163,6 +1172,10 @@ impl Writer {
                     PAct::SaveTemplate => lang::l(
                         "Kapak, kişiler, perde ve sahneler kalır, replikler kalmaz; ana ekranda Yeni'de çıkar.",
                         "Keeps the cover, cast, acts and scenes, not the lines; it shows under New on the home screen.",
+                    ),
+                    PAct::PlaySettings => lang::l(
+                        "Bu oyunun konuşma hızı, taslağı olduğu oyun ve sözlüğü.",
+                        "This play's pace, the play it is a draft of, and its words.",
                     ),
                     PAct::Key(KeyCode::Char('q'), _) => lang::l(
                         "Kaydeder ve ana ekrana döner.",

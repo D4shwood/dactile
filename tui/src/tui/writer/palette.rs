@@ -26,6 +26,8 @@ pub enum PAct {
     FoldRibbon,
     /// Dosya's page, on the play's details.
     Info,
+    /// The play's own settings.
+    PlaySettings,
 }
 
 /// An entry of the command palette.

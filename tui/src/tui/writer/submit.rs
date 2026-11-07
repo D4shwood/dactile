@@ -84,17 +84,32 @@ impl Writer {
                 self.save_sidecar();
                 self.popup = Popup::Roles;
             }
-            FormKind::Wpm => match form.get("Dakikada kelime").trim().parse::<u32>() {
+            FormKind::Wpm(settings) => match form.get("Dakikada kelime").trim().parse::<u32>() {
                 Ok(n) if (30..=400).contains(&n) => {
                     self.sidecar.wpm = Some(n);
                     self.save_sidecar();
-                    self.popup = Popup::Roles;
+                    self.popup = if settings {
+                        Popup::PlaySettings(0)
+                    } else {
+                        Popup::Roles
+                    };
                 }
                 _ => {
                     let e = lang::l("30 ile 400 arası bir sayı.", "A number from 30 to 400.");
                     return Err(Box::new((form, e.into())));
                 }
             },
+            FormKind::Others => {
+                if let Some(e) = dcast::set_others(&self.buf.text, form.get("Diğer kişiler")) {
+                    let t = dactile::tex::apply(&self.buf.text, &[e]);
+                    self.replace_text(t);
+                    self.say(lang::l("Diğer kişiler yazıldı.", "Others written."), false);
+                }
+                self.popup = Popup::Cast(CastPanel {
+                    sel: 0,
+                    by_lines: false,
+                });
+            }
             FormKind::Summary(back) => {
                 let at = form.at.start;
                 self.set_summary(at, form.get("Özet"));

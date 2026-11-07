@@ -143,8 +143,10 @@ pub enum FormKind {
     Actor(String),
     /// A casting's name: a new one, or the one in use renamed.
     CastingName(bool),
-    /// The play's words a minute.
-    Wpm,
+    /// The play's words a minute: asked from its settings, or the numbers.
+    Wpm(bool),
+    /// Those under the cast list.
+    Others,
     /// A new member of a group (an index into `Cast::groups`).
     NewMember(usize),
     /// A group's name: a new group, or this one renamed.

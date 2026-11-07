@@ -192,6 +192,10 @@ impl Writer {
                 let sel = *sel;
                 self.draw_backstage(f, area, sel);
             }
+            Popup::PlaySettings(sel) => {
+                let sel = *sel;
+                self.draw_play_settings(f, area, sel);
+            }
             Popup::Palette(q, sel) => {
                 let items = palette_items(q);
                 panels::draw_palette(f, area, q, &items, *sel);
@@ -346,6 +350,7 @@ impl Writer {
                 | Popup::Search(..)
                 | Popup::Ribbon(_)
                 | Popup::Backstage(_)
+                | Popup::PlaySettings(_)
         );
         let cursor = self.cursor_stop().filter(|c| {
             !covered && c.row >= self.shown && c.row < self.shown + area.height as usize
