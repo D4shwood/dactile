@@ -423,6 +423,44 @@ pub fn open_url(url: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Sends pages `first` to `last` of a PDF to the default printer, `copies`
+/// times, and waits for `lp` to take them.
+pub fn print(pdf: &Path, first: usize, last: usize, copies: usize) -> anyhow::Result<()> {
+    still_there(pdf)?;
+    let out = outside("lp")
+        .args(print_args(first, last, copies))
+        .arg("--")
+        .arg(pdf)
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                anyhow::anyhow!(
+                    "{}",
+                    lang::l(
+                        "lp bulunamadı: yazdırmak için CUPS'ı kur.",
+                        "lp not found: install CUPS to print.",
+                    )
+                )
+            } else {
+                anyhow::anyhow!("lp: {e}")
+            }
+        })?;
+    if !out.status.success() {
+        anyhow::bail!("lp: {}", String::from_utf8_lossy(&out.stderr).trim());
+    }
+    Ok(())
+}
+
+fn print_args(first: usize, last: usize, copies: usize) -> Vec<String> {
+    vec![
+        "-n".into(),
+        copies.max(1).to_string(),
+        "-P".into(),
+        format!("{first}-{last}"),
+    ]
+}
+
 fn web_address(url: &str) -> bool {
     let low = url.to_lowercase();
     ["http://", "https://", "mailto:"]
@@ -541,6 +579,12 @@ mod tests {
     }
 
     const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
+
+    #[test]
+    fn what_lp_is_told() {
+        assert_eq!(print_args(2, 5, 3), ["-n", "3", "-P", "2-5"]);
+        assert_eq!(print_args(1, 1, 0), ["-n", "1", "-P", "1-1"]);
+    }
 
     #[test]
     fn only_web_addresses_open() {

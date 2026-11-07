@@ -683,6 +683,23 @@ fn pdf(path: String) -> Res<tauri::ipc::Response> {
         .map_err(|e| e.to_string())
 }
 
+/// The window over the whole screen, for the PDF viewer.
+#[tauri::command]
+fn full_screen(window: tauri::WebviewWindow, on: bool) -> Res<()> {
+    window.set_fullscreen(on).map_err(|e| e.to_string())
+}
+
+/// Pages of a PDF to the default printer. `lp` may take a moment: off the
+/// main thread.
+#[tauri::command]
+async fn pdf_print(path: String, first: usize, last: usize, copies: usize) -> Res<()> {
+    tauri::async_runtime::spawn_blocking(move || {
+        dactile::build::print(std::path::Path::new(&path), first, last, copies).map_err(err)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// A web address from a PDF's link, in the desktop's browser.
 #[tauri::command]
 fn open_url(url: String) -> Res<()> {
@@ -820,6 +837,8 @@ pub fn run() {
             note_fix,
             note_authors,
             pdf,
+            full_screen,
+            pdf_print,
             open_url,
             sync_view,
             sync_edit,

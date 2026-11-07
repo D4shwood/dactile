@@ -51,6 +51,11 @@
   // A rectangle being dragged out, in the window's coordinates.
   let band = $state<{ x: number; y: number; w: number; h: number } | null>(null);
   let doc = $state.raw<pdfjs.PDFDocumentProxy | null>(null);
+  let full = $state(false);
+  let present = $state(false);
+  let clock = $state(false);
+  let laser = $state<{ x: number; y: number } | null>(null);
+  let printing = $state<{ first: number; last: number; copies: number } | null>(null);
   let size = $state(0);
   let labels = $state.raw<string[] | null>(null);
   let search: Search | undefined = $state();
@@ -130,12 +135,14 @@
     apply();
     sheets.fit(v.fit);
     if (!v.fit) sheets.setZoom(clampZoom(v.zoom));
+    pinching(host);
   });
 
   // A drawing under way stops, and the document closes.
   onDestroy(() => {
     drawn++;
     endLens();
+    if (full || present) api.fullScreen(false).catch(() => {});
     sheets?.destroy();
     release?.();
     release = null;
@@ -228,6 +235,97 @@
     if (!o) return;
     if (side === "right") choose({ right: o.right ? "" : "search" });
     else choose({ left: o.left ? "" : "thumbs" });
+  }
+
+  // ------------------------------------------------------- the whole screen
+
+  function setFull(on: boolean) {
+    full = on;
+    api.fullScreen(on).catch((e) => say(String(e), true));
+  }
+
+  /// One page at a time, on black. The grid and the fit chosen come back
+  /// after.
+  function startShow() {
+    if (!sheets || !pages) return;
+    menu = false;
+    present = true;
+    api.fullScreen(true).catch((e) => say(String(e), true));
+    sheets.set({ columns: 1, rows: 1, offset: 0, single: true }, false, turn);
+    sheets.fit("window");
+    host?.focus();
+  }
+
+  function endShow() {
+    present = false;
+    laser = null;
+    clock = false;
+    if (!full) api.fullScreen(false).catch((e) => say(String(e), true));
+    apply();
+    if (!o) return;
+    if (o.fit) sheets?.fit(o.fit);
+    else sheets?.setZoom(clampZoom(o.zoom));
+    host?.focus();
+  }
+
+  /// In a presentation: left next, right previous, the middle button the
+  /// laser pointer while held.
+  function showDown(e: PointerEvent) {
+    e.preventDefault();
+    if (e.button === 0) sheets?.go(page + 1);
+    else if (e.button === 2) sheets?.go(page - 1);
+    else if (e.button === 1) {
+      laser = { x: e.clientX, y: e.clientY };
+      drag(
+        e,
+        (m) => (laser = { x: m.clientX, y: m.clientY }),
+        () => (laser = null),
+      );
+    }
+  }
+
+  function showKey(e: KeyboardEvent): boolean {
+    const keys: Record<string, () => void> = {
+      Escape: endShow,
+      ArrowRight: () => sheets?.go(page + 1),
+      ArrowDown: () => sheets?.go(page + 1),
+      PageDown: () => sheets?.go(page + 1),
+      " ": () => sheets?.go(page + 1),
+      ArrowLeft: () => sheets?.go(page - 1),
+      ArrowUp: () => sheets?.go(page - 1),
+      PageUp: () => sheets?.go(page - 1),
+      Home: () => sheets?.go(1),
+      End: () => sheets?.go(pages),
+      c: () => (clock = !clock),
+      C: () => (clock = !clock),
+    };
+    const f = keys[e.key];
+    if (!f) return false;
+    e.preventDefault();
+    e.stopPropagation();
+    f();
+    return true;
+  }
+
+  // ------------------------------------------------------- printing
+
+  function openPrint() {
+    menu = false;
+    printing = { first: 1, last: pages, copies: 1 };
+  }
+
+  async function print() {
+    const p = printing;
+    if (!p || result?.kind !== "built") return;
+    const first = Math.min(Math.max(1, p.first), pages);
+    const last = Math.min(Math.max(first, p.last), pages);
+    try {
+      await api.pdfPrint(result.pdf, first, last, Math.max(1, p.copies));
+      printing = null;
+      say(l("Yazıcıya gönderildi.", "Sent to the printer."));
+    } catch (e) {
+      say(String(e), true);
+    }
   }
 
   /// A quarter turn, for the session: the file stays as it is.
@@ -376,6 +474,7 @@
   /// Keys act here only while the focus is in the viewer; those not taken
   /// go on to the writer.
   function onkey(e: KeyboardEvent) {
+    if (present && showKey(e)) return;
     const mod = e.ctrlKey || e.metaKey;
     const typing = (e.target as HTMLElement).matches?.("input, select, textarea");
     const take = (f: () => void) => {
@@ -388,6 +487,7 @@
       if (e.key === "ArrowRight") return take(forward);
       return;
     }
+    if (mod && e.shiftKey && (e.key === "f" || e.key === "F")) return take(() => setFull(!full));
     if (mod && !e.shiftKey) {
       if (e.key === "=" || e.key === "+") return take(() => setZoom(stepZoom(zoom, true)));
       if (e.key === "-") return take(() => setZoom(stepZoom(zoom, false)));
@@ -403,6 +503,7 @@
     }
     if (e.key === "Escape") return take(escape);
     if (e.key === "F3" && !mod) return take(() => findAgain(e.shiftKey));
+    if (e.key === "F5" && !mod) return take(startShow);
     if (typing || mod) return;
     if (e.key === "Home") return take(() => act("first"));
     if (e.key === "End") return take(() => act("last"));
@@ -420,8 +521,10 @@
   /// Esc closes one thing at a time, the last opened first.
   function escape() {
     if (glass) endLens();
+    else if (printing) printing = null;
     else if (menu) menu = false;
     else if (band) band = null;
+    else if (full) setFull(false);
     else if (o?.right) {
       choose({ right: "" });
       host?.focus();
@@ -463,6 +566,37 @@
     setZoom(zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1), e.clientX - r.left, e.clientY - r.top);
   }
 
+  // Pinching on a touch screen; WebKit's gesture events where they exist.
+  let pinchFrom = 0;
+  let pinchZoom = 100;
+  const apart = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+
+  function pinching(el: HTMLElement) {
+    el.addEventListener("touchstart", (e) => {
+      if (e.touches.length !== 2) return;
+      pinchFrom = apart(e.touches);
+      pinchZoom = zoom;
+    });
+    el.addEventListener(
+      "touchmove",
+      (e) => {
+        if (e.touches.length !== 2 || !pinchFrom) return;
+        e.preventDefault();
+        setZoom((pinchZoom * apart(e.touches)) / pinchFrom);
+      },
+      { passive: false },
+    );
+    el.addEventListener("touchend", () => (pinchFrom = 0));
+    el.addEventListener("gesturestart", (e) => {
+      e.preventDefault();
+      pinchZoom = zoom;
+    });
+    el.addEventListener("gesturechange", (e) => {
+      e.preventDefault();
+      setZoom(pinchZoom * (e as unknown as { scale: number }).scale);
+    });
+  }
+
   /// The mouse's back and forward buttons.
   function onmouseup(e: MouseEvent) {
     if (e.button === 3) back();
@@ -487,6 +621,7 @@
   }
 
   function ondown(e: PointerEvent) {
+    if (present) return showDown(e);
     if (e.button !== 0 || !sheets || !host) return;
     if (e.target === host && e.offsetX > host.clientWidth) return; // Its scroll bar.
     const mod = e.ctrlKey || e.metaKey;
@@ -583,6 +718,11 @@
     <button title={l("Görünüm seçenekleri", "View options")} aria-label={l("Görünüm seçenekleri", "View options")} aria-expanded={menu} class:on={menu} onclick={() => (menu = !menu)}><Icon name="more" /></button>
     {#if menu && o}
       <div class="drop">
+        <div class="row">
+          <button class="word" title={l("Tam ekran (Ctrl+Shift+F)", "Full screen (Ctrl+Shift+F)")} onclick={() => setFull(!full)}>{l("Tam ekran", "Full screen")}</button>
+          <button class="word" title={l("Sunum (F5, odak görüntüleyicideyken)", "Presentation (F5, with the focus in the viewer)")} disabled={none} onclick={startShow}>{l("Sunum", "Presentation")}</button>
+          <button class="word" title={l("Yazdır", "Print")} disabled={none} onclick={openPrint}>{l("Yazdır", "Print")}</button>
+        </div>
         <label><input type="checkbox" checked={o.continuous} onchange={(e) => choose({ continuous: e.currentTarget.checked })} /> {l("Sürekli", "Continuous")}</label>
         <label><input type="checkbox" checked={o.single_step} onchange={(e) => choose({ single_step: e.currentTarget.checked })} /> {l("Tek sayfa adımı", "Single page step")}</label>
         <div class="row">
@@ -625,8 +765,10 @@
 {/snippet}
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-<aside class="pdf" class:wide bind:this={root} tabindex="-1" onkeydown={onkey} onmouseup={onmouseup}>
-  {#if o?.toolbar}
+<aside class="pdf" class:wide={wide || full || present} class:present bind:this={root} tabindex="-1" onkeydown={onkey} onmouseup={onmouseup}>
+  {#if present}
+    <!-- No bars in a presentation. -->
+  {:else if o?.toolbar}
     <TopBar {tr} bind:mode bind:box fit={o.fit} {page} {pages} label={labels?.[page - 1] ?? ""} {canBack} {canForward} {wide} disabled={none} {act} go={goPage} {more} />
   {:else if o}
     <button class="unhide" title={l("Araç çubuğunu göster", "Show toolbar")} aria-label={l("Araç çubuğunu göster", "Show toolbar")} onclick={() => act("hide")}><Icon name="show" /></button>
@@ -651,12 +793,12 @@
   {/if}
   {#if building}<p class="muted note">{tr ? "derleniyor…" : "building…"}</p>{/if}
   <div class="middle">
-    {#if o?.left}
+    {#if o?.left && !present}
       <Side {tr} tab={o.left} {doc} {page} bytes={size} {labels} choose={(tab) => choose({ left: tab })} go={(n) => jump(() => sheets?.go(n))} {follow} />
     {/if}
     <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_static_element_interactions -->
-    <div class="pages {mode}" class:invert={o?.invert} class:gray={o?.gray} class:dim={building} bind:this={host} tabindex="0" onpointerdown={ondown} {onwheel} {onscroll}></div>
-    {#if o?.right && sheets}
+    <div class="pages {mode}" class:invert={o?.invert} class:gray={o?.gray} class:dim={building} bind:this={host} tabindex="0" onpointerdown={ondown} {onwheel} {onscroll} oncontextmenu={(e) => present && e.preventDefault()}></div>
+    {#if o?.right && sheets && !present}
       <div class="panel">
         <div class="tabs" role="tablist">
           <button role="tab" aria-selected={o.right === "search"} class:on={o.right === "search"} title={l("Ara (Ctrl+F)", "Search (Ctrl+F)")} onclick={() => choose({ right: "search" })}>{l("Ara", "Search")}</button>
@@ -670,7 +812,27 @@
       </div>
     {/if}
   </div>
-  <BottomBar {tr} hasLeft left={!!o?.left} right={!!o?.right} {page} {pages} {zoom} disabled={none} {toggle} {setZoom} step={(up) => setZoom(stepZoom(zoom, up))} />
+  {#if !present}
+    <BottomBar {tr} hasLeft left={!!o?.left} right={!!o?.right} {page} {pages} {zoom} disabled={none} {toggle} {setZoom} step={(up) => setZoom(stepZoom(zoom, up))} />
+  {/if}
+  {#if laser}
+    <div class="laser" style:left="{laser.x}px" style:top="{laser.y}px"></div>
+  {/if}
+  {#if present && clock}
+    <div class="showclock"><Clock {tr} /></div>
+  {/if}
+  {#if printing}
+    <div class="print" role="dialog" aria-label={l("Yazdır", "Print")}>
+      <strong>{l("Yazdır", "Print")}</strong>
+      <label>{l("İlk sayfa", "First page")} <input type="number" min="1" max={pages} bind:value={printing.first} /></label>
+      <label>{l("Son sayfa", "Last page")} <input type="number" min="1" max={pages} bind:value={printing.last} /></label>
+      <label>{l("Kopya", "Copies")} <input type="number" min="1" max="99" bind:value={printing.copies} /></label>
+      <div class="row">
+        <button class="word" title={l("Varsayılan yazıcıya gönder", "Send to the default printer")} onclick={print}>{l("Yazdır", "Print")}</button>
+        <button class="word" title={l("Vazgeç (Esc)", "Cancel (Esc)")} onclick={() => (printing = null)}>{l("Vazgeç", "Cancel")}</button>
+      </div>
+    </div>
+  {/if}
   {#if glass && o}
     <div
       class="lens"
@@ -708,6 +870,78 @@
     inset: 0;
     z-index: 40;
     border: 0;
+  }
+  .pdf.present {
+    background: #000;
+  }
+  .present .pages {
+    overflow: hidden;
+    cursor: default;
+  }
+  .present .pages :global(.sheet) {
+    box-shadow: none;
+  }
+  .laser {
+    position: fixed;
+    z-index: 8;
+    width: 14px;
+    height: 14px;
+    margin: -7px 0 0 -7px;
+    border-radius: 50%;
+    pointer-events: none;
+    background: #ff2a2a;
+    box-shadow: 0 0 12px 4px rgba(255, 42, 42, 0.6);
+  }
+  .showclock {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 8;
+    border-radius: 8px;
+    background: var(--chrome);
+  }
+  .print {
+    position: absolute;
+    top: 40px;
+    left: 50%;
+    z-index: 7;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--chrome-fg);
+    background: var(--chrome);
+    border: 1px solid var(--chrome-line);
+    border-radius: 6px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+  }
+  .print label {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .print input {
+    width: 4em;
+    font: inherit;
+    color: inherit;
+    background: var(--chrome-2);
+    border: 1px solid var(--chrome-line);
+    border-radius: 3px;
+    caret-color: var(--claret);
+  }
+  .print .word {
+    padding: 2px 10px;
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 1px solid var(--chrome-line);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .print .word:focus-visible {
+    outline: 2px solid var(--claret);
   }
   .unhide {
     position: absolute;
