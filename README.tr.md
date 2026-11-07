@@ -355,8 +355,9 @@ Sınıf [tex/](tex/) klasöründe; Dactile onu kendi içinde taşır.
   | taslak | sans | 1,5 | her repliğe ve yönergeye bir numara | "TASLAK" |
   | final | serif | tek | yok | yıldızlı karakterler |
 
-- **Seçenekler:** `left` ya da `right` sahne başlıklarını o yana alır, varsayılan
-  `center`; `nohash` `#`'i yeniden sıradan bir karakter yapar; `nonotes`
+- `\begin{document}` öncesindeki `\scenetitleflush[left]` sahne başlıklarını o
+  yana alır (`right` ya da varsayılan `center`).
+- **Seçenekler:** `nohash` `#`'i yeniden sıradan bir karakter yapar; `nonotes`
   rejisöre notları o kopyadan çıkarır. Bir `#` satırı kaynak satırın sonunda
   ya da üstündeki bir `%` yorumunda biter.
 - **Oyuncu kopyaları**, Dactile'ın oyunun bir kopyasının önsözüne yazdığı

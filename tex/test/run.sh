@@ -121,3 +121,20 @@ pdftotext pro.pdf pro.txt
 grep -q 'Ön Sahne' pro.txt && grep -q 'Sahne 1' pro.txt || { cat pro.txt; echo "FAIL: prologue numbering"; exit 1; }
 grep -q 'tiyatrocast{I-0}{se}' pro.aux || { echo "FAIL: prologue cast key"; exit 1; }
 echo "ok: prologue"
+
+# \scenetitleflush: the side of the scene headings; a wrong word stops the build.
+flush() {
+    printf '\\documentclass{tiyatro}\n\\scenetitleflush%s\n\\begin{document}\n#sahne Kıyı\n\nTablo.\n\\end{document}\n' "$2" > "flush-$1.tex"
+}
+at() {
+    pdftotext -bbox "flush-$1.pdf" - | sed -n 's/.*xMin="\([0-9.]*\)".*>Kıyı<.*/\1/p' | head -1
+}
+for side in left sol sağ right center; do
+    flush "$side" "[$side]"
+    xelatex -interaction=nonstopmode -halt-on-error "flush-$side.tex" > /dev/null 2>&1 || { grep -A6 '^! ' "flush-$side.log"; echo "FAIL: flush $side"; exit 1; }
+done
+awk -v l="$(at left)" -v c="$(at center)" -v r="$(at right)" -v s="$(at sol)" -v g="$(at sağ)" \
+    'BEGIN { exit !(l < c && c < r && l == s && r == g) }' || { echo "FAIL: flush sides"; exit 1; }
+flush wrong '[ust]'
+! xelatex -interaction=nonstopmode -halt-on-error flush-wrong.tex > /dev/null 2>&1 || { echo "FAIL: flush took a wrong word"; exit 1; }
+echo "ok: scene heading side"

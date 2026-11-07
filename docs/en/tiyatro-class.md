@@ -30,17 +30,27 @@ folder. This page covers every command in the class.
 ## Class options
 
 Options go in the brackets of `\documentclass[…]{tiyatro}`, separated by commas:
-`\documentclass[final,left]{tiyatro}`.
+`\documentclass[final,nonotes]{tiyatro}`.
 
 | Option | What it does |
 |---|---|
 | `draft` | Sans, 1.5× spacing, line numbers in the margin, "TASLAK" on the cover. The default |
 | `final` | Serif, single spacing, no numbers, the starred characters on the cover |
-| `center`, `orta` | Scene headings in the middle. The default |
-| `left`, `sol` | Scene headings on the left |
-| `right`, `sag` | Scene headings on the right |
 | `nohash` | Turns `#` lines off; `#` is an ordinary character |
 | `nonotes` | Leaves the director's notes out of this build |
+
+## Scene heading side
+
+This is not a class option but a line of its own before `\begin{document}`:
+
+```latex
+\documentclass{tiyatro}
+\scenetitleflush[left]
+```
+
+It takes `left` (`sol`), `right` (`sağ`, `sag`) or `center` (`orta`). Without the
+line, headings stand in the middle. If it is written more than once the last one
+counts, and any other word is an error when the play is built.
 
 You don't have to type the side. In Dactile, **Play › Heading side** goes through
 middle, left and right; in Dactile Light the "Scene headings" field of the **Alt+I**

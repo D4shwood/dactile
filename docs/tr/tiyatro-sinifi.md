@@ -30,17 +30,27 @@ derlenir. Bu sayfa sınıfın bütün komutlarını anlatır.
 ## Sınıf seçenekleri
 
 `\documentclass[…]{tiyatro}` satırının köşeli parantezine, virgülle ayırarak yazılır:
-`\documentclass[final,left]{tiyatro}`.
+`\documentclass[final,nonotes]{tiyatro}`.
 
 | Seçenek | Ne yapar |
 |---|---|
 | `draft` | Taslak: sans yazı, 1,5 satır aralığı, kenarda satır numarası, kapakta "TASLAK". Varsayılan budur |
 | `final` | Son hâl: serif yazı, tek aralık, numara yok, kapakta yıldızlı kişiler |
-| `center`, `orta` | Sahne başlıkları ortada. Varsayılan budur |
-| `left`, `sol` | Sahne başlıkları solda |
-| `right`, `sag` | Sahne başlıkları sağda |
 | `nohash` | `#` satırlarını kapatır, `#` sıradan karakter olur |
 | `nonotes` | Yönetmene notları bu derlemeden çıkarır |
+
+## Sahne başlıklarının hizası
+
+Sınıf seçeneği değil, `\begin{document}` öncesinde kendi satırıdır:
+
+```latex
+\documentclass{tiyatro}
+\scenetitleflush[left]
+```
+
+`left` (`sol`), `right` (`sağ`, `sag`) ya da `center` (`orta`) alır. Satır yoksa
+başlıklar ortadadır. Birden çok yazılırsa sonuncusu geçerlidir, başka bir sözcük
+derlemede hata verir.
 
 Hizayı elle yazmak zorunda değilsin. Dactile'da **Oyun › Başlık hizası** düğmesi
 orta, sol, sağ arasında geçer; Dactile Light'ta **Alt+I** formundaki "Sahne

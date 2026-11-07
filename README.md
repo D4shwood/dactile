@@ -360,8 +360,9 @@ ticking it is yours. Nothing changes the play by itself.
   | draft | sans | 1.5× | one number per line of dialogue or direction | "TASLAK" |
   | final | serif | single | none | the starred characters |
 
-- options: `left` or `right` set the scene headings to a side, `center` by default;
-  `nohash` makes `#` an ordinary character again; `nonotes` leaves the
+- `\scenetitleflush[left]` in the preamble sets the scene headings to a side
+  (`right`, or `center`, the default).
+- options: `nohash` makes `#` an ordinary character again; `nonotes` leaves the
   director's notes out of a copy. A `#` line ends at the end of the source
   line, or at a `%` comment on it.
 - actor copies, written by Dactile into a copy of the play's preamble:

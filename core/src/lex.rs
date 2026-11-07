@@ -492,6 +492,7 @@ fn is_known_command(name: &str) -> bool {
         "yenidil",
         "fontyukle",
         "setmaxnamewidth",
+        "scenetitleflush",
         "linebreak",
         "newline",
         "small",

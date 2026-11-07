@@ -12,12 +12,15 @@
 %   nohash     # at a line's start is not a heading (#sahne, #perde, #önsöz, #notlar)
 %   nonotes    leaves the director's notes (\notlar) out of this copy
 %
+% Where the scene headings stand is the play's own line in the preamble:
+%   \scenetitleflush[left]   or right, center (sol, sağ, orta); center by default
+%
 % The class is split in two: tiyatro-core.sty (characters, lines, scenes, acts,
 % the cast table) and tiyatro-theme.sty (page, fonts, words, cover). A different
 % look only needs a different theme.
 
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesClass{tiyatro}[2026/11/07 v1.7.3 Dactile stage play class]
+\ProvidesClass{tiyatro}[2026/11/07 v1.7.4 Dactile stage play class]
 
 \newif\iftiyatrodraft
 \tiyatrodrafttrue
@@ -29,19 +32,8 @@
 \newif\iftiyatronotes
 \tiyatronotestrue
 \DeclareOption{nonotes}{\tiyatronotesfalse}
-% Where scene headings stand: center unless the play says otherwise.
-\newcommand\tiyatrosceneflush{\centering}
-\DeclareOption{center}{\renewcommand\tiyatrosceneflush{\centering}}
-\DeclareOption{orta}{\renewcommand\tiyatrosceneflush{\centering}}
-\DeclareOption{left}{\renewcommand\tiyatrosceneflush{\raggedright}}
-\DeclareOption{sol}{\renewcommand\tiyatrosceneflush{\raggedright}}
-\DeclareOption{right}{\renewcommand\tiyatrosceneflush{\raggedleft}}
-\DeclareOption{sag}{\renewcommand\tiyatrosceneflush{\raggedleft}}
 \DeclareOption*{\PassOptionsToClass{\CurrentOption}{book}}
 \ProcessOptions\relax
-% They are this class's alone: geometry would take `left` for a margin.
-\@for\tiyatro@opt:={left,right,center,sol,sag,orta}\do{%
-  \@expandtwoargs\@removeelement{\tiyatro@opt}{\@classoptionslist}\@classoptionslist}
 
 % Latin Modern, LaTeX's default font, is missing from some TeX installs, and
 % the base class and fontspec ask for it before the theme picks the real fonts.

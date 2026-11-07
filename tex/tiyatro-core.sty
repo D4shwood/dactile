@@ -61,6 +61,8 @@
 \ProvidesExplPackage{tiyatro-core}{2026-10-30}{1.4.0}{Dactile: characters, lines, scenes, acts}
 \RequirePackage{xspace}
 
+\msg_new:nnn { tiyatro } { flush }
+  { Scene~headings~can~stand~left,~center~or~right,~not~'#1'. }
 \msg_new:nnn { tiyatro } { hash }
   { '\iow_char:N\##1'~is~not~a~heading;~printed~as~it~is.~Write~\iow_char:N\\\iow_char:N\#~for~a~plain~\iow_char:N\#. }
 \msg_new:nnn { tiyatro } { rerun }
@@ -678,6 +680,24 @@
   }
 \NewCommandCopy \prologue \onsahne
 
+% Where the scene headings stand: \scenetitleflush[left] in the preamble.
+\tl_new:N \g__tiy_scene_flush_tl
+\tl_gset:Nn \g__tiy_scene_flush_tl { \centering }
+\NewDocumentCommand \scenetitleflush { O{center} }
+  {
+    \str_case:nnF {#1}
+      {
+        { left } { \tl_gset:Nn \g__tiy_scene_flush_tl { \raggedright } }
+        { sol } { \tl_gset:Nn \g__tiy_scene_flush_tl { \raggedright } }
+        { right } { \tl_gset:Nn \g__tiy_scene_flush_tl { \raggedleft } }
+        { sağ } { \tl_gset:Nn \g__tiy_scene_flush_tl { \raggedleft } }
+        { sag } { \tl_gset:Nn \g__tiy_scene_flush_tl { \raggedleft } }
+        { center } { \tl_gset:Nn \g__tiy_scene_flush_tl { \centering } }
+        { orta } { \tl_gset:Nn \g__tiy_scene_flush_tl { \centering } }
+      }
+      { \msg_error:nnn { tiyatro } { flush } {#1} }
+  }
+
 \cs_new_protected:Npn \__tiy_scene_title:nn #1#2
   {
     \tl_if_blank:nTF {#1}
@@ -685,7 +705,7 @@
       { \__tiy_toc:nn { section } { #2 \sceneseparator #1 } }
     \vspace* { \beforesceneskip }
     \group_begin:
-    \tiyatrosceneflush
+    \tl_use:N \g__tiy_scene_flush_tl
     { \scenetitlefont #2 \tl_if_blank:nF {#1} { \sceneseparator #1 } }
     \par \nobreak
     { \scenecastfont \__tiy_scene_cast:V \g__tiy_scene_tl }

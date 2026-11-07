@@ -183,8 +183,7 @@ impl Writer {
                     t = dactile::tex::apply(&t, &[e]);
                 }
                 let side = form.get(lang::l("Sahne başlıkları", "Scene headings"));
-                let side = info::Side::parse(&side.replace('ğ', "g"));
-                let side = side.unwrap_or(info::Side::Center);
+                let side = info::Side::parse(side).unwrap_or(info::Side::Center);
                 if let Some(e) = info::set_scene_align(&t, side) {
                     t = dactile::tex::apply(&t, &[e]);
                 }

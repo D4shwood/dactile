@@ -429,7 +429,7 @@ pub fn view(text: &str) -> View {
         cast,
         blocks,
         tail,
-        scene_align: doc.scene_align.option(),
+        scene_align: doc.scene_align.word(),
     }
 }
 
