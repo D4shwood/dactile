@@ -826,6 +826,10 @@ fn dev_eval(app: tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Wayland desktops match a window to its menu entry by this name alone:
+    // left at the binary's name, the window gets the generic W icon.
+    #[cfg(target_os = "linux")]
+    glib::set_prgname(Some("io.github.d4shwood.dactile"));
     tauri::Builder::default()
         .manage(Mutex::new(App::default()))
         .manage(spell::Shared::default())

@@ -28,3 +28,7 @@ tauri = { version = "2", features = [] }
 # The file picker through the desktop portal, as Dactile Light does it
 # (tauri-plugin-dialog wants rfd's GTK side, which can't sit beside it).
 rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Names the window after the menu entry, so the desktop finds its icon.
+glib = "0.18"

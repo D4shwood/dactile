@@ -813,6 +813,7 @@ version = "0.3.0-beta.1"
 dependencies = [
  "anyhow",
  "dactile",
+ "glib",
  "rfd",
  "serde",
  "serde_json",

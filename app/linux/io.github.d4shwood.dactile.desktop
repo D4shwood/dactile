@@ -8,4 +8,4 @@ Icon=io.github.d4shwood.dactile
 Terminal=false
 Categories=Office;WordProcessor;
 MimeType=text/x-tex;
-StartupWMClass=dactile
+StartupWMClass=io.github.d4shwood.dactile
