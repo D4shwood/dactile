@@ -61,6 +61,7 @@ pub struct Settings {
     pub page_zoom: u16,
     pub ribbon_folded: bool,
     pub ribbon_height: u16,
+    pub scene_list: bool,
     pub pdf_width: u16,
     pub cover_last: std::collections::BTreeMap<String, String>,
     pub viewer: config::Viewer,
@@ -100,6 +101,7 @@ pub fn settings(cfg: &Config) -> Settings {
         page_zoom: cfg.page_zoom,
         ribbon_folded: cfg.ribbon_folded,
         ribbon_height: cfg.ribbon_height,
+        scene_list: cfg.scene_list,
         pdf_width: cfg.pdf_width,
         cover_last: cfg.cover_last.clone(),
         viewer: cfg.viewer.clone(),
@@ -460,6 +462,7 @@ fn change(cfg: &mut Config, key: &str, value: &serde_json::Value) -> anyhow::Res
         "surprise" => cfg.surprise = value.as_str().unwrap_or("").to_string(),
         "page_zoom" => cfg.page_zoom = value.as_u64().unwrap_or(100).clamp(50, 300) as u16,
         "ribbon_folded" => cfg.ribbon_folded = value.as_bool().unwrap_or(false),
+        "scene_list" => cfg.scene_list = value.as_bool().unwrap_or(true),
         "ribbon_height" => cfg.ribbon_height = value.as_u64().unwrap_or(0).min(400) as u16,
         "pdf_width" => cfg.pdf_width = value.as_u64().unwrap_or(0).min(4000) as u16,
         "cover_last" => {

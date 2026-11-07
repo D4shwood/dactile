@@ -5,7 +5,7 @@
   import { EditorView } from "@codemirror/view";
   import { redo, selectAll, undo } from "@codemirror/commands";
   import { openSearchPanel } from "@codemirror/search";
-  import { api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Files, type Look, type Made, type Memo, type Summary, type NoteCard, type Opened, type PlaySettings, type Preview, type Settings } from "./api";
+  import { type Head, api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Files, type Look, type Made, type Memo, type Summary, type NoteCard, type Opened, type PlaySettings, type Preview, type Settings } from "./api";
   import { focus, setCards, setDim, setFocus } from "./focus";
   import { blockAt, currentView, extensions, insertSnippet, typeBackslash, coverClicked, openCover, pickNote, wrapSelection, unwrapSelection, setNotes, setSource, setView } from "./editor";
   import { BACKSTAGE, type Act } from "./ribbon";
@@ -25,6 +25,7 @@
   import Ribbon from "./Ribbon.svelte";
   import Keys from "./Keys.svelte";
   import Guide from "./Guide.svelte";
+  import SceneList from "./SceneList.svelte";
   import Pdf from "./Pdf.svelte";
   import Board from "./Board.svelte";
   import Notes from "./Notes.svelte";
@@ -108,6 +109,10 @@
   let look = $state(pickLook(first));
   let playFont = $state("");
   let playSize = $state("");
+  // svelte-ignore state_referenced_locally
+  let sceneList = $state(first.scene_list);
+  let heads = $state<Head[]>([]);
+  let cursorAt = $state(0);
   let source = $state(false);
   /// Where the play's class option puts its scene headings.
   let sceneAlign = $state("center");
@@ -180,6 +185,7 @@
         // Typed on meanwhile: the next one is on its way.
         sceneAlign = v.scene_align;
         playSize = v.play_font_size;
+        heads = v.heads;
         if (playFont !== v.play_font) {
           playFont = v.play_font;
           applyLook(shownLook());
@@ -202,6 +208,7 @@
     const v = currentView(view.state);
     if (!v) return;
     const head = view.state.selection.main.head;
+    cursorAt = head;
     let act = "";
     let scene = "";
     for (const b of v.blocks) {
@@ -609,6 +616,12 @@
     void castCall(() => api.playFontWrite(view.state.doc.toString(), f));
   }
 
+  /// A heading of the list beside the page: its top comes to the window's.
+  function goHead(at: number) {
+    view.dispatch({ selection: { anchor: at }, effects: EditorView.scrollIntoView(at, { y: "start", yMargin: 60 }) });
+    view.focus();
+  }
+
   function setPlaySize(s: string) {
     if (opened.read_only) return;
     void castCall(() => api.playFontSizeWrite(view.state.doc.toString(), s));
@@ -798,6 +811,11 @@
         break;
       case "cover-source":
         openCover(view);
+        break;
+      case "scene-list":
+        sceneList = !sceneList;
+        api.set("scene_list", sceneList);
+        requestAnimationFrame(() => view.requestMeasure());
         break;
       case "guide":
         side = side === "guide" ? "" : "guide";
@@ -1116,7 +1134,10 @@
   {/if}
 
   <main class="body" class:split={side !== ""} style={side === "pdf" && pdfShown ? `--pdf-col:${pdfShown}px` : ""}>
-    <div class="left">
+    <div class="left" class:listed={sceneList && heads.length > 0 && !board && !casting && !memo}>
+      {#if sceneList && heads.length > 0 && !board && !casting && !memo}
+        <SceneList {tr} {heads} at={cursorAt} go={goHead} />
+      {/if}
       <div class="desk" class:gone={board || casting || memo} class:plain={!sheet} {onwheel}>
         <div class="page" class:source class:typewriter data-scene-align={sceneAlign} style={`--z: ${zoom / 100}`}>
           <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
@@ -1466,6 +1487,18 @@
     position: relative;
     min-width: 0;
     min-height: 0;
+    container-type: inline-size;
+  }
+  .left.listed .desk {
+    left: 220px;
+  }
+  @container (max-width: 620px) {
+    .left.listed .desk {
+      left: 0;
+    }
+    .left > :global(.scene-list) {
+      display: none;
+    }
   }
   .desk {
     position: absolute;

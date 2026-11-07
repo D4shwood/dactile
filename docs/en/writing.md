@@ -85,7 +85,7 @@ In both apps:
 | Alt+B, Alt+J | Split the scene at the cursor; join it with the next |
 | Alt+S | Spelling suggestions |
 
-In Dactile only: **F12** the PDF panel (a click in the PDF shows that line in the writing), **Ctrl + / − / 0** page zoom, **Ctrl+F1**
+In Dactile only: the acts and scenes down the left (a click goes there; View > Scene list hides it), **F12** the PDF panel (a click in the PDF shows that line in the writing), **Ctrl + / − / 0** page zoom, **Ctrl+F1**
 fold the ribbon, **Alt** ribbon letters.
 
 In Dactile Light only: **F10** the ribbon, **Ctrl+P** the command palette, **F1**

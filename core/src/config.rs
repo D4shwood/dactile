@@ -54,6 +54,8 @@ pub struct Config {
     pub ribbon_folded: bool,
     /// The ribbon's height in pixels, dragged by hand; 0 is its own.
     pub ribbon_height: u16,
+    /// The desktop app: the acts and scenes down the left of the writing.
+    pub scene_list: bool,
     /// The PDF panel's width in pixels, dragged by hand; 0 is its own.
     pub pdf_width: u16,
     /// The cover details last filled in, offered for the next play.
@@ -163,6 +165,7 @@ impl Default for Config {
             pages: false,
             ribbon_folded: false,
             ribbon_height: 0,
+            scene_list: true,
             pdf_width: 0,
             cover_last: Default::default(),
             page_zoom: 100,

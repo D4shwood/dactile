@@ -124,6 +124,7 @@ export const TABS: Tab[] = [
         b("Kaynak", "Source", "⟨⟩", "F2", k("source")),
         b("PDF", "PDF", "⎙", "F12", k("pdf-panel")),
         b("Notlar", "Notes", "✎", "Ctrl+N", k("notes")),
+        b("Sahne listesi", "Scene list", "☰", "", k("scene-list")),
       ]),
       g("Yakınlık", "Zoom", [
         b("Büyüt", "Zoom in", "+", "Ctrl++", k("zoom-in")),

@@ -63,6 +63,7 @@ export interface Settings extends Look {
   lang: "tr" | "en";
   ribbon_folded: boolean;
   ribbon_height: number;
+  scene_list: boolean;
   pdf_width: number;
   cover_last: Record<string, string>;
   viewer: Viewer;
@@ -183,7 +184,15 @@ export interface Cover {
   cast: CastRow[];
 }
 
+export interface Head {
+  from: number;
+  depth: number;
+  label: string;
+  hidden: boolean;
+}
+
 export interface View {
+  heads: Head[];
   cover: Cover | null;
   cast: Person[];
   blocks: Block[];

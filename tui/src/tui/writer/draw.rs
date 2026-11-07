@@ -236,32 +236,10 @@ impl Writer {
         if sheet.x < 16 || self.strip_shown() {
             return;
         }
-        let o = &self.doc.outline;
-        let base = self.doc.body.start;
-        // (where it starts, depth, label, hidden)
-        let mut entries: Vec<(usize, u8, String, bool)> = Vec::new();
-        for sct in &o.sections {
-            let name = if sct.title.trim().is_empty() {
-                match sct.which {
-                    dactile::lex::Section::Preface => lang::l("Önsöz", "Preface"),
-                    dactile::lex::Section::Notes => lang::l("Rejisöre notlar", "Director's notes"),
-                }
-                .to_string()
-            } else {
-                sct.title.trim().to_string()
-            };
-            entries.push((self.doc.blocks[sct.block + base].span.start, 0, name, false));
-        }
-        for u in shelf::units(&self.buf.text, &self.doc) {
-            let depth = u8::from(u.kind == shelf::UnitKind::Scene);
-            let name = if u.hidden {
-                format!("{} ({})", u.name(), lang::l("gizli", "hidden"))
-            } else {
-                u.name()
-            };
-            entries.push((u.span.start, depth, name, u.hidden));
-        }
-        entries.sort_by_key(|e| e.0);
+        let entries: Vec<(usize, u8, String, bool)> = shelf::headings(&self.buf.text, &self.doc)
+            .into_iter()
+            .map(|h| (h.at, h.depth, h.label, h.hidden))
+            .collect();
         if entries.is_empty() {
             return;
         }

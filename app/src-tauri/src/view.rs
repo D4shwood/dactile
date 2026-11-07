@@ -93,6 +93,16 @@ pub struct View {
     pub play_font: String,
     /// `\playfontsize`, empty for the class's.
     pub play_font_size: String,
+    /// The list beside the page.
+    pub heads: Vec<Head>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Head {
+    pub from: usize,
+    pub depth: u8,
+    pub label: String,
+    pub hidden: bool,
 }
 
 /// Byte offsets to UTF-16 ones.
@@ -436,6 +446,15 @@ pub fn view(text: &str) -> View {
         scene_align: doc.scene_align.word(),
         play_font: dactile::info::play_font(text),
         play_font_size: dactile::info::play_font_size(text),
+        heads: dactile::shelf::headings(text, &doc)
+            .into_iter()
+            .map(|h| Head {
+                from: u.at(h.at),
+                depth: h.depth,
+                label: h.label,
+                hidden: h.hidden,
+            })
+            .collect(),
     }
 }
 

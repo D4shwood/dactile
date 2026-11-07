@@ -2,6 +2,7 @@
 //! (out of the PDF, one tap from coming back), or moved to the play's trash
 //! file next to it, from where they can be put back or destroyed.
 
+use crate::lang;
 use crate::lex::{self, Kind};
 use crate::outline;
 use crate::render::Doc;
@@ -60,6 +61,51 @@ pub fn strip(text: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// A line of the list beside the page: where it starts and how deep it is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Heading {
+    pub at: usize,
+    pub depth: u8,
+    pub label: String,
+    pub hidden: bool,
+}
+
+/// The play's headings in order: prefaces, notes, acts and their scenes.
+pub fn headings(text: &str, doc: &Doc) -> Vec<Heading> {
+    let base = doc.body.start;
+    let mut out: Vec<Heading> = doc
+        .outline
+        .sections
+        .iter()
+        .map(|s| Heading {
+            at: doc.blocks[s.block + base].span.start,
+            depth: 0,
+            label: if s.title.trim().is_empty() {
+                match s.which {
+                    crate::lex::Section::Preface => lang::l("Önsöz", "Preface"),
+                    crate::lex::Section::Notes => lang::l("Rejisöre notlar", "Director's notes"),
+                }
+                .to_string()
+            } else {
+                s.title.trim().to_string()
+            },
+            hidden: false,
+        })
+        .collect();
+    out.extend(units(text, doc).into_iter().map(|u| Heading {
+        at: u.span.start,
+        depth: u8::from(u.kind == UnitKind::Scene),
+        label: if u.hidden {
+            format!("{} ({})", u.name(), lang::l("gizli", "hidden"))
+        } else {
+            u.name()
+        },
+        hidden: u.hidden,
+    }));
+    out.sort_by_key(|h| h.at);
+    out
 }
 
 /// The acts and scenes of the body in order, hidden ones included.
