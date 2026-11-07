@@ -389,6 +389,7 @@ pub fn backstage() -> Vec<(&'static str, &'static str, &'static str, PAct)> {
         ),
         ("Oyun bilgisi", "Cover details", "Alt+İ", k(Char('i'), a)),
         ("Oyun ayarları", "Play settings", "", PAct::PlaySettings),
+        ("Dosyalarım", "My files", "", PAct::Files),
         ("Kapat", "Close", "^Q", k(Char('q'), c)),
     ]
 }
@@ -1176,6 +1177,10 @@ impl Writer {
                     PAct::PlaySettings => lang::l(
                         "Bu oyunun konuşma hızı, taslağı olduğu oyun ve sözlüğü.",
                         "This play's pace, the play it is a draft of, and its words.",
+                    ),
+                    PAct::Files => lang::l(
+                        "Klasörü, PDF'i, tablosu, oyuncu kopyaları ve taslakları.",
+                        "Its folder, PDF, role table, actors' copies and drafts.",
                     ),
                     PAct::Key(KeyCode::Char('q'), _) => lang::l(
                         "Kaydeder ve ana ekrana döner.",

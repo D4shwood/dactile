@@ -196,6 +196,7 @@ impl Writer {
                 let sel = *sel;
                 self.draw_play_settings(f, area, sel);
             }
+            Popup::Files(list) => list.draw(f, area),
             Popup::Palette(q, sel) => {
                 let items = palette_items(q);
                 panels::draw_palette(f, area, q, &items, *sel);
@@ -351,6 +352,7 @@ impl Writer {
                 | Popup::Ribbon(_)
                 | Popup::Backstage(_)
                 | Popup::PlaySettings(_)
+                | Popup::Files(_)
         );
         let cursor = self.cursor_stop().filter(|c| {
             !covered && c.row >= self.shown && c.row < self.shown + area.height as usize

@@ -387,3 +387,58 @@ fn a_build_without_a_line_says_nothing_of_alt_g() {
     with(w, KeyCode::Char('g'), KeyModifiers::ALT);
     assert_eq!(w.buf.cursor, at);
 }
+
+/// The play's files, read.
+fn files_of(w: &mut Writer) {
+    w.run(PAct::Files);
+    let begun = Instant::now();
+    while matches!(&w.popup, Popup::Files(f) if f.busy()) {
+        assert!(begun.elapsed() < Duration::from_secs(5));
+        w.tick();
+    }
+}
+
+#[test]
+fn a_play_in_a_temporary_folder_says_so() {
+    let mut o = open("temporary");
+    let w = &mut o.w;
+    // The test's folder is one the system empties.
+    assert!(w.temporary);
+    assert_eq!(
+        w.message.as_ref().map(|m| m.0.as_str()),
+        Some(files::temporary_warning())
+    );
+    with(w, KeyCode::Char('s'), KeyModifiers::CONTROL);
+    assert!(w.message.as_ref().is_some_and(|m| m.1));
+    w.temporary = false;
+    with(w, KeyCode::Char('s'), KeyModifiers::CONTROL);
+    assert!(w.message.as_ref().is_some_and(|m| !m.1));
+}
+
+#[test]
+fn the_files_show_and_close() {
+    let mut o = open("files");
+    let w = &mut o.w;
+    files_of(w);
+    let drawn = screen(w);
+    assert!(drawn.contains("PDF"), "{drawn}");
+    press(w, KeyCode::Esc);
+    assert!(matches!(w.popup, Popup::None));
+    assert!(!w.quit);
+}
+
+#[test]
+fn a_draft_from_the_files_opens_after_this_play_closes() {
+    let mut o = open("draft");
+    let draft = o.dir.join("oyun-0.2.tex");
+    std::fs::write(&draft, PLAY).unwrap();
+    let w = &mut o.w;
+    files_of(w);
+    // The drafts come last, and Down stops there.
+    for _ in 0..8 {
+        press(w, KeyCode::Down);
+    }
+    press(w, KeyCode::Enter);
+    assert_eq!(w.open_next.as_deref(), Some(draft.as_path()));
+    assert!(w.quit);
+}

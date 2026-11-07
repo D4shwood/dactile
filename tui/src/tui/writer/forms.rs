@@ -20,6 +20,18 @@ impl Writer {
                 self.play_settings_key(k);
                 true
             }
+            Popup::Files(list) => {
+                match list.key(k) {
+                    files::Step::Stay => {}
+                    files::Step::Close => self.popup = Popup::None,
+                    files::Step::Open(p) => {
+                        self.popup = Popup::None;
+                        self.open_next = Some(p);
+                        self.quit = true;
+                    }
+                }
+                true
+            }
             Popup::Menu(m) => match k.code {
                 KeyCode::Up => {
                     m.up();

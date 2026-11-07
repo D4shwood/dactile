@@ -345,6 +345,7 @@ impl Writer {
             PAct::FoldRibbon => self.fold_ribbon(),
             PAct::Info => self.popup = Popup::Backstage(0),
             PAct::PlaySettings => self.popup = Popup::PlaySettings(0),
+            PAct::Files => self.popup = Popup::Files(Box::new(Files::open(&self.path))),
             PAct::SaveTemplate => {
                 let title = self.doc.title(&self.buf.text).unwrap_or_default();
                 self.popup = Popup::Form(Form {

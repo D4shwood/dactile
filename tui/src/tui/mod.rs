@@ -2,6 +2,7 @@
 
 mod anim;
 mod board;
+mod files;
 mod home;
 mod importing;
 mod keys;
@@ -110,6 +111,22 @@ pub fn run(start: Start) -> Result<()> {
                             continue;
                         }
                         let _ = remember(w, &mut cfg);
+                        // A draft asked for from the play's files.
+                        if let Some(next) = w.open_next.take() {
+                            match open(&next, &mut cfg) {
+                                Ok(n) => {
+                                    screen = Screen::Writer(Box::new(n));
+                                    continue;
+                                }
+                                Err(e) if !direct => {
+                                    let mut h = Home::new(&cfg, false);
+                                    h.message = Some((format!("{e:#}"), true));
+                                    screen = Screen::Home(h);
+                                    continue;
+                                }
+                                Err(e) => return Err(e),
+                            }
+                        }
                         if direct {
                             return Ok(());
                         }

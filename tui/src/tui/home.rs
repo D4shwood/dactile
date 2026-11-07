@@ -84,6 +84,12 @@ pub struct Home {
     importing: Option<super::importing::Importing>,
     /// `/`: what the list is searched for, the keys going to it.
     filter: Option<String>,
+    /// `k`: what belongs to the chosen play.
+    files: Option<super::files::Files>,
+    /// `r`: the file manager's answer, while it is asked.
+    revealing: Option<std::sync::mpsc::Receiver<Result<(), String>>>,
+    /// The plays folder is one the system empties.
+    temporary: bool,
 }
 
 struct Page {
@@ -141,6 +147,9 @@ impl Home {
             side_right: 0,
             importing: None,
             filter: None,
+            files: None,
+            revealing: None,
+            temporary: false,
         };
         h.refresh(cfg);
         // On the play worked on last.
@@ -157,6 +166,7 @@ impl Home {
         lang::set(lang::resolve(&cfg.lang, None));
         (self.plays, self.lasts) = library::tree(library::list(cfg)).into_iter().unzip();
         self.sel = self.sel.min(self.plays.len().saturating_sub(1));
+        self.temporary = super::files::temporary(&cfg.plays_dir());
     }
 
     pub fn key(&mut self, k: KeyEvent, cfg: &mut Config) -> Action {
@@ -164,6 +174,17 @@ impl Home {
         if let Some(imp) = &mut self.importing {
             let step = imp.key(k, cfg);
             return self.import_step(step);
+        }
+        if let Some(files) = &mut self.files {
+            match files.key(k) {
+                super::files::Step::Stay => {}
+                super::files::Step::Close => self.files = None,
+                super::files::Step::Open(p) => {
+                    self.files = None;
+                    return Action::Open(p);
+                }
+            }
+            return Action::Stay;
         }
         let armed = self.arming.take();
         if self.inline.is_some() {
@@ -238,6 +259,18 @@ impl Home {
                     && let Err(e) = dactile::build::open(&dactile::build::pdf_path(&p.path))
                 {
                     self.message = Some((format!("{e:#}"), true));
+                }
+            }
+            KeyCode::Char('k') => {
+                if let Some(p) = self.plays.get(self.sel) {
+                    self.files = Some(super::files::Files::open(&p.path));
+                }
+            }
+            KeyCode::Char('r') => {
+                if let Some(p) = self.plays.get(self.sel) {
+                    let pdf = dactile::build::pdf_path(&p.path);
+                    let it = if pdf.exists() { &pdf } else { &p.path };
+                    self.revealing = Some(super::files::reveal(it));
                 }
             }
             KeyCode::Char('o') => self.open_form(cfg),
@@ -489,6 +522,13 @@ impl Home {
     }
 
     pub fn tick(&mut self) -> Action {
+        if let Some(files) = &mut self.files {
+            files.tick();
+        }
+        if let Some(r) = self.revealing.as_ref().and_then(|rx| rx.try_recv().ok()) {
+            self.revealing = None;
+            self.message = r.err().map(|e| (e, true));
+        }
         match &mut self.importing {
             Some(imp) => {
                 let step = imp.tick(import_lang());
@@ -521,6 +561,8 @@ impl Home {
 
     pub fn animating(&self, cfg: &Config) -> bool {
         self.importing.as_ref().is_some_and(|i| i.busy())
+            || self.files.as_ref().is_some_and(|f| f.busy())
+            || self.revealing.is_some()
             || cfg.animations
                 && (self.born.elapsed() < TYPE_FOR
                     || self.form_born.elapsed() < std::time::Duration::from_millis(160)
@@ -1170,6 +1212,9 @@ impl Home {
                 msg.clone(),
                 Style::default().fg(if *warn { WARN } else { MUTED }),
             ),
+            None if self.temporary => {
+                Span::styled(super::files::temporary_warning(), Style::default().fg(WARN))
+            }
             None => dict,
         };
         f.render_widget(
@@ -1219,6 +1264,9 @@ impl Home {
         );
         if let Some(imp) = &self.importing {
             imp.draw(f, area);
+        }
+        if let Some(files) = &self.files {
+            files.draw(f, area);
         }
         if let Some(form) = &self.form {
             // The form unrolls over what was there.
@@ -1763,9 +1811,15 @@ fn tagline_room(w: u16, tagline: u16, folder: u16) -> (bool, bool) {
 }
 
 fn draw_keys(f: &mut Frame, area: Rect) {
-    let keys: [(&str, &str, &str); 15] = [
+    let keys: [(&str, &str, &str); 17] = [
         ("⏎", "oyunu aç", "open the play"),
         ("/", "oyunlarda ara", "search the plays"),
+        ("k", "oyunun dosyaları", "the play's files"),
+        (
+            "r",
+            "dosya yöneticisinde göster",
+            "show in the file manager",
+        ),
         (
             "n",
             "yeni: şablonlar; iki kez boş oyun",
@@ -2112,6 +2166,21 @@ mod tests {
             panic!("nothing opened");
         };
         assert!(p.to_string_lossy().contains("deniz-feneri"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn k_shows_the_files_and_keys_go_to_them() {
+        let (mut h, mut cfg, dir) = shelf("files");
+        // The test's folder is one the system empties.
+        assert!(h.temporary);
+        press(&mut h, &mut cfg, KeyCode::Char('k'));
+        assert!(h.files.is_some());
+        // `/` is not the search while the files are up.
+        press(&mut h, &mut cfg, KeyCode::Char('/'));
+        assert!(h.filter.is_none());
+        press(&mut h, &mut cfg, KeyCode::Esc);
+        assert!(h.files.is_none());
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

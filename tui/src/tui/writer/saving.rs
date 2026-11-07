@@ -4,6 +4,9 @@ use super::*;
 
 impl Writer {
     pub fn tick(&mut self) {
+        if let Popup::Files(list) = &mut self.popup {
+            list.tick();
+        }
         if let Some(rx) = &self.speller_rx
             && let Ok(result) = rx.try_recv()
         {
@@ -145,6 +148,14 @@ impl Writer {
                             "Saved; the version from elsewhere is in the history.",
                         ),
                         false,
+                    );
+                } else if by_hand && self.temporary {
+                    self.say(
+                        lang::l(
+                            "Kaydedildi, ama bu klasör geçici: bilgisayar yeniden başlayınca silinebilir.",
+                            "Saved, but this folder is temporary: it may be erased when the computer restarts.",
+                        ),
+                        true,
                     );
                 } else if by_hand {
                     self.say(lang::l("Kaydedildi.", "Saved."), false);

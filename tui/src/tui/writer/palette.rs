@@ -28,6 +28,8 @@ pub enum PAct {
     Info,
     /// The play's own settings.
     PlaySettings,
+    /// What belongs to the play.
+    Files,
 }
 
 /// An entry of the command palette.

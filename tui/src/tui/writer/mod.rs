@@ -24,6 +24,7 @@ pub use palette::{PAct, PItem};
 
 use super::anim;
 use super::board;
+use super::files::{self, Files};
 use super::keys;
 use super::memorize::{self, Memo};
 use super::panels::{self, CastPanel, Entry, ScenesPanel};
@@ -176,6 +177,10 @@ pub struct Writer {
     /// The line of the play the last build stopped on, for Alt+G.
     failed_line: Option<usize>,
     find_options: find::FindOptions,
+    /// A draft to go on to once this play has closed.
+    pub open_next: Option<PathBuf>,
+    /// The play is in a folder the system empties.
+    temporary: bool,
     /// The last press of the left button, and how many in a row: a double
     /// click chooses a word, a triple its row.
     clicks: Option<(Instant, u16, u16, u8)>,
@@ -279,6 +284,8 @@ enum Popup {
     Backstage(usize),
     /// The play's own settings: its pace (0) and its words after.
     PlaySettings(usize),
+    /// What belongs to the play.
+    Files(Box<Files>),
 }
 
 impl Writer {
@@ -388,6 +395,8 @@ impl Writer {
             stopped_at: None,
             failed_line: None,
             find_options: Default::default(),
+            open_next: None,
+            temporary: files::temporary(path),
             clicks: None,
             known: HashSet::new(),
             spell_cache: HashMap::new(),
@@ -420,6 +429,9 @@ impl Writer {
         w.refresh_known();
         w.relayout();
         w.snap_forward();
+        if w.temporary && w.message.is_none() {
+            w.say(files::temporary_warning(), true);
+        }
         Ok(w)
     }
 

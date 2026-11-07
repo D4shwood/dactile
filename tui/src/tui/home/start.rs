@@ -711,7 +711,11 @@ impl Home {
             }
             return Action::Stay;
         };
-        if self.form.is_some() || self.importing.is_some() || self.inline.is_some() {
+        if self.form.is_some()
+            || self.importing.is_some()
+            || self.inline.is_some()
+            || self.files.is_some()
+        {
             return Action::Stay;
         }
         let (x, y) = (m.column, m.row);
