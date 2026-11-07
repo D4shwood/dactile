@@ -185,3 +185,12 @@ pdffonts ornek-oyun.pdf > fonts.txt
 pdffonts final.pdf > fonts-final.txt
 [ "$(sed -n 's/^[A-Z]*+\([^ -]*\).*/\1/p' fonts.txt | sort -u | grep -v Mono)" = "$(sed -n 's/^[A-Z]*+\([^ -]*\).*/\1/p' fonts-final.txt | sort -u | grep -v Mono)" ] || { cat fonts.txt fonts-final.txt; echo "FAIL: draft font"; exit 1; }
 echo "ok: draft font"
+
+# \playfont: the PDF takes it; one that isn't there only warns.
+sed 's/\\begin{document}/\\playfont{DejaVu Serif}\n&/' cover.tex > font.tex
+xelatex -interaction=nonstopmode -halt-on-error font.tex > /dev/null 2>&1 || { grep -A6 '^! ' font.log; echo "FAIL: playfont"; exit 1; }
+pdffonts font.pdf | grep -q 'DejaVuSerif' || { pdffonts font.pdf; echo "FAIL: playfont not used"; exit 1; }
+sed 's/\\begin{document}/\\playfont{No Such Font}\n&/' cover.tex > nofont.tex
+xelatex -interaction=nonstopmode -halt-on-error nofont.tex > /dev/null 2>&1 || { grep -A6 '^! ' nofont.log; echo "FAIL: a missing font stopped the build"; exit 1; }
+grep -q 'No Such Font' nofont.log || { echo "FAIL: no warning for a missing font"; exit 1; }
+echo "ok: play font"

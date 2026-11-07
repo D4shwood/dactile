@@ -70,6 +70,7 @@ başlıkları" alanı aynı işi yapar. Hiza yazı ekranında da görünür.
 | `\address{…}` | Adres | `\address{İstanbul}` |
 | `\email{…}` | E-posta | `\email{ornek@example.com}` |
 | `\telephone{…}` | Telefon | `\telephone{000 000 00 00}` |
+| `\playfont{…}` | Oyunun yazı tipi. Bilgisayarda yoksa uyarır, sınıfın yazı tipi kalır | `\playfont{Noto Serif}` |
 | `\maketitle` | Kapağı basar; `\begin{document}` sonrasında | |
 
 Boş bırakılan satır kapağa basılmaz.

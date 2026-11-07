@@ -67,6 +67,6 @@ pub mod class {
 mod tests {
     #[test]
     fn class_version() {
-        assert_eq!(super::class::version(), "1.8.0");
+        assert_eq!(super::class::version(), "1.9.0");
     }
 }

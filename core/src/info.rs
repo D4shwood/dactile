@@ -347,6 +347,37 @@ pub fn set_scene_align(text: &str, side: Side) -> Option<Edit> {
     })
 }
 
+const FONT: &str = "playfont";
+
+/// The play's font, by `\playfont{…}` in the preamble; empty is the class's.
+/// The last one counts, as in the class.
+pub fn play_font(text: &str) -> String {
+    tex::commands(text, source::split(text).preamble)
+        .iter()
+        .rfind(|c| c.name == FONT)
+        .and_then(|c| tex::group(text, c.span.end))
+        .map_or(String::new(), |g| g.inner.trim().to_string())
+}
+
+/// Sets the play's font; the class's own leaves no line behind.
+pub fn set_play_font(text: &str, font: &str) -> Option<Edit> {
+    let font = font.trim();
+    if play_font(text) == font {
+        return None;
+    }
+    let cmds = tex::commands(text, source::split(text).preamble);
+    let mut lines = cmds.iter().filter(|c| c.name == FONT);
+    let Some(c) = lines.next_back() else {
+        return add_line(text, &format!("\\{FONT}{{{font}}}"));
+    };
+    let g = tex::group(text, c.span.end)?;
+    // With one before it, taking this one out would bring that one back.
+    if font.is_empty() && lines.next().is_none() {
+        return Some(remove_line(text, c.span.start..g.span.end));
+    }
+    Some(Edit::new(g.inner_span, font))
+}
+
 /// Switches `\documentclass[draft]` and `[final]`.
 pub fn set_final(text: &str, fin: bool) -> Option<Edit> {
     let (want, other) = if fin {
@@ -380,6 +411,22 @@ mod tests {
     use crate::tex::apply;
 
     const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
+
+    #[test]
+    fn the_font_line_comes_and_goes() {
+        let plain = "\\documentclass{tiyatro}\n\\title{Kar}\n\\begin{document}\n\\end{document}\n"
+            .to_string();
+        assert_eq!(play_font(&plain), "");
+        assert!(set_play_font(&plain, "").is_none());
+        let e = set_play_font(&plain, "Gentium Plus").unwrap();
+        let with = tex::apply(&plain, &[e]);
+        assert!(with.contains("\n\\playfont{Gentium Plus}\n"));
+        assert_eq!(play_font(&with), "Gentium Plus");
+        let e = set_play_font(&with, "Noto Serif").unwrap();
+        assert_eq!(play_font(&tex::apply(&with, &[e])), "Noto Serif");
+        let e = set_play_font(&with, "").unwrap();
+        assert_eq!(tex::apply(&with, &[e]), plain);
+    }
 
     #[test]
     fn scene_headings_stand_where_the_preamble_says() {

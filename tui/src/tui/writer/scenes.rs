@@ -825,6 +825,11 @@ impl Writer {
             side,
             sides.iter().map(ToString::to_string).collect(),
         ));
+        fields.push(Field::text(
+            lang::l("Yazı tipi", "Font"),
+            &info::play_font(&self.buf.text),
+            Vec::new(),
+        ));
         fields.push(Field::flag(
             "Kişiler ayrı sayfada",
             info::cast_own_page(&self.buf.text),

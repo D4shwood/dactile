@@ -106,6 +106,7 @@
   let theme = $state(first.theme || "paper");
   /// The rest of the look; the page's zoom and theme have keys of their own.
   let look = $state(pickLook(first));
+  let playFont = $state("");
   let source = $state(false);
   /// Where the play's class option puts its scene headings.
   let sceneAlign = $state("center");
@@ -177,6 +178,11 @@
         const v = await api.view(doc.toString());
         // Typed on meanwhile: the next one is on its way.
         sceneAlign = v.scene_align;
+        if (playFont !== v.play_font) {
+          playFont = v.play_font;
+          applyLook(shownLook());
+          requestAnimationFrame(() => view.requestMeasure());
+        }
         if (view.state.doc === doc) view.dispatch({ effects: setView.of(v) });
         if (board && view.state.doc === doc) cards = await api.board(doc.toString());
         if (focused && view.state.doc === doc) await refocus();
@@ -593,9 +599,17 @@
     requestAnimationFrame(() => view.requestMeasure());
   }
 
+  /// The play's own font, when it has one, wins on the page.
+  const shownLook = () => ({ ...look, page_font: playFont || look.page_font, theme, page_zoom: zoom });
+
+  function setPlayFont(f: string) {
+    if (opened.read_only) return;
+    void castCall(() => api.playFontWrite(view.state.doc.toString(), f));
+  }
+
   function setTheme(t: string) {
     theme = t;
-    applyLook({ ...look, theme: t, page_zoom: zoom });
+    applyLook(shownLook());
     api.set("theme", t);
   }
 
@@ -604,7 +618,7 @@
     else if (key === "page_zoom") setZoom(value as number);
     else {
       look[key] = value;
-      applyLook({ ...look, theme, page_zoom: zoom });
+      applyLook(shownLook());
       api.set(key, value).catch((e) => say(String(e), true));
       requestAnimationFrame(() => view.requestMeasure());
     }
@@ -969,7 +983,7 @@
   // ------------------------------------------------------------ life
 
   onMount(() => {
-    applyLook({ ...look, theme, page_zoom: zoom });
+    applyLook(shownLook());
     void loadFiles();
     view = new EditorView({
       parent: host,
@@ -1055,9 +1069,9 @@
 
 <div class="writer">
   <Ribbon
-    font={look.page_font}
-    fonts={installedFonts(look.page_font)}
-    setFont={(f) => setLook("page_font", f)}
+    font={playFont}
+    fonts={installedFonts(playFont)}
+    setFont={setPlayFont}
     bind:this={ribbon}
     {tr}
     {folded}

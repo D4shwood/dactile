@@ -279,6 +279,13 @@ pub const ENTRIES: &[Entry] = &[
     ),
     e(
         Cover,
+        "\\playfont",
+        "Oyunun yazı tipi; PDF ve Word buna uyar. Bilgisayarda yoksa sınıfın yazı tipi kalır.",
+        "The play's font, for the PDF and Word alike. If it isn't installed, the class's stays.",
+        "\\playfont{Noto Serif}",
+    ),
+    e(
+        Cover,
         "\\scenetitleflush",
         "Sahne başlıklarını sola ya da sağa yaslar.",
         "Sets scene headings left or right.",

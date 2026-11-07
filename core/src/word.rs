@@ -366,6 +366,15 @@ fn document_xml(text: &str, doc: &Doc, title: &str, author: &str) -> String {
 }
 
 /// The play as the bytes of a `.docx`.
+/// The styles, in the play's own font when it has one.
+fn styles_for(text: &str) -> String {
+    let font = crate::info::play_font(text);
+    if font.is_empty() {
+        return STYLES.to_string();
+    }
+    STYLES.replace("Liberation Serif", &escape(&font).replace('"', "&quot;"))
+}
+
 pub fn document(text: &str) -> Result<Vec<u8>> {
     let doc = Doc::new(text);
     let title = tex::unescape_text(&info::get(text, "title").unwrap_or_default());
@@ -383,11 +392,12 @@ pub fn document(text: &str) -> Result<Vec<u8>> {
     let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
     let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
     let body = document_xml(text, &doc, &title, &author);
+    let styles = styles_for(text);
     for (name, data) in [
         ("[Content_Types].xml", CONTENT_TYPES),
         ("_rels/.rels", RELS),
         ("word/_rels/document.xml.rels", DOC_RELS),
-        ("word/styles.xml", STYLES),
+        ("word/styles.xml", styles.as_str()),
         ("word/document.xml", body.as_str()),
         ("docProps/core.xml", core.as_str()),
         ("docProps/app.xml", app.as_str()),
@@ -435,6 +445,14 @@ pub fn export(play: &Path, text: &str) -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_play_font_reaches_the_styles() {
+        let play = "\\documentclass{tiyatro}\n\\playfont{Noto Serif}\n\\begin{document}\n\\end{document}\n";
+        let styles = styles_for(play);
+        assert!(styles.contains("w:ascii=\"Noto Serif\""));
+        assert!(!styles.contains("Liberation"));
+    }
     use crate::import;
 
     const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");

@@ -225,6 +225,9 @@ impl Writer {
                 if let Some(e) = info::set_scene_align(&t, side) {
                     t = dactile::tex::apply(&t, &[e]);
                 }
+                if let Some(e) = info::set_play_font(&t, form.get(lang::l("Yazı tipi", "Font"))) {
+                    t = dactile::tex::apply(&t, &[e]);
+                }
                 if t != self.buf.text && self.editable() {
                     self.replace_text(t);
                     self.say(

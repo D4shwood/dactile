@@ -70,6 +70,7 @@ These go before `\begin{document}`. All are optional.
 | `\address{…}` | An address | `\address{İstanbul}` |
 | `\email{…}` | An email address | `\email{ornek@example.com}` |
 | `\telephone{…}` | Telephone | `\telephone{000 000 00 00}` |
+| `\playfont{…}` | The play's font. If it isn't installed, a warning, and the class's stays | `\playfont{Noto Serif}` |
 | `\maketitle` | Prints the cover, after `\begin{document}` | |
 
 A line left empty isn't printed.

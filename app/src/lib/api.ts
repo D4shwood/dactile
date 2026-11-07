@@ -188,6 +188,7 @@ export interface View {
   blocks: Block[];
   tail: { start: number; end: number } | null;
   scene_align: string;
+  play_font: string;
 }
 
 export interface Card {
@@ -314,6 +315,7 @@ export const api = {
   summarySet: (text: string, at: number, summary: string) =>
     invoke<Change | null>("summary_set", { text, at, summary }),
   docxExport: (path: string, text: string) => invoke<string>("docx_export", { path, text }),
+  playFontWrite: (text: string, font: string) => invoke<Made>("play_font_write", { text, font }),
   sceneAlignNext: (text: string) => invoke<Made>("scene_align_next", { text }),
   sceneSplit: (text: string, at: number) => invoke<Made>("scene_split", { text, at }),
   sceneJoin: (text: string, at: number) => invoke<Made>("scene_join", { text, at }),

@@ -420,6 +420,11 @@ fn cover_write(text: String, form: cover::CoverForm) -> people::Made {
 }
 
 #[tauri::command]
+fn play_font_write(text: String, font: String) -> people::Made {
+    cover::font(&text, &font)
+}
+
+#[tauri::command]
 fn scene_align_next(text: String) -> Res<people::Made> {
     scenes::next_align(&text)
 }
@@ -1048,6 +1053,7 @@ pub fn run() {
             scene_split,
             scene_join,
             scene_align_next,
+            play_font_write,
             cover_read,
             cover_write,
             docx_export,

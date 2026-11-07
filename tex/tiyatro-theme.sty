@@ -23,8 +23,23 @@
   { \clist_map_inline:nn {#1} { \IfFontExistsTF {##1} { \setmainfont {##1} \clist_map_break: } { } } }
 
 % A draft reads as the final copy does, with room between its lines.
-\__tiy_main_font:n { Times~New~Roman, TeX~Gyre~Termes, Liberation~Serif, DejaVu~Serif }
+\cs_new_protected:Npn \__tiy_own_font:
+  { \__tiy_main_font:n { Times~New~Roman, TeX~Gyre~Termes, Liberation~Serif, DejaVu~Serif } }
+\__tiy_own_font:
 \iftiyatrodraft \setstretch { 1.15 } \else \singlespacing \fi
+
+% The play's own font, in the preamble. Empty is the class's; one that isn't
+% installed here only warns, so a play still builds on another computer.
+\NewDocumentCommand \playfont { m }
+  {
+    \tl_if_blank:nTF {#1}
+      { \__tiy_own_font: }
+      {
+        \IfFontExistsTF {#1}
+          { \setmainfont {#1} }
+          { \msg_warning:nnn { tiyatro } { font } {#1} }
+      }
+  }
 
 % Line numbers use the mono font.
 \cs_new_protected:Npn \__tiy_mono_font:n #1

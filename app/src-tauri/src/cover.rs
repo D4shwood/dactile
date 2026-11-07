@@ -88,6 +88,16 @@ pub fn write(text: &str, form: &CoverForm) -> Made {
     }
 }
 
+/// The ribbon's font list: the one line, nothing else.
+pub fn font(text: &str, font: &str) -> Made {
+    let new = info::set_play_font(text, font).map_or(text.to_string(), |e| tex::apply(text, &[e]));
+    Made {
+        change: diff(text, &new),
+        cursor: None,
+        message: lang::l("Oyunun yazı tipi değişti.", "The play's font changed.").to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

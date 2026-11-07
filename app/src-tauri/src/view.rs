@@ -89,6 +89,8 @@ pub struct View {
     pub tail: Option<Range<usize>>,
     /// Where the scene headings stand: left, center or right.
     pub scene_align: &'static str,
+    /// `\playfont`, empty for the class's.
+    pub play_font: String,
 }
 
 /// Byte offsets to UTF-16 ones.
@@ -430,6 +432,7 @@ pub fn view(text: &str) -> View {
         blocks,
         tail,
         scene_align: doc.scene_align.word(),
+        play_font: dactile::info::play_font(text),
     }
 }
 

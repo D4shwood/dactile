@@ -23,7 +23,7 @@
     /// The buttons' row in pixels, dragged by hand; 0 is its own.
     height: number;
     resized: (h: number) => void;
-    /// The page's font and the list it comes from; empty is the app's own.
+    /// The play's font and the list it comes from; empty is the class's.
     font: string;
     fonts: string[];
     setFont: (f: string) => void;
@@ -217,7 +217,7 @@
           {#if grp.font}
             <select
               class="font"
-              title={tr ? "Sayfanın yazı tipi: ekranda görünür, PDF'i değiştirmez" : "The page's font: on screen, the PDF keeps its own"}
+              title={tr ? "Oyunun yazı tipi: sayfa, PDF ve Word buna uyar" : "The play's font: the page, the PDF and Word follow it"}
               value={font}
               onchange={(e) => setFont(e.currentTarget.value)}
             >
