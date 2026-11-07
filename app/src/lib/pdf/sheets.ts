@@ -43,6 +43,12 @@ export interface Spot {
 
 export type Fit = "" | "width" | "text" | "window";
 
+/// A rectangle laid over a page, in PDF points.
+export interface Mark {
+  rect: number[];
+  kind: "hit" | "now" | "flash";
+}
+
 export interface Events {
   page: (n: number) => void;
   zoom: (percent: number) => void;
@@ -56,6 +62,10 @@ export class Sheets {
   /// Which `arrange` is the latest.
   private arranging = 0;
   private sheets: Sheet[] = [];
+  private marks = new Map<number, Mark[]>();
+  private flashed = new Map<number, Mark[]>();
+  private fading = 0;
+  private sharpening: RenderTask | null = null;
   private busy = false;
   private frame = 0;
   private later = 0;
@@ -443,6 +453,7 @@ export class Sheets {
 
   /// What lies over the canvas: the text to select.
   private async layers(s: Sheet, page: PDFPageProxy, view: PageViewport) {
+    this.paint(s);
     if (s.text) return;
     const div = document.createElement("div");
     div.className = "textLayer";
@@ -450,6 +461,103 @@ export class Sheets {
     const text = new TextLayer({ textContentSource: page.streamTextContent(), container: div, viewport: view });
     s.text = text;
     await text.render();
+  }
+
+  /// The search's marks, by page, in place of those there.
+  mark(marks: Map<number, Mark[]>) {
+    this.marks = marks;
+    for (const s of this.sheets) this.paint(s);
+  }
+
+  /// Marks are in percent of the page, so a zoom leaves them right.
+  private paint(s: Sheet) {
+    s.el.querySelector(".marks")?.remove();
+    const list = [...(this.marks.get(s.n) ?? []), ...(this.flashed.get(s.n) ?? [])];
+    if (!list.length || !s.base) return;
+    const layer = document.createElement("div");
+    layer.className = "marks";
+    for (const m of list) {
+      const [a, b, c, d] = s.base.convertToViewportRectangle(m.rect);
+      const div = document.createElement("div");
+      div.className = m.kind;
+      div.style.left = `${(Math.min(a, c) / s.base.width) * 100}%`;
+      div.style.top = `${(Math.min(b, d) / s.base.height) * 100}%`;
+      div.style.width = `${(Math.abs(c - a) / s.base.width) * 100}%`;
+      div.style.height = `${(Math.abs(d - b) / s.base.height) * 100}%`;
+      layer.append(div);
+    }
+    s.canvas ? s.canvas.after(layer) : s.el.prepend(layer);
+  }
+
+  /// Brings a rectangle of a page into view, a third of the way down. With
+  /// `flash`, the rectangles light up for a moment.
+  async reveal(n: number, rect: number[], flash: number[][] = []) {
+    const doc = this.doc;
+    const s = this.sheets[n - 1];
+    if (!doc || !s) return;
+    const view = this.viewOf(await doc.getPage(n), 1);
+    if (this.doc !== doc) return;
+    const [a, b, c, d] = view.convertToViewportRectangle(rect);
+    const f = (this.zoom / 100) * UNIT;
+    this.show(n);
+    this.host.scrollTop = s.el.offsetTop + Math.min(b, d) * f - this.host.clientHeight / 3;
+    const left = s.el.offsetLeft + Math.min(a, c) * f;
+    const right = s.el.offsetLeft + Math.max(a, c) * f;
+    if (left < this.host.scrollLeft || right > this.host.scrollLeft + this.host.clientWidth) this.host.scrollLeft = left - PAD;
+    this.page = n;
+    this.on.page(n);
+    if (flash.length) {
+      clearTimeout(this.fading);
+      const old = [...this.flashed.keys()];
+      this.flashed = new Map([[n, flash.map((r) => ({ rect: r, kind: "flash" as const }))]]);
+      s.base ??= view;
+      for (const p of [...old, n]) if (this.sheets[p - 1]) this.paint(this.sheets[p - 1]);
+      this.fading = window.setTimeout(() => {
+        this.flashed = new Map();
+        this.paint(s);
+      }, 2500);
+    }
+    this.update();
+  }
+
+  /// The drawn page under a point of the window.
+  under(x: number, y: number) {
+    for (const s of this.sheets) {
+      if (s.el.hidden || !s.canvas) continue;
+      const rect = s.el.getBoundingClientRect();
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return { n: s.n, rect, canvas: s.canvas };
+    }
+    return null;
+  }
+
+  /// A page drawn `factor` times finer than on the screen, for the lens.
+  async sharp(n: number, factor: number): Promise<HTMLCanvasElement | null> {
+    const page = this.sheets[n - 1]?.page;
+    if (!page) return null;
+    const view = this.viewOf(page, (this.zoom / 100) * UNIT * factor);
+    const ratio = Math.min(devicePixelRatio || 1, Math.sqrt(MAX_PIXELS / (view.width * view.height)));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.floor(view.width * ratio);
+    canvas.height = Math.floor(view.height * ratio);
+    const task = page.render({
+      canvasContext: canvas.getContext("2d")!,
+      viewport: view,
+      transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0],
+    });
+    this.sharpening = task;
+    try {
+      await task.promise;
+      return canvas;
+    } catch {
+      canvas.width = 0;
+      return null;
+    } finally {
+      if (this.sharpening === task) this.sharpening = null;
+    }
+  }
+
+  stopSharp() {
+    this.sharpening?.cancel();
   }
 
   /// A far page gives back all it holds.

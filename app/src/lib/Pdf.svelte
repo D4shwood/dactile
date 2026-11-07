@@ -1,13 +1,16 @@
 <script lang="ts">
   // The built PDF beside the page, drawn by pdf.js: the bars, the keys and
   // the mouse. The pages themselves are in pdf/sheets.ts.
-  import { onDestroy, onMount, untrack } from "svelte";
+  import { onDestroy, onMount, tick, untrack } from "svelte";
   import * as pdfjs from "pdfjs-dist";
   import worker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
   import { api, type BuildResult, type Viewer } from "./api";
   import BottomBar from "./pdf/BottomBar.svelte";
+  import Clock from "./pdf/Clock.svelte";
   import Icon from "./pdf/Icon.svelte";
   import { centimetres, clampZoom, stepOf, stepZoom, Trail, type Mode } from "./pdf/layout";
+  import { Lens } from "./pdf/lens";
+  import Search from "./pdf/Search.svelte";
   import { Sheets, type Fit, type Place } from "./pdf/sheets";
   import TopBar from "./pdf/TopBar.svelte";
 
@@ -46,6 +49,12 @@
   let failure = $state("");
   // A rectangle being dragged out, in the window's coordinates.
   let band = $state<{ x: number; y: number; w: number; h: number } | null>(null);
+  let doc = $state.raw<pdfjs.PDFDocumentProxy | null>(null);
+  let search: Search | undefined = $state();
+  // The lens while the button is held: where it is, and what draws in it.
+  let glass = $state<{ x: number; y: number } | null>(null);
+  let glassCanvas: HTMLCanvasElement | undefined = $state();
+  let lens: Lens | null = null;
 
   const trail = new Trail<Place>();
   let canBack = $state(false);
@@ -69,13 +78,14 @@
     if (n !== drawn) return;
     const loading = pdfjs.getDocument({ data: bytes });
     try {
-      const doc = await loading.promise;
+      const opened = await loading.promise;
       if (n !== drawn || !sheets) return;
       failure = "";
-      await sheets.open(doc);
+      await sheets.open(opened);
       // A newer build came meanwhile: this one is about to close.
-      if (n !== drawn) return sheets.forget(doc);
-      pages = doc.numPages;
+      if (n !== drawn) return sheets.forget(opened);
+      pages = opened.numPages;
+      doc = opened;
       const ended = new Promise<void>((done) => {
         release?.();
         release = done;
@@ -115,6 +125,7 @@
   // A drawing under way stops, and the document closes.
   onDestroy(() => {
     drawn++;
+    endLens();
     sheets?.destroy();
     release?.();
     release = null;
@@ -143,6 +154,26 @@
     Object.assign(o, patch);
     apply();
     keep();
+  }
+
+  /// The bottom bar's toggles: a panel opens at its last tab.
+  function toggle(side: "left" | "right") {
+    if (!o) return;
+    if (side === "right") choose({ right: o.right ? "" : "search" });
+  }
+
+  /// Ctrl+F: the search panel, ready to type in.
+  async function openSearch() {
+    if (!o) return;
+    if (o.right !== "search") choose({ right: "search" });
+    await tick();
+    search?.focus();
+  }
+
+  async function findAgain(against: boolean) {
+    if (!o) return;
+    if (o.right !== "search") return openSearch();
+    search?.again(against);
   }
 
   function fit(f: Fit) {
@@ -270,11 +301,13 @@
       if (e.key === "3") return take(() => fit("window"));
       if (e.key === "4") return take(() => fit("text"));
       if (e.key === "j" || e.key === "J") return take(gotoBox);
+      if (e.key === "f" || e.key === "F") return take(openSearch);
       if (e.key === "Home") return take(() => act("first"));
       if (e.key === "End") return take(() => act("last"));
       return;
     }
     if (e.key === "Escape") return take(escape);
+    if (e.key === "F3" && !mod) return take(() => findAgain(e.shiftKey));
     if (typing || mod) return;
     if (e.key === "Home") return take(() => act("first"));
     if (e.key === "End") return take(() => act("last"));
@@ -291,10 +324,36 @@
 
   /// Esc closes one thing at a time, the last opened first.
   function escape() {
-    if (menu) menu = false;
+    if (glass) endLens();
+    else if (menu) menu = false;
     else if (band) band = null;
-    else if (wide) wide = false;
+    else if (o?.right) {
+      choose({ right: "" });
+      host?.focus();
+    } else if (wide) wide = false;
     else close();
+  }
+
+  function endLens() {
+    lens?.end();
+    lens = null;
+    glass = null;
+  }
+
+  /// The lens opens under the pointer and follows it while the button is
+  /// held.
+  async function openLens(e: PointerEvent) {
+    if (!o || !sheets?.under(e.clientX, e.clientY)) return;
+    const point = (m: PointerEvent) => {
+      if (lens) glass = { x: m.clientX, y: m.clientY };
+      lens?.move(m.clientX, m.clientY);
+    };
+    glass = { x: e.clientX, y: e.clientY };
+    drag(e, point, endLens);
+    await tick();
+    if (!glassCanvas || !glass) return;
+    lens = new Lens(sheets, glassCanvas, o.lens_size);
+    lens.move(glass.x, glass.y);
   }
 
   // ------------------------------------------------------- the mouse
@@ -355,7 +414,7 @@
     if (mode !== "magnify") return;
     e.preventDefault();
     if (e.altKey) return setZoom(stepZoom(zoom, false), ...inside(e));
-    if (!e.shiftKey) return;
+    if (!e.shiftKey) return void openLens(e);
     const [x, y] = [e.clientX, e.clientY];
     band = { x, y, w: 0, h: 0 };
     drag(
@@ -383,12 +442,22 @@
     return [e.clientX - r.left, e.clientY - r.top];
   }
 
-  function copyPlace(x: number, y: number) {
+  async function copyPlace(x: number, y: number) {
     const text = centimetres(x, y);
-    navigator.clipboard
-      ?.writeText(text)
-      .then(() => say(l(`Konum kopyalandı: ${text} cm`, `Position copied: ${text} cm`)))
-      .catch((e) => say(String(e), true));
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // WebKitGTK may refuse the clipboard API: the old way, as the writer does.
+      const t = document.createElement("textarea");
+      t.value = text;
+      root?.append(t);
+      t.select();
+      const ok = document.execCommand("copy");
+      t.remove();
+      host?.focus();
+      if (!ok) return say(l("Pano kullanılamadı.", "The clipboard can't be used."), true);
+    }
+    say(l(`Konum kopyalandı: ${text} cm`, `Position copied: ${text} cm`));
   }
 
   const none = $derived(result?.kind !== "built" && pages === 0);
@@ -457,9 +526,40 @@
     <p class="muted empty">{tr ? "F5 ile derle." : "Build with F5."}</p>
   {/if}
   {#if building}<p class="muted note">{tr ? "derleniyor…" : "building…"}</p>{/if}
-  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_static_element_interactions -->
-  <div class="pages {mode}" class:invert={o?.invert} class:gray={o?.gray} class:dim={building} bind:this={host} tabindex="0" onpointerdown={ondown} {onwheel}></div>
-  <BottomBar {tr} left={!!o?.left} right={!!o?.right} {page} {pages} {zoom} disabled={none} {setZoom} step={(up) => setZoom(stepZoom(zoom, up))} />
+  <div class="middle">
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_static_element_interactions -->
+    <div class="pages {mode}" class:invert={o?.invert} class:gray={o?.gray} class:dim={building} bind:this={host} tabindex="0" onpointerdown={ondown} {onwheel}></div>
+    {#if o?.right && sheets}
+      <div class="panel">
+        <div class="tabs" role="tablist">
+          <button role="tab" aria-selected={o.right === "search"} class:on={o.right === "search"} title={l("Ara (Ctrl+F)", "Search (Ctrl+F)")} onclick={() => choose({ right: "search" })}>{l("Ara", "Search")}</button>
+          <button role="tab" aria-selected={o.right === "clock"} class:on={o.right === "clock"} title={l("Saat", "Clock")} onclick={() => choose({ right: "clock" })}>{l("Saat", "Clock")}</button>
+        </div>
+        {#if o.right === "search"}
+          <Search bind:this={search} {tr} {doc} {page} {sheets} {say} />
+        {:else}
+          <Clock {tr} />
+        {/if}
+      </div>
+    {/if}
+  </div>
+  <BottomBar {tr} left={!!o?.left} right={!!o?.right} {page} {pages} {zoom} disabled={none} {toggle} {setZoom} step={(up) => setZoom(stepZoom(zoom, up))} />
+  {#if glass && o}
+    <div
+      class="lens"
+      class:round={o.lens_round}
+      class:shadow={o.lens_shadow}
+      class:border={o.lens_border}
+      class:invert={o.invert}
+      class:gray={o.gray}
+      style:left="{glass.x - o.lens_size / 2}px"
+      style:top="{glass.y - o.lens_size / 2}px"
+      style:width="{o.lens_size}px"
+      style:height="{o.lens_size}px"
+    >
+      <canvas bind:this={glassCanvas}></canvas>
+    </div>
+  {/if}
   {#if band}
     <div class="band" style:left="{band.x}px" style:top="{band.y}px" style:width="{band.w}px" style:height="{band.h}px"></div>
   {/if}
@@ -557,8 +657,103 @@
     background: var(--chrome);
     border-radius: 4px;
   }
+  .middle {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+  }
+  .panel {
+    flex: 0 0 200px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    color: var(--chrome-fg);
+    background: var(--chrome);
+    border-left: 1px solid var(--chrome-line);
+  }
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--chrome-line);
+  }
+  .tabs button {
+    flex: 1;
+    padding: 4px 6px;
+    font-size: 12px;
+    color: inherit;
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+  }
+  .tabs button.on {
+    border-bottom-color: var(--claret);
+  }
+  .tabs button:focus-visible {
+    outline: 2px solid var(--claret);
+    outline-offset: -2px;
+  }
+  .lens {
+    position: fixed;
+    z-index: 7;
+    overflow: hidden;
+    pointer-events: none;
+    background: white;
+  }
+  .lens.round {
+    border-radius: 50%;
+  }
+  .lens.shadow {
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  }
+  .lens.border {
+    outline: 2px solid var(--claret);
+  }
+  .lens canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .lens.invert canvas {
+    filter: invert(1) hue-rotate(180deg);
+  }
+  .lens.gray canvas {
+    filter: grayscale(1);
+  }
+  .lens.invert.gray canvas {
+    filter: invert(1) grayscale(1);
+  }
+  .pages :global(.marks) {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .pages :global(.marks div) {
+    position: absolute;
+    border-radius: 2px;
+    mix-blend-mode: multiply;
+  }
+  .pages :global(.marks .hit) {
+    background: #ffd84d;
+  }
+  .pages :global(.marks .now) {
+    background: #ff9f43;
+  }
+  .pages :global(.marks .flash) {
+    background: color-mix(in srgb, var(--claret) 35%, transparent);
+    animation: flash 2.5s ease-out forwards;
+  }
+  @keyframes flash {
+    70% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
   .pages {
     flex: 1;
+    min-width: 0;
     min-height: 0;
     overflow: auto;
     position: relative;

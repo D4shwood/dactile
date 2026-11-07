@@ -5,6 +5,7 @@
 
   let {
     tr,
+    hasLeft = false,
     left,
     right,
     page,
@@ -16,13 +17,14 @@
     step,
   }: {
     tr: boolean;
+    hasLeft?: boolean;
     left: boolean;
     right: boolean;
     page: number;
     pages: number;
     zoom: number;
     disabled: boolean;
-    toggle?: (side: "left" | "right") => void;
+    toggle: (side: "left" | "right") => void;
     setZoom: (z: number) => void;
     step: (up: boolean) => void;
   } = $props();
@@ -36,8 +38,10 @@
 </script>
 
 <div class="bar">
-  <button title={l("Sol panel: küçük resimler, ana hat, bilgi", "Left panel: thumbnails, outline, info")} aria-label={l("Sol panel", "Left panel")} aria-pressed={left} class:on={left} disabled={!toggle} onclick={() => toggle?.("left")}><Icon name="left" /></button>
-  <button title={l("Sağ panel: arama, saat", "Right panel: search, clock")} aria-label={l("Sağ panel", "Right panel")} aria-pressed={right} class:on={right} disabled={!toggle} onclick={() => toggle?.("right")}><Icon name="right" /></button>
+  {#if hasLeft}
+    <button title={l("Sol panel: küçük resimler, ana hat, bilgi", "Left panel: thumbnails, outline, info")} aria-label={l("Sol panel", "Left panel")} aria-pressed={left} class:on={left} onclick={() => toggle("left")}><Icon name="left" /></button>
+  {/if}
+  <button title={l("Sağ panel: arama, saat", "Right panel: search, clock")} aria-label={l("Sağ panel", "Right panel")} aria-pressed={right} class:on={right} onclick={() => toggle("right")}><Icon name="right" /></button>
   <span class="grow"></span>
   <span class="page">{l("Sayfa", "Page")} {page} / {pages}</span>
   {#if custom}
