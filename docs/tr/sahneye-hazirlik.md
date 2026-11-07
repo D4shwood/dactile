@@ -71,6 +71,7 @@ yerini bulur; üstüne satır eklemek notu kaybettirmez.
 | `n` | Kendi notun |
 | ␣ | Tamam ya da yeniden açık |
 | `u` | Notun düzeltmesini uygula, `“yanlış” → doğru`; Ctrl+Z geri alır |
+| `g`, `U` | Bu kısmın ya da bütün notların düzeltmelerini birlikte uygula |
 | `r`, `e` | Yanıtla, düzenle |
 | `h`, `a`, `x` | Gizle, arşivle, sil (iki kez) |
 | `c`, `o` | Notlu PDF kopyası (`oyun - notlu.pdf`), aç |

@@ -328,7 +328,7 @@ Sınıf [tex/](tex/) klasöründe; Dactile onu kendi içinde taşır.
 - **Karakterler** kısaltmalarla tanımlanır:
   - `\karakter`
   - gruplar (`\karaktergrubu` ya da `\chargroup`, üyeleri `\gkarakter`)
-  - kişiler tablosuna girmeyenler (`\gizlikarakter`)
+  - kişiler tablosuna girmeyenler (`\sirkarakter`)
   - kişiler sayfasında adı geçmeyenler, listenin altında (`\digerkisiler{Köylüler, müzisyenler.}`)
   - replik ve yönergelerde dipnot: `\dipnot{…}`
   - replik içinde geçen ad (`\setinlinename`)
@@ -352,7 +352,7 @@ Sınıf [tex/](tex/) klasöründe; Dactile onu kendi içinde taşır.
 
   | Mod | Font | Satır aralığı | Kenar | Kapak |
   |---|---|---|---|---|
-  | taslak | sans | 1,5 | her repliğe ve yönergeye bir numara | "TASLAK" |
+  | taslak | serif | 1,15 | her repliğe ve yönergeye bir numara | "TASLAK" |
   | final | serif | tek | yok | yıldızlı karakterler |
 
 - `\begin{document}` öncesindeki `\scenetitleflush[left]` sahne başlıklarını o

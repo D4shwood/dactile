@@ -34,7 +34,7 @@ derlenir. Bu sayfa sınıfın bütün komutlarını anlatır.
 
 | Seçenek | Ne yapar |
 |---|---|
-| `draft` | Taslak: sans yazı, 1,5 satır aralığı, kenarda satır numarası, kapakta "TASLAK". Varsayılan budur |
+| `draft` | Taslak: final ile aynı serif yazı, 1,15 satır aralığı, kenarda satır numarası, kapakta "TASLAK". Varsayılan budur |
 | `final` | Son hâl: serif yazı, tek aralık, numara yok, kapakta yıldızlı kişiler |
 | `nohash` | `#` satırlarını kapatır, `#` sıradan karakter olur |
 | `nonotes` | Yönetmene notları bu derlemeden çıkarır |
@@ -64,11 +64,30 @@ başlıkları" alanı aynı işi yapar. Hiza yazı ekranında da görünür.
 |---|---|---|
 | `\title{…}` | Oyunun adı | `\title{Kar Masalı}` |
 | `\author{…}` | Yazar | `\author{Örnek Yazar}` |
+| `\editedby{…}` | Yazarın altında "Düzenleyen: …" | `\editedby{Örnek Kişi}` |
 | `\draft{…}` | Taslak numarası | `\draft{0.1}` |
 | `\copyrightnotice{…}` | Telif satırı | `\copyrightnotice{2026 Örnek Yazar}` |
 | `\address{…}` | Adres | `\address{İstanbul}` |
 | `\email{…}` | E-posta | `\email{ornek@example.com}` |
+| `\telephone{…}` | Telefon | `\telephone{000 000 00 00}` |
 | `\maketitle` | Kapağı basar; `\begin{document}` sonrasında | |
+
+Boş bırakılan satır kapağa basılmaz.
+
+### Kapak ve kişiler sayfasının görünümü
+
+```latex
+\coverstyle{title}{align=left, size=Huge, style=smallcaps, before=2cm, after=1cm}
+\caststyle{title}{align=center, size=Large}
+```
+
+Kapakta `title`, `author`, `editedby`, `draft`, `starred`, `copyright`, `address`,
+`telephone`, `email`; kişiler sayfasında `title`, `names`, `stars`, `descriptions`,
+`others` ayarlanır. Yanlış ad ya da değer derlemeyi durdurur. Dactile'da Giriş
+sekmesindeki **Kapak ve kişiler** bu satırları yazar.
+
+`\kisiler` sonunda sayfa kapanır; `\kisiler*` yazılırsa oyun aynı sayfada başlar.
+`\dramatispersonae`, kişiler başlığını oyunun dili ne olursa olsun Latince yapar.
 
 ## Kişiler
 
@@ -107,7 +126,7 @@ alır, yanında bir şey yazmaz.
 
 | Komut | Ne yapar | Örnek |
 |---|---|---|
-| `\gizlikarakter{AD}{kısaltma}` | Konuşur ama tabloda hiç görünmez | `\gizlikarakter{HERKES}{hep}` |
+| `\sirkarakter{AD}{kısaltma}` | Konuşur ama tabloda hiç görünmez. İngilizcesi `\secretcharacter`; eski `\gizlikarakter` de çalışır | `\sirkarakter{HERKES}{hep}` |
 | `\digerkisiler{…}`, `\othercast` | Tablonun altına toplu kişileri yazar | `\digerkisiler{Köylüler, müzisyenler.}` |
 | `\setinlinename{kısaltma}{Ad}` | Replik içinde `\oz` yazınca çıkacak ad | `\setinlinename{oz}{Ozan Usta}` |
 | `\setmaxnamewidth{ölçü}` | Replik adı sütununun genişliği | `\setmaxnamewidth{3cm}` |

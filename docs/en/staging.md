@@ -70,6 +70,7 @@ lines added above it don't lose it.
 | `n` | A note of your own |
 | ␣ | Done, or open again |
 | `u` | Make the note's correction, `“wrong” → right`; Ctrl+Z undoes it |
+| `g`, `U` | Apply the corrections of this part, or of all the notes, together |
 | `r`, `e` | Reply, edit |
 | `h`, `a`, `x` | Hide, archive, delete (twice) |
 | `c`, `o` | A PDF copy with the notes (`oyun - notlu.pdf`), open it |

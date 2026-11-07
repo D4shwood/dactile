@@ -34,7 +34,7 @@ Options go in the brackets of `\documentclass[…]{tiyatro}`, separated by comma
 
 | Option | What it does |
 |---|---|
-| `draft` | Sans, 1.5× spacing, line numbers in the margin, "TASLAK" on the cover. The default |
+| `draft` | The same serif as final, 1.15× spacing, line numbers in the margin, "TASLAK" on the cover. The default |
 | `final` | Serif, single spacing, no numbers, the starred characters on the cover |
 | `nohash` | Turns `#` lines off; `#` is an ordinary character |
 | `nonotes` | Leaves the director's notes out of this build |
@@ -64,11 +64,30 @@ These go before `\begin{document}`. All are optional.
 |---|---|---|
 | `\title{…}` | The play's title | `\title{Kar Masalı}` |
 | `\author{…}` | The author | `\author{Örnek Yazar}` |
+| `\editedby{…}` | "Edited by" under the author | `\editedby{Sample Person}` |
 | `\draft{…}` | The draft number | `\draft{0.1}` |
 | `\copyrightnotice{…}` | The copyright line | `\copyrightnotice{2026 Örnek Yazar}` |
 | `\address{…}` | An address | `\address{İstanbul}` |
 | `\email{…}` | An email address | `\email{ornek@example.com}` |
+| `\telephone{…}` | Telephone | `\telephone{000 000 00 00}` |
 | `\maketitle` | Prints the cover, after `\begin{document}` | |
+
+A line left empty isn't printed.
+
+### The look of the cover and the cast page
+
+```latex
+\coverstyle{title}{align=left, size=Huge, style=smallcaps, before=2cm, after=1cm}
+\caststyle{title}{align=center, size=Large}
+```
+
+The cover has `title`, `author`, `editedby`, `draft`, `starred`, `copyright`, `address`,
+`telephone`, `email`; the cast page has `title`, `names`, `stars`, `descriptions`,
+`others`. A wrong name or value stops the build. In Dactile, **Cover and cast** on the
+Home tab writes these lines.
+
+`\kisiler` ends its page; with `\kisiler*` the play starts on the same page.
+`\dramatispersonae` makes the cast title Latin, whatever the play's language.
 
 ## Characters
 
@@ -107,7 +126,7 @@ description: the character is in the table with nothing beside the name.
 
 | Command | What it does | Example |
 |---|---|---|
-| `\gizlikarakter{NAME}{alias}` | Speaks, but never appears in the table | `\gizlikarakter{HERKES}{hep}` |
+| `\secretcharacter{NAME}{alias}` | Speaks, but never appears in the table. Also `\sirkarakter`; the old `\gizlikarakter` still works | `\secretcharacter{HERKES}{hep}` |
 | `\digerkisiler{…}`, `\othercast` | Writes those named together under the table | `\digerkisiler{Köylüler, müzisyenler.}` |
 | `\setinlinename{alias}{Name}` | The name `\oz` gives inside a line | `\setinlinename{oz}{Ozan Usta}` |
 | `\setmaxnamewidth{length}` | The width of the names' column | `\setmaxnamewidth{3cm}` |

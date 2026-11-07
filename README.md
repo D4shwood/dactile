@@ -333,7 +333,7 @@ ticking it is yours. Nothing changes the play by itself.
 
 - characters with aliases: `\karakter`, groups (`\karaktergrubu` or
   `\chargroup`, their members `\gkarakter`), characters
-  left out of the cast table (`\gizlikarakter`), and the name used inside a
+  left out of the cast table (`\secretcharacter`), and the name used inside a
   line (`\setinlinename`), and those the cast page doesn't name, under the
   list (`\digerkisiler{Köylüler, müzisyenler.}`, or `\othercast`)
 - footnotes in lines and directions: `\dipnot{…}`, or `\footnote`
@@ -357,7 +357,7 @@ ticking it is yours. Nothing changes the play by itself.
 
   | Mode | Font | Spacing | Margin | Cover |
   |---|---|---|---|---|
-  | draft | sans | 1.5× | one number per line of dialogue or direction | "TASLAK" |
+  | draft | serif | 1.15× | one number per line of dialogue or direction | "TASLAK" |
   | final | serif | single | none | the starred characters |
 
 - `\scenetitleflush[left]` in the preamble sets the scene headings to a side
