@@ -1,37 +1,125 @@
 //! Finding and replacing.
 
 use super::*;
+use regex::{Regex, RegexBuilder};
+
+/// How the find form looks: each stays on for the next search.
+#[derive(Clone, Copy, Default, PartialEq)]
+pub struct FindOptions {
+    /// Capitals and small letters apart.
+    pub case: bool,
+    pub whole_word: bool,
+    pub regexp: bool,
+    /// The cover and cast lines too, not just the play's body.
+    pub whole_file: bool,
+}
+
+impl FindOptions {
+    /// `needle` as a regular expression, in these options.
+    fn regex(self, needle: &str) -> Result<Regex, regex::Error> {
+        let mut p = if self.regexp {
+            format!("(?:{needle})")
+        } else {
+            regex::escape(needle)
+        };
+        if self.whole_word {
+            p = format!(r"\b{p}\b");
+        }
+        RegexBuilder::new(&p)
+            .case_insensitive(!self.case)
+            .multi_line(true)
+            .build()
+    }
+}
 
 impl Writer {
     /// The next match of `needle` after the cursor (wrapping), ignoring case
-    /// the Turkish way.
+    /// the Turkish way unless asked not to.
     pub(super) fn find_from(&self, needle: &str, from: usize) -> Option<std::ops::Range<usize>> {
         if needle.is_empty() {
             return None;
         }
+        let o = self.find_options;
         let t = &self.buf.text;
-        let n = dcast::lower_tr(needle);
+        let area = if o.whole_file {
+            0..t.len()
+        } else {
+            self.doc.parts.body.clone()
+        };
+        if o.regexp {
+            let re = o.regex(needle).ok()?;
+            let mut first = None;
+            for m in re.find_iter(&t[area.clone()]).filter(|m| !m.is_empty()) {
+                let r = area.start + m.start()..area.start + m.end();
+                if r.start >= from {
+                    return Some(r);
+                }
+                first.get_or_insert(r);
+            }
+            return first;
+        }
+        let fold = |s: &str| {
+            if o.case {
+                s.to_string()
+            } else {
+                dcast::lower_tr(s)
+            }
+        };
+        let n = fold(needle);
         let n: Vec<char> = n.chars().collect();
         let starts: Vec<usize> = t.char_indices().map(|(i, _)| i).collect();
         let try_at = |i: usize| -> Option<usize> {
             let mut end = i;
             for &c in &n {
                 let ch = t[end..].chars().next()?;
-                let low: Vec<char> = dcast::lower_tr(&ch.to_string()).chars().collect();
+                let low: Vec<char> = fold(&ch.to_string()).chars().collect();
                 if low.first() != Some(&c) {
                     return None;
                 }
                 end += ch.len_utf8();
             }
-            Some(end)
+            let apart = !o.whole_word
+                || !t[..i]
+                    .chars()
+                    .next_back()
+                    .is_some_and(char::is_alphanumeric)
+                    && !t[end..].chars().next().is_some_and(char::is_alphanumeric);
+            apart.then_some(end)
         };
-        let body = self.doc.parts.body.clone();
-        let after = starts.iter().filter(|&&i| i >= from && i < body.end);
-        let before = starts.iter().filter(|&&i| i >= body.start && i < from);
+        let after = starts.iter().filter(|&&i| i >= from && i < area.end);
+        let before = starts.iter().filter(|&&i| i >= area.start && i < from);
         after.chain(before).find_map(|&i| try_at(i).map(|e| i..e))
     }
 
+    /// What goes in place of the match at `r`: with a regexp, `$1` is its
+    /// first group.
+    fn replacement(&self, needle: &str, r: &std::ops::Range<usize>, with: &str) -> String {
+        let o = self.find_options;
+        if !o.regexp {
+            return with.to_string();
+        }
+        let caps = o
+            .regex(needle)
+            .ok()
+            .and_then(|re| re.captures_at(&self.buf.text, r.start));
+        let Some(caps) = caps else {
+            return with.to_string();
+        };
+        let mut out = String::new();
+        caps.expand(with, &mut out);
+        out
+    }
+
     pub(super) fn find_next(&mut self, needle: &str) {
+        if self.find_options.regexp
+            && let Err(e) = self.find_options.regex(needle)
+        {
+            self.say(
+                &lang::f("Düzenli ifade bozuk: {}", "A broken regexp: {}", &[&e]),
+                true,
+            );
+            return;
+        }
         let from = self.buf.selection().map_or(self.buf.cursor, |s| s.end);
         match self.find_from(needle, from) {
             Some(r) => {
@@ -52,17 +140,17 @@ impl Writer {
     }
 
     pub(super) fn replace_one(&mut self, needle: &str, with: &str) {
-        let matches = self
+        let found = self
             .buf
-            .selected_text()
-            .is_some_and(|s| dcast::lower_tr(s) == dcast::lower_tr(needle));
-        if matches && self.editable() {
-            let r = self.buf.selection().unwrap();
+            .selection()
+            .filter(|s| self.find_from(needle, s.start).as_ref() == Some(s));
+        if let Some(r) = found
+            && self.editable()
+        {
             let at = r.start;
-            self.buf.apply(
-                &[dactile::tex::Edit::new(r, with.to_string())],
-                at + with.len(),
-            );
+            let with = self.replacement(needle, &r, with);
+            let end = at + with.len();
+            self.buf.apply(&[dactile::tex::Edit::new(r, with)], end);
             self.edited();
         }
         self.find_next(needle);
@@ -73,7 +161,11 @@ impl Writer {
             return;
         }
         let mut edits = Vec::new();
-        let mut at = self.doc.parts.body.start;
+        let mut at = if self.find_options.whole_file {
+            0
+        } else {
+            self.doc.parts.body.start
+        };
         while let Some(r) = self.find_from(needle, at) {
             if r.start < at
                 || edits
@@ -83,7 +175,8 @@ impl Writer {
                 break;
             }
             at = r.end;
-            edits.push(dactile::tex::Edit::new(r, with.to_string()));
+            let with = self.replacement(needle, &r, with);
+            edits.push(dactile::tex::Edit::new(r, with));
         }
         let n = edits.len();
         if n > 0 {

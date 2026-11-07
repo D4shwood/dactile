@@ -61,6 +61,125 @@ fn at_end_of(w: &mut Writer, words: &str) {
     w.relayout();
 }
 
+fn find_one(w: &Writer, needle: &str) -> Option<String> {
+    let r = w.find_from(needle, 0)?;
+    Some(w.buf.text[r].to_string())
+}
+
+#[test]
+fn find_goes_by_its_options() {
+    let mut o = open("find");
+    let w = &mut o.w;
+    // By default small and capital are one, the Turkish way.
+    assert_eq!(find_one(w, "AMCA").as_deref(), Some("Amca"));
+    w.find_options.case = true;
+    assert_eq!(find_one(w, "AMCA"), None);
+    w.find_options.case = false;
+    // "taş" in a longer word doesn't count as the word.
+    w.find_options.whole_word = true;
+    assert_eq!(find_one(w, "dur"), None);
+    assert_eq!(find_one(w, "durdu").as_deref(), Some("durdu"));
+    w.find_options.whole_word = false;
+    // The cover is out of the search, but for the whole file.
+    assert_eq!(find_one(w, "Kar Masalı"), None);
+    w.find_options.whole_file = true;
+    assert_eq!(find_one(w, "Kar Masalı").as_deref(), Some("Kar Masalı"));
+    w.find_options.whole_file = false;
+    w.find_options.regexp = true;
+    assert_eq!(find_one(w, r"Am+ca,").as_deref(), Some("Amca,"));
+    // A broken one says so, and nothing moves.
+    let at = w.buf.cursor;
+    w.find_next("(");
+    assert_eq!(w.buf.cursor, at);
+    assert!(w.message.as_ref().is_some_and(|m| m.1));
+}
+
+#[test]
+fn a_regexp_replaces_with_its_groups() {
+    let mut o = open("regexp");
+    let w = &mut o.w;
+    w.find_options.regexp = true;
+    w.replace_all(r"(Amca), yine", "$1, gene");
+    assert!(w.buf.text.contains("Amca, gene mi"));
+}
+
+#[test]
+fn the_find_form_keeps_its_options() {
+    let mut o = open("form");
+    let w = &mut o.w;
+    with(w, KeyCode::Char('f'), KeyModifiers::CONTROL);
+    type_in(w, "amca");
+    press(w, KeyCode::Down);
+    press(w, KeyCode::Down);
+    press(w, KeyCode::Char(' '));
+    press(w, KeyCode::Enter);
+    assert!(w.find_options.case);
+    press(w, KeyCode::Esc);
+    with(w, KeyCode::Char('f'), KeyModifiers::CONTROL);
+    assert!(matches!(&w.popup, Popup::Form(f) if f.get("Harf duyarlı") == "evet"));
+}
+
+fn note(archived: bool, state: dactile::notes::State) -> dactile::notes::Note {
+    dactile::notes::Note {
+        archived,
+        state,
+        ..Default::default()
+    }
+}
+
+#[test]
+fn the_notes_show_three_ways_with_their_counts() {
+    use dactile::notes::State;
+    let mut o = open("notes");
+    let w = &mut o.w;
+    w.notes.list = vec![
+        note(false, State::Open),
+        note(false, State::Done),
+        note(false, State::Hidden),
+        note(true, State::Open),
+    ];
+    w.notes_view.open = true;
+    assert_eq!(w.shown_notes(), [0]);
+    w.notes_view.show = notes::Show::All;
+    assert_eq!(w.shown_notes().len(), 3);
+    w.notes_view.show = notes::Show::Archive;
+    assert_eq!(w.shown_notes(), [3]);
+}
+
+fn click(w: &mut Writer, col: u16, row: u16) {
+    w.mouse(MouseEvent {
+        kind: MouseEventKind::Down(MouseButton::Left),
+        column: col,
+        row,
+        modifiers: KeyModifiers::NONE,
+    });
+}
+
+#[test]
+fn double_and_triple_clicks_choose_a_word_and_a_row() {
+    let mut o = open("clicks");
+    let w = &mut o.w;
+    screen(w);
+    let at = w.buf.text.find("yine mi").unwrap() + 1;
+    w.buf.cursor = at;
+    w.keep_visible();
+    screen(w);
+    let s = w.cursor_stop().unwrap();
+    let (x, y) = (
+        w.sheet().text_x + s.col,
+        w.text_top + (s.row - w.shown) as u16,
+    );
+    click(w, x, y);
+    assert_eq!(w.buf.selected_text(), None);
+    click(w, x, y);
+    assert_eq!(w.buf.selected_text(), Some("yine"));
+    click(w, x, y);
+    assert!(w.buf.selected_text().is_some_and(|t| t.len() > 4));
+    // A fourth starts over.
+    click(w, x, y);
+    assert_eq!(w.buf.selected_text(), None);
+}
+
 #[test]
 fn others_are_set_shown_and_cleared() {
     let mut o = open("others");

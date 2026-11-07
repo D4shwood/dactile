@@ -175,6 +175,10 @@ pub struct Writer {
     stopped_at: Option<usize>,
     /// The line of the play the last build stopped on, for Alt+G.
     failed_line: Option<usize>,
+    find_options: find::FindOptions,
+    /// The last press of the left button, and how many in a row: a double
+    /// click chooses a word, a triple its row.
+    clicks: Option<(Instant, u16, u16, u8)>,
     /// Words the play knows: names and words added by hand, lower case.
     known: HashSet<String>,
     spell_cache: HashMap<String, bool>,
@@ -383,6 +387,8 @@ impl Writer {
             problems: Vec::new(),
             stopped_at: None,
             failed_line: None,
+            find_options: Default::default(),
+            clicks: None,
             known: HashSet::new(),
             spell_cache: HashMap::new(),
             misspelt: Vec::new(),

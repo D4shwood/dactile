@@ -380,6 +380,13 @@ impl Writer {
                 form.get("Ara").to_string(),
                 form.get("Değiştir").to_string(),
             );
+            let on = |label: &str| form.get(label) == "evet";
+            self.find_options = find::FindOptions {
+                case: on("Harf duyarlı"),
+                whole_word: on("Tam kelime"),
+                regexp: on("Düzenli ifade"),
+                whole_file: on("Bütün dosya"),
+            };
             let ctrl = k.modifiers.contains(KeyModifiers::CONTROL);
             let alt = k.modifiers.contains(KeyModifiers::ALT);
             match k.code {

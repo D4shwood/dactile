@@ -18,6 +18,33 @@ const AUTHOR_COLORS: [Color; 6] = [
     Color::Rgb(0xa8, 0x82, 0xb4),
 ];
 
+/// The open notes, all but the archive, or the archive.
+#[derive(Clone, Copy, Default, PartialEq)]
+pub enum Show {
+    #[default]
+    Open,
+    All,
+    Archive,
+}
+
+impl Show {
+    fn lists(self, n: &Note) -> bool {
+        match self {
+            Show::Open => !n.archived && n.state == State::Open,
+            Show::All => !n.archived,
+            Show::Archive => n.archived,
+        }
+    }
+
+    fn next(self) -> Show {
+        match self {
+            Show::Open => Show::All,
+            Show::All => Show::Archive,
+            Show::Archive => Show::Open,
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct NotesView {
     pub open: bool,
@@ -27,8 +54,8 @@ pub struct NotesView {
     pub sel: usize,
     /// Only this author's.
     pub filter: Option<String>,
-    /// Done and hidden notes and the archive too.
-    pub all: bool,
+    /// Which of them the panel lists.
+    pub show: Show,
     /// What was last read or written of the notes file.
     pub disk_time: Option<SystemTime>,
     /// Bumped on every change to the notes, for the places to be found again.
@@ -186,8 +213,7 @@ impl Writer {
         let mut out: Vec<usize> = (0..self.notes.list.len())
             .filter(|&i| {
                 let n = &self.notes.list[i];
-                (v.all || (!n.archived && n.state != State::Hidden))
-                    && v.filter.as_ref().is_none_or(|a| &n.author == a)
+                v.show.lists(n) && v.filter.as_ref().is_none_or(|a| &n.author == a)
             })
             .collect();
         // By group as they first came, the archive last.
@@ -338,6 +364,7 @@ impl Writer {
                     State::Done
                 };
                 self.save_notes();
+                self.pick_shown_note();
             }
             KeyCode::Char('u') if has => self.apply_note(sel),
             KeyCode::Char('r') if has => self.popup = Popup::Form(self.reply_form(sel)),
@@ -352,11 +379,11 @@ impl Writer {
                 };
                 let hidden = n.state == State::Hidden;
                 self.save_notes();
-                if hidden && !self.notes_view.all {
+                if hidden && self.notes_view.show == Show::Open {
                     self.say(
                         lang::l(
-                            "Gizlendi: s ile gizliler de görünür.",
-                            "Hidden: s shows the hidden ones too.",
+                            "Gizlendi: s ile Hepsi'nde görünür.",
+                            "Hidden: s shows it under All.",
                         ),
                         false,
                     );
@@ -368,12 +395,16 @@ impl Writer {
                 n.archived = !n.archived;
                 let archived = n.archived;
                 self.save_notes();
-                if archived && !self.notes_view.all {
+                if archived != (self.notes_view.show == Show::Archive) {
                     self.say(
-                        lang::l(
-                            "Arşive gitti: s ile arşiv de görünür.",
-                            "Archived: s shows the archive too.",
-                        ),
+                        if archived {
+                            lang::l(
+                                "Arşive gitti: s ile Arşiv'de görünür.",
+                                "Archived: s shows it under Archive.",
+                            )
+                        } else {
+                            lang::l("Arşivden çıktı.", "Out of the archive.")
+                        },
                         false,
                     );
                     self.choose_note(step(1).filter(|&i| i != sel).or(step(-1)));
@@ -417,21 +448,7 @@ impl Writer {
                 self.pick_shown_note();
             }
             KeyCode::Char('s') => {
-                self.notes_view.all = !self.notes_view.all;
-                self.say(
-                    if self.notes_view.all {
-                        lang::l(
-                            "Çözülenler, gizliler ve arşiv de görünüyor.",
-                            "Done, hidden and archived notes shown too.",
-                        )
-                    } else {
-                        lang::l(
-                            "Yalnız açık ve çözülen notlar.",
-                            "Open and done notes only.",
-                        )
-                    },
-                    false,
-                );
+                self.notes_view.show = self.notes_view.show.next();
                 self.pick_shown_note();
             }
             KeyCode::Char('p') => {
@@ -956,31 +973,23 @@ impl Writer {
         let tw = inner.width as usize;
         let shown = self.shown_notes();
         let gone = self.places().gone.clone();
-        let open = self
-            .notes
-            .list
-            .iter()
-            .filter(|n| n.state == State::Open && !n.archived)
-            .count();
-        let done = self
-            .notes
-            .list
-            .iter()
-            .filter(|n| n.state == State::Done && !n.archived)
-            .count();
+        let tab = |show: Show, name: &str| {
+            let n = self.notes.list.iter().filter(|n| show.lists(n)).count();
+            let color = if self.notes_view.show == show {
+                BEIGE
+            } else {
+                FAINT
+            };
+            Span::styled(format!("  {name} {n}"), Style::default().fg(color))
+        };
         let mut head = vec![
             Span::styled(
                 lang::l("Notlar", "Notes"),
                 Style::default().fg(BEIGE).add_modifier(Modifier::BOLD),
             ),
-            Span::styled(
-                lang::f(
-                    "  {} açık · {} çözüldü",
-                    "  {} open · {} done",
-                    &[&open, &done],
-                ),
-                Style::default().fg(MUTED),
-            ),
+            tab(Show::Open, lang::l("Açık", "Open")),
+            tab(Show::All, lang::l("Hepsi", "All")),
+            tab(Show::Archive, lang::l("Arşiv", "Archive")),
         ];
         if let Some(a) = &self.notes_view.filter {
             head.push(Span::styled(
@@ -1114,8 +1123,8 @@ impl Writer {
                     "␣ done  u apply  r reply  e edit",
                 ),
                 lang::l(
-                    "n yeni  h gizle  a arşiv  x sil  f süz  s tümü",
-                    "n new  h hide  a archive  x delete  f filter  s all",
+                    "n yeni  h gizle  a arşiv  x sil  f süz  s görünüm",
+                    "n new  h hide  a archive  x delete  f filter  s view",
                 ),
                 lang::l(
                     "p yapıştır  i dosya  c notlu PDF  o aç",

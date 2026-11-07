@@ -2,6 +2,9 @@
 
 use super::*;
 
+/// Presses closer than this make a double or triple click.
+const DOUBLE: Duration = Duration::from_millis(400);
+
 impl Writer {
     pub fn mouse(&mut self, m: MouseEvent) {
         // The menus along the top, and the one open.
@@ -45,6 +48,17 @@ impl Writer {
                         ),
                         false,
                     );
+                } else if matches!(self.popup, Popup::None)
+                    && m.column >= self.sheet().x
+                    && m.row >= self.text_top
+                {
+                    // On the text: the word under it, and its spelling menu.
+                    let row = self.shown + (m.row - self.text_top) as usize;
+                    let col = m.column.saturating_sub(self.sheet().text_x);
+                    if let Some(s) = self.lay.stop_near(row, col) {
+                        self.go(s.byte, false);
+                        self.suggest();
+                    }
                 }
             }
             MouseEventKind::Down(MouseButton::Left) | MouseEventKind::Drag(MouseButton::Left) => {
@@ -73,9 +87,56 @@ impl Writer {
                 if let Some(s) = hit {
                     let drag = matches!(m.kind, MouseEventKind::Drag(_));
                     self.go(s.byte, drag);
+                    if !drag {
+                        match self.click_count(m.column, m.row) {
+                            2 => self.choose_word(),
+                            3 => self.choose_row(),
+                            _ => {}
+                        }
+                    }
                 }
             }
             _ => {}
+        }
+    }
+
+    /// How many presses in a row this is, at one place: after three it
+    /// starts over.
+    fn click_count(&mut self, x: u16, y: u16) -> u8 {
+        let n = match self.clicks {
+            Some((at, cx, cy, n)) if at.elapsed() < DOUBLE && (cx, cy) == (x, y) => n % 3 + 1,
+            _ => 1,
+        };
+        self.clicks = Some((Instant::now(), x, y, n));
+        n
+    }
+
+    /// The word at the cursor chosen.
+    fn choose_word(&mut self) {
+        let t = &self.buf.text;
+        let cur = self.buf.cursor;
+        let from = t[..cur]
+            .char_indices()
+            .rev()
+            .take_while(|(_, c)| c.is_alphanumeric())
+            .last()
+            .map_or(cur, |(i, _)| i);
+        let to = t[cur..]
+            .char_indices()
+            .find(|(_, c)| !c.is_alphanumeric())
+            .map_or(t.len(), |(i, _)| cur + i);
+        if from < to {
+            self.buf.anchor = Some(from);
+            self.buf.cursor = to;
+        }
+    }
+
+    /// The row the cursor is on chosen, as it stands on the screen.
+    fn choose_row(&mut self) {
+        let stops = self.row_stops();
+        if let (Some(a), Some(b)) = (stops.first(), stops.last()) {
+            self.buf.anchor = Some(a.byte);
+            self.buf.cursor = b.byte;
         }
     }
 }

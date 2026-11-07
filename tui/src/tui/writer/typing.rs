@@ -208,6 +208,10 @@ impl Writer {
                     fields: vec![
                         Field::text("Ara", &q, Vec::new()),
                         Field::text("Değiştir", "", Vec::new()),
+                        Field::flag("Harf duyarlı", self.find_options.case),
+                        Field::flag("Tam kelime", self.find_options.whole_word),
+                        Field::flag("Düzenli ifade", self.find_options.regexp),
+                        Field::flag("Bütün dosya", self.find_options.whole_file),
                     ],
                     focus: 0,
                     at: 0..0,

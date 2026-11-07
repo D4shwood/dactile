@@ -831,6 +831,7 @@ dependencies = [
  "dactile",
  "dirs",
  "ratatui",
+ "regex",
  "rfd",
  "unicode-width",
 ]
