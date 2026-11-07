@@ -34,6 +34,26 @@ pub struct PlayCard {
     pub depth: usize,
     /// A book of plays: those under it are its parts.
     pub book: bool,
+    /// Its family stands on the imported tab.
+    pub imported: bool,
+    /// The tree's lines left of it, one a level: "", "pipe", "mid" or "top".
+    pub lead: Vec<&'static str>,
+}
+
+/// The tree grows upward: at each level a line where siblings stand above,
+/// and at the last the branch.
+fn lead(firsts: &[bool]) -> Vec<&'static str> {
+    let last = firsts.len().saturating_sub(1);
+    firsts
+        .iter()
+        .enumerate()
+        .map(|(i, &first)| match (i == last, first) {
+            (true, true) => "top",
+            (true, false) => "mid",
+            (false, true) => "",
+            (false, false) => "pipe",
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -52,6 +72,7 @@ pub struct Settings {
     pub lang: &'static str,
     pub theme: String,
     pub surprise: String,
+    pub saved_surprises: Vec<String>,
     pub accent: String,
     pub page_font: String,
     pub page_size: u16,
@@ -92,6 +113,7 @@ pub fn settings(cfg: &Config) -> Settings {
         lang: if lang::is_tr() { "tr" } else { "en" },
         theme: cfg.theme().to_string(),
         surprise: cfg.surprise.clone(),
+        saved_surprises: cfg.saved_surprises.clone(),
         accent: cfg.accent.clone(),
         page_font: cfg.page_font.clone(),
         page_size: cfg.page_size,
@@ -110,9 +132,13 @@ pub fn settings(cfg: &Config) -> Settings {
 
 pub fn home(cfg: &Config) -> Home {
     lang::set(lang_of(cfg));
-    let plays = library::tree(library::list(cfg))
+    let (list, ups): (Vec<_>, Vec<_>) = library::tree(library::list(cfg)).into_iter().unzip();
+    let imported = library::imported_families(&list);
+    let plays = list
         .into_iter()
-        .map(|(p, up)| PlayCard {
+        .zip(ups)
+        .zip(imported)
+        .map(|((p, up), imported)| PlayCard {
             path: p.path.display().to_string(),
             title: p.title,
             author: p.author,
@@ -126,6 +152,8 @@ pub fn home(cfg: &Config) -> Home {
             elsewhere: p.elsewhere,
             depth: up.len(),
             book: p.book,
+            imported,
+            lead: lead(&up),
         })
         .collect();
     let templates = templates::all(lang_of(cfg))
@@ -460,6 +488,17 @@ fn change(cfg: &mut Config, key: &str, value: &serde_json::Value) -> anyhow::Res
     match key {
         "theme" => cfg.theme = value.as_str().unwrap_or("paper").to_string(),
         "surprise" => cfg.surprise = value.as_str().unwrap_or("").to_string(),
+        "saved_surprises" => {
+            cfg.saved_surprises = value
+                .as_array()
+                .map(|l| {
+                    l.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .take(24)
+                        .collect()
+                })
+                .unwrap_or_default();
+        }
         "page_zoom" => cfg.page_zoom = value.as_u64().unwrap_or(100).clamp(50, 300) as u16,
         "ribbon_folded" => cfg.ribbon_folded = value.as_bool().unwrap_or(false),
         "scene_list" => cfg.scene_list = value.as_bool().unwrap_or(true),

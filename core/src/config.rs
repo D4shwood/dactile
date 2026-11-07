@@ -34,6 +34,8 @@ pub struct Config {
     pub theme: String,
     /// The desktop app's surprise theme: a hue and `dark` or `light`.
     pub surprise: String,
+    /// Surprises kept to come back to, in the same form.
+    pub saved_surprises: Vec<String>,
     /// One of `ACCENTS`.
     pub accent: String,
     /// The desktop app's page: a font's name, empty for its own; its size in
@@ -154,6 +156,7 @@ impl Default for Config {
             paper: true,
             theme: String::new(),
             surprise: String::new(),
+            saved_surprises: Vec::new(),
             accent: "claret".into(),
             page_font: String::new(),
             page_size: 17,

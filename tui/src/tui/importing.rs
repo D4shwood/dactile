@@ -814,6 +814,7 @@ impl Preview {
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         let path = dactile::library::free_path(&dir, &dactile::library::file_name(&title));
         dactile::file::write_atomic(&path, &d.tex()).map_err(|e| format!("{e:#}"))?;
+        dactile::sidecar::Sidecar::mark_imported(&path, true).map_err(|e| format!("{e:#}"))?;
         Ok(path)
     }
 

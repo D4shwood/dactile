@@ -340,6 +340,9 @@ impl Writer {
                         &[&p.display()],
                     );
                     self.say(&said, false);
+                    if let Err(e) = dactile::build::launch(&p) {
+                        self.say(&e.to_string(), true);
+                    }
                 }
                 Err(e) => self.say(&e.to_string(), true),
             },

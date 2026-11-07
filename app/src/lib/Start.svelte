@@ -57,12 +57,27 @@
     return d.toLocaleDateString(tr ? "tr-TR" : "en-GB", { day: "numeric", month: "short", year: "numeric" });
   };
 
+  /// The list's tab: the plays written here, or those imported.
+  let shelf = $state<"mine" | "imported">("mine");
+  const importedCount = $derived(home.plays.filter((p) => p.imported).length);
   const plays = $derived(
     home.plays.filter((p) =>
+      p.imported === (shelf === "imported") &&
       (p.title + " " + p.author + " " + p.path).toLocaleLowerCase("tr").includes(filter.toLocaleLowerCase("tr")),
     ),
   );
   const tiles = $derived(home.templates.filter((t) => t.kind !== "own").slice(0, 3));
+
+  /// A play and its drafts to the other tab, and the list after it.
+  async function moveShelf(p: PlayCard) {
+    try {
+      await api.playImported(p.path, !p.imported);
+      want = p.path;
+      await reload();
+    } catch (e) {
+      error = String(e);
+    }
+  }
 
   async function choose(p: PlayCard) {
     chosen = p;
@@ -324,9 +339,11 @@
     const wanted = want && home.plays.find((p) => p.path === want);
     if (wanted) {
       want = null;
+      shelf = wanted.imported ? "imported" : "mine";
       choose(wanted);
     }
     if (chosen && !home.plays.some((p) => p.path === chosen!.path)) chosen = null;
+    if (chosen && !plays.some((p) => p.path === chosen!.path)) chosen = null;
     if (!chosen && plays.length) choose(plays[0]);
   });
 
@@ -462,7 +479,19 @@
               <button class="plain" onclick={restore}>{l("Geri al", "Undo")}</button>
             </p>
           {/if}
-          {#if !plays.length}
+          <div class="shelves" role="tablist">
+            <button role="tab" aria-selected={shelf === "mine"} class:on={shelf === "mine"} onclick={() => (shelf = "mine")}>
+              {l("Oyunlarım", "My plays")} <small>{home.plays.length - importedCount}</small>
+            </button>
+            <button role="tab" aria-selected={shelf === "imported"} class:on={shelf === "imported"} onclick={() => (shelf = "imported")}>
+              {l("İçe aktarılanlar", "Imported")} <small>{importedCount}</small>
+            </button>
+          </div>
+          {#if shelf === "imported" && !plays.length}
+            <p class="muted">
+              {l("İçe aktarılan oyun yok. Eski bir oyunu buraya almak için ona sağ tıkla.", "Nothing imported. To bring an older play here, right click it.")}
+            </p>
+          {:else if !plays.length}
             <p class="muted">
               {l(`${home.settings.plays_dir} içinde oyun yok. Yukarıdan yeni bir tane başlat.`, `No plays in ${home.settings.plays_dir}. Start one above.`)}
             </p>
@@ -487,11 +516,14 @@
               class="row"
               class:on={chosen?.path === p.path}
               class:picked={picks.includes(p.path)}
-              style:padding-left="{10 + p.depth * 20}px"
+              style:padding-left="{10 + p.depth * 22}px"
               onclick={(e) => clickRow(p, e)}
               ondblclick={() => open(p.path)}
               oncontextmenu={(e) => rightClick(p, e)}
             >
+              {#if p.lead.length}
+                <span class="lead" aria-hidden="true">{#each p.lead as cell}<i class={cell}></i>{/each}</span>
+              {/if}
               <span class="t">{p.title}{#if p.draft}<em> · {p.draft}</em>{/if}{#if p.book}<em> · {l("kitap", "book")}</em>{/if}</span>
               <span class="m">{p.acts ? `${p.acts} ${l("perde", "acts")}` : l("Tek Perde", "One act")} · {p.scenes} {l("sahne", "scenes")} · ~{p.minutes} {l("dk", "min")}</span>
               <span class="d">{ago(p.modified)}{p.elsewhere ? " · " + l("dışarıda", "elsewhere") : ""}</span>
@@ -613,6 +645,9 @@
       <button role="menuitem" onclick={pick(() => startForm("copy"))}>{l("Kopya", "Copy")}</button>
       <button role="menuitem" onclick={pick(() => startForm("rename"))}>{l("Adını değiştir", "Rename")}</button>
       <button role="menuitem" onclick={pick(() => api.reveal(p.path))}>{l("Dosya gezgininde göster", "Show in the file manager")}</button>
+      <button role="menuitem" onclick={pick(() => moveShelf(p))}>
+        {p.imported ? l("Oyunlarıma taşı", "Move to my plays") : l("İçe aktarılanlara taşı", "Move to imported")}
+      </button>
       <button role="menuitem" onclick={pick(throwAway)}>{l("Çöpe at", "To the trash")}</button>
     {/if}
   </div>
@@ -965,7 +1000,64 @@
     margin-left: auto;
     width: 200px;
   }
+  .shelves {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid var(--chrome-line);
+  }
+  .shelves button {
+    margin-bottom: -1px;
+    padding: 6px 12px;
+    color: var(--chrome-muted);
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+  }
+  .shelves button.on {
+    color: var(--chrome-fg);
+    font-weight: 600;
+    border-bottom-color: var(--accent-ink);
+  }
+  .shelves small {
+    margin-left: 3px;
+    opacity: 0.7;
+  }
+  .lead {
+    position: absolute;
+    inset: 0 auto -1px 10px;
+    display: flex;
+    pointer-events: none;
+  }
+  .lead i {
+    position: relative;
+    width: 22px;
+  }
+  .lead .pipe::before,
+  .lead .mid::before,
+  .lead .top::before {
+    content: "";
+    position: absolute;
+    left: 7px;
+    top: 0;
+    bottom: 0;
+    border-left: 1px solid var(--chrome-muted);
+  }
+  .lead .top::before {
+    top: 19px;
+  }
+  .lead .mid::after,
+  .lead .top::after {
+    content: "";
+    position: absolute;
+    left: 7px;
+    top: 19px;
+    width: 12px;
+    border-top: 1px solid var(--chrome-muted);
+  }
   .row {
+    position: relative;
     display: grid;
     grid-template-columns: 1fr auto;
     grid-template-rows: auto auto;

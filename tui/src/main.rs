@@ -213,6 +213,7 @@ fn import_all(file: &std::path::Path, ocr: bool, book: Option<&str>, front: bool
         let name = dactile::library::file_name(&play.title);
         let path = dactile::library::free_path(&cfg.plays_dir(), &name);
         dactile::file::write_atomic(&path, &play.tex())?;
+        dactile::sidecar::Sidecar::mark_imported(&path, true)?;
         if let Some(root) = &root {
             dactile::book::join(root, &path, at)?;
         }
@@ -258,6 +259,7 @@ fn import(
         }
     };
     dactile::file::write_atomic(&path, &draft.tex())?;
+    dactile::sidecar::Sidecar::mark_imported(&path, true)?;
     let c = draft.counts();
     println!("{}", path.display());
     if src.plays.len() > 1 {

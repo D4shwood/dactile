@@ -709,7 +709,10 @@
       case "docx":
         api
           .docxExport(opened.path, view.state.doc.toString())
-          .then((p) => say(l(`Word belgesi yazıldı: ${p}`, `Word document written: ${p}`)))
+          .then(async (p) => {
+            say(l(`Word belgesi yazıldı: ${p}`, `Word document written: ${p}`));
+            await api.launch(p);
+          })
           .catch((e) => say(String(e), true));
         break;
       case "scene-align":

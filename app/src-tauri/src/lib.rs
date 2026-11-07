@@ -62,6 +62,14 @@ fn home(app: Shared) -> Home {
     play::home(&a.cfg)
 }
 
+/// The home screen's menu: a play's family to the imported tab, or back.
+#[tauri::command]
+fn play_imported(app: Shared, path: String, on: bool) -> Res<()> {
+    let cfg = app.lock().unwrap().cfg.clone();
+    let plays = dactile::library::list(&cfg);
+    dactile::library::set_imported(&plays, std::path::Path::new(&path), on).map_err(err)
+}
+
 #[tauri::command]
 fn settings(app: Shared) -> Settings {
     play::settings(&app.lock().unwrap().cfg)
@@ -969,6 +977,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             keys_view,
+            play_imported,
             guide_view,
             home,
             settings,

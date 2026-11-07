@@ -210,7 +210,13 @@ pub fn tabs() -> Vec<Tab> {
                     "Build",
                     vec![
                         b("PDF derle", "Build PDF", "⎙", "F5", k(F(5), n)),
-                        b("Word olarak ver", "Export to Word", "⇱", "", PAct::Docx),
+                        b(
+                            "Word'e aktar ve aç",
+                            "Export and open in Word",
+                            "⇱",
+                            "",
+                            PAct::Docx,
+                        ),
                     ],
                 ),
             ],
@@ -433,7 +439,12 @@ pub fn backstage() -> Vec<(&'static str, &'static str, &'static str, PAct)> {
             "",
             PAct::NotesPdf,
         ),
-        ("Word olarak ver", "Export to Word", "", PAct::Docx),
+        (
+            "Word'e aktar ve aç",
+            "Export and open in Word",
+            "",
+            PAct::Docx,
+        ),
         (
             "Şablon olarak kaydet",
             "Save as a template",
@@ -1226,8 +1237,8 @@ impl Writer {
                         "The alignment, size, style and spacing of a part of the cover or cast page.",
                     ),
                     PAct::Docx => lang::l(
-                        "Oyunu oyunun yanına bir .docx olarak yazar; başkasının belgesi ezilmez.",
-                        "Writes the play next to it as a .docx; someone else's document stays.",
+                        "Oyunu yanına bir .docx olarak yazar ve bilgisayarın onu açan programıyla açar; başkasının belgesi ezilmez.",
+                        "Writes the play next to it as a .docx and opens it with this computer's program for it; someone else's document stays.",
                     ),
                     PAct::NotesPdf => lang::l(
                         "Açık notlar kenarda, hepsinin listesi sonda, ayrı bir PDF.",

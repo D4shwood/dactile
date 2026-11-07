@@ -16,6 +16,8 @@ export interface PlayCard {
   elsewhere: boolean;
   depth: number;
   book: boolean;
+  imported: boolean;
+  lead: string[];
 }
 
 export interface TemplateCard {
@@ -30,6 +32,8 @@ export interface Look {
   theme: string;
   /// The surprise theme's hue and brightness, as `newSurprise` makes them.
   surprise: string;
+  /// Surprises kept to come back to.
+  saved_surprises: string[];
   accent: string;
   page_font: string;
   page_size: number;
@@ -258,6 +262,7 @@ export interface GuideGroup {
 }
 
 export const api = {
+  playImported: (path: string, on: boolean) => invoke<void>("play_imported", { path, on }),
   keys: () => invoke<KeysView>("keys_view"),
   guide: () => invoke<GuideGroup[]>("guide_view"),
   home: () => invoke<Home>("home"),

@@ -119,8 +119,8 @@ export function installedFonts(chosen: string): string[] {
 }
 
 export function pickLook(s: Look): Look {
-  const { theme, surprise, accent, page_font, page_size, line_spacing, page_width, page_zoom, animations } = s;
-  return { theme, surprise, accent, page_font, page_size, line_spacing, page_width, page_zoom, animations };
+  const { theme, surprise, saved_surprises, accent, page_font, page_size, line_spacing, page_width, page_zoom, animations } = s;
+  return { theme, surprise, saved_surprises, accent, page_font, page_size, line_spacing, page_width, page_zoom, animations };
 }
 
 export function applyLook(s: Look) {

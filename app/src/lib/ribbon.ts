@@ -89,7 +89,7 @@ export const TABS: Tab[] = [
       // At the far right: what makes the play's files.
       g("Derleme", "Build", [
         b("PDF derle", "Build PDF", "⎙", "F5", k("build")),
-        b("Word olarak ver", "Export to Word", "⇱", "", k("docx")),
+        b("Word'e aktar ve aç", "Export and open in Word", "⇱", "", k("docx")),
         b("Dosyalarım", "My files", "▱", "", k("files")),
       ], { end: true }),
     ],

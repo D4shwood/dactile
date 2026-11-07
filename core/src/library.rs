@@ -34,6 +34,45 @@ pub struct Play {
     pub parent: Option<PathBuf>,
     /// A book of plays: those under it are its parts.
     pub book: bool,
+    /// It came in through the import.
+    pub imported: bool,
+}
+
+/// The top of a play's family, by index; a loop of links stops where it closes.
+fn root_of(plays: &[Play], mut at: usize) -> usize {
+    for _ in 0..plays.len() {
+        let up = plays[at].parent.as_deref();
+        match up.and_then(|u| plays.iter().position(|p| p.path == u)) {
+            Some(u) => at = u,
+            None => break,
+        }
+    }
+    at
+}
+
+/// For each play, whether its family stands on the imported tab: a family
+/// stays together, so one imported member takes the rest along.
+pub fn imported_families(plays: &[Play]) -> Vec<bool> {
+    let roots: Vec<usize> = (0..plays.len()).map(|i| root_of(plays, i)).collect();
+    roots
+        .iter()
+        .map(|r| (0..plays.len()).any(|i| roots[i] == *r && plays[i].imported))
+        .collect()
+}
+
+/// Moves a play's whole family to the imported tab, or back.
+pub fn set_imported(plays: &[Play], play: &Path, on: bool) -> anyhow::Result<()> {
+    let Some(at) = plays.iter().position(|p| p.path == play) else {
+        return Ok(());
+    };
+    let root = root_of(plays, at);
+    for (i, p) in plays.iter().enumerate() {
+        // Marking the play itself is enough; clearing takes all of them.
+        if root_of(plays, i) == root && (i == at || !on) {
+            crate::sidecar::Sidecar::mark_imported(&p.path, on)?;
+        }
+    }
+    Ok(())
 }
 
 /// Whether a file is a play for the class.
@@ -73,6 +112,7 @@ pub fn read(path: &Path, wpm: u32) -> Option<Play> {
             .and_then(|s| s.parent)
             .map(|name| path.with_file_name(name)),
         book: crate::sidecar::Sidecar::load(path).is_ok_and(|s| s.book),
+        imported: crate::sidecar::Sidecar::load(path).is_ok_and(|s| s.imported),
     })
 }
 
@@ -483,6 +523,39 @@ pub fn template(title: &str, author: &str, lang: Lang) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn member(path: &str, parent: Option<&str>, imported: bool) -> Play {
+        Play {
+            path: path.into(),
+            title: String::new(),
+            author: String::new(),
+            acts: 0,
+            scenes: 0,
+            secs: 0,
+            characters: 0,
+            words: 0,
+            draft: None,
+            final_mode: false,
+            starred: Vec::new(),
+            modified: None,
+            elsewhere: false,
+            parent: parent.map(Into::into),
+            book: false,
+            imported,
+        }
+    }
+
+    #[test]
+    fn a_family_stays_on_one_tab() {
+        let plays = [
+            member("/a.tex", None, true),
+            member("/a2.tex", Some("/a.tex"), false),
+            member("/b.tex", None, false),
+            member("/c.tex", Some("/d.tex"), true),
+            member("/d.tex", None, false),
+        ];
+        assert_eq!(imported_families(&plays), [true, true, false, true, true]);
+    }
     use crate::render::Doc;
 
     #[test]
@@ -538,6 +611,7 @@ mod tests {
             elsewhere: false,
             parent: None,
             book: false,
+            imported: false,
         }
     }
 

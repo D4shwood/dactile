@@ -79,6 +79,9 @@ pub struct Home {
     hits: Hits,
     /// Whether the column showed, and where it ends, at the last draw.
     side_shown: bool,
+    /// Which plays stand on the imported tab, and whether it is the one open.
+    imported: Vec<bool>,
+    shelf: bool,
     side_right: u16,
     /// `i`: a document being imported.
     importing: Option<super::importing::Importing>,
@@ -144,6 +147,8 @@ impl Home {
             templates: Vec::new(),
             hits: Hits::default(),
             side_shown: false,
+            imported: Vec::new(),
+            shelf: false,
             side_right: 0,
             importing: None,
             filter: None,
@@ -165,7 +170,9 @@ impl Home {
     pub fn refresh(&mut self, cfg: &Config) {
         lang::set(lang::resolve(&cfg.lang, None));
         (self.plays, self.lasts) = library::tree(library::list(cfg)).into_iter().unzip();
+        self.imported = library::imported_families(&self.plays);
         self.sel = self.sel.min(self.plays.len().saturating_sub(1));
+        self.filtered();
         self.temporary = super::files::temporary(&cfg.plays_dir());
     }
 
@@ -241,8 +248,12 @@ impl Home {
             KeyCode::Char('?') => self.go_section(Section::Keys, cfg),
             KeyCode::Char('q') | KeyCode::Esc => return Action::Quit,
             KeyCode::Char('c') if ctrl => return Action::Quit,
-            KeyCode::Up => self.sel = self.sel.saturating_sub(1),
-            KeyCode::Down => self.sel = (self.sel + 1).min(self.plays.len().saturating_sub(1)),
+            KeyCode::Char('t') if self.section == Section::Home => {
+                self.shelf = !self.shelf;
+                self.filtered();
+            }
+            KeyCode::Up => self.step_sel(false),
+            KeyCode::Down => self.step_sel(true),
             KeyCode::Enter => {
                 if let Some(p) = self.plays.get(self.sel) {
                     return Action::Open(p.path.clone());
@@ -444,11 +455,13 @@ impl Home {
     /// The plays the search leaves, all of them without one: `plays` itself
     /// stays whole, for what a rename finds in it.
     fn shown(&self) -> Vec<usize> {
+        let on_shelf = |i: &usize| self.imported.get(*i).copied().unwrap_or(false) == self.shelf;
         let Some(q) = &self.filter else {
-            return (0..self.plays.len()).collect();
+            return (0..self.plays.len()).filter(on_shelf).collect();
         };
         let q = dactile::cast::lower_tr(q);
         (0..self.plays.len())
+            .filter(on_shelf)
             .filter(|&i| {
                 let p = &self.plays[i];
                 let all = format!("{} {} {}", p.title, p.author, p.path.display());
@@ -1683,6 +1696,17 @@ impl Home {
     fn draw_list(&mut self, f: &mut Frame, mut area: Rect) {
         let mut caret = None;
         let shown = self.shown();
+        let tab = if self.shelf {
+            lang::l("İçe aktarılanlar · t: oyunlarım", "Imported · t: my plays")
+        } else {
+            lang::l("Oyunlarım · t: içe aktarılanlar", "My plays · t: imported")
+        };
+        f.render_widget(
+            Paragraph::new(Span::styled(tab, Style::default().fg(FAINT))),
+            Rect { height: 1, ..area },
+        );
+        area.y += 1;
+        area.height = area.height.saturating_sub(1);
         if let Some(q) = &self.filter {
             self.draw_filter(f, area, q, shown.len());
             area.y += 1;
@@ -1879,9 +1903,14 @@ fn tagline_room(w: u16, tagline: u16, folder: u16) -> (bool, bool) {
 }
 
 fn draw_keys(f: &mut Frame, area: Rect) {
-    let keys: [(&str, &str, &str); 17] = [
+    let keys: [(&str, &str, &str); 18] = [
         ("⏎", "oyunu aç", "open the play"),
         ("/", "oyunlarda ara", "search the plays"),
+        (
+            "t",
+            "oyunlarım ve içe aktarılanlar arasında geç",
+            "between my plays and the imported ones",
+        ),
         ("k", "oyunun dosyaları", "the play's files"),
         (
             "r",

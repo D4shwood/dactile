@@ -43,6 +43,9 @@ pub struct Sidecar {
     /// The play this one is a draft of: its file name, next to it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent: Option<String>,
+    /// It came in through the import; it goes on the home screen's other tab.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub imported: bool,
     /// A book: the plays with this one as their parent are its parts.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub book: bool,
@@ -103,6 +106,16 @@ impl Sidecar {
             Ok(t) => toml::from_str(&t).with_context(|| format!("reading {}", path.display())),
             Err(_) => Ok(Sidecar::default()),
         }
+    }
+
+    /// Notes that `play` came in through the import, or no longer counts so.
+    pub fn mark_imported(play: &Path, on: bool) -> Result<()> {
+        let mut side = Sidecar::load(play)?;
+        if side.imported != on {
+            side.imported = on;
+            side.save(play)?;
+        }
+        Ok(())
     }
 
     /// Writes it, or removes the file when there's nothing in it.

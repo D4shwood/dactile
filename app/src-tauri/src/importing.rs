@@ -381,6 +381,7 @@ pub fn write(file_from: &Path, d: &Draft, cfg: &Config) -> anyhow::Result<PathBu
     std::fs::create_dir_all(&dir)?;
     let path = library::free_path(&dir, &library::file_name(&title));
     file::write_atomic(&path, &d.tex())?;
+    dactile::sidecar::Sidecar::mark_imported(&path, true)?;
     Ok(path)
 }
 

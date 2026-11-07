@@ -2,7 +2,7 @@
   // The app's look, applied as it is chosen: on the start screen's settings
   // and in the writer's panel. No setting for the cursor: it always blinks.
   import type { Look } from "./api";
-  import { ACCENTS, THEMES, installedFonts, newSurprise } from "./look";
+  import { ACCENTS, THEMES, installedFonts, newSurprise, surpriseColours } from "./look";
 
   let {
     tr,
@@ -13,6 +13,19 @@
   const l = (t: string, e: string) => (tr ? t : e);
   const fonts = $derived(installedFonts(look.page_font));
   const dark = $derived(look.theme === "night" || look.theme === "dark");
+  const kept = $derived(look.saved_surprises ?? []);
+  const isSurprise = $derived(look.theme === "surprise");
+  function keep() {
+    if (!kept.includes(look.surprise)) set("saved_surprises", [...kept, look.surprise].slice(-24));
+  }
+  function forget(s: string) {
+    set("saved_surprises", kept.filter((x) => x !== s));
+  }
+  function wear(s: string) {
+    set("surprise", s);
+    set("theme", "surprise");
+  }
+
   function surprise() {
     set("surprise", newSurprise(look.surprise));
     set("theme", "surprise");
@@ -52,7 +65,27 @@
         <small>{l("Sürpriz yap", "Surprise me")}</small>
       </button>
     </div>
+    {#if isSurprise && look.surprise && !kept.includes(look.surprise)}
+      <button class="keep" onclick={keep}>{l("Bu görünümü kaydet", "Save this look")}</button>
+    {/if}
   </div>
+
+  {#if kept.length}
+    <div class="field">
+      <span class="name">{l("Kaydedilen görünümler", "Saved looks")}</span>
+      <div class="swatches">
+        {#each kept as s (s)}
+          {@const c = surpriseColours(s)}
+          <span class="saved">
+            <button class="theme" class:on={isSurprise && look.surprise === s} aria-pressed={isSurprise && look.surprise === s} title={l("Bu görünüme geç", "Wear this look")} onclick={() => wear(s)}>
+              <span class="sheet" style:background={c["--page"]} style:color={c["--accent-ink"]}>Aa</span>
+            </button>
+            <button class="forget" title={l("Kayıttan sil", "Forget it")} aria-label={l("Kayıttan sil", "Forget it")} onclick={() => forget(s)}>×</button>
+          </span>
+        {/each}
+      </div>
+    </div>
+  {/if}
 
   {#if look.theme !== "surprise"}
   <div class="field">
@@ -129,6 +162,40 @@
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+  }
+  .keep {
+    align-self: flex-start;
+    margin-top: 6px;
+    padding: 3px 9px;
+    font-size: 12px;
+    color: inherit;
+    background: none;
+    border: 1px solid var(--chrome-line);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .saved {
+    position: relative;
+  }
+  .forget {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    font-size: 11px;
+    line-height: 1;
+    color: var(--chrome-fg);
+    background: var(--chrome-2);
+    border: 1px solid var(--chrome-line);
+    border-radius: 50%;
+    cursor: pointer;
+    opacity: 0;
+  }
+  .saved:hover .forget,
+  .forget:focus {
+    opacity: 1;
   }
   .theme {
     display: grid;
