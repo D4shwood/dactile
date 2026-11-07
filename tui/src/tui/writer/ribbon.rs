@@ -865,8 +865,9 @@ impl Writer {
                     format!(" {}", b.name())
                 };
                 let pad = (p.w as usize).saturating_sub(b.icon.width() + label.width());
-                buf.set_string(p.x, p.y, b.icon, icon_style);
-                buf.set_string(
+                popup::put(buf, p.x, p.y, b.icon, icon_style);
+                popup::put(
+                    buf,
                     p.x + b.icon.width() as u16,
                     p.y,
                     format!("{label}{}", " ".repeat(pad)),
@@ -878,7 +879,8 @@ impl Writer {
                 );
                 if show_tips {
                     let t: String = tips[p.i].to_uppercase().collect();
-                    buf.set_string(
+                    popup::put(
+                        buf,
                         p.x,
                         p.y,
                         format!("{t:1}"),
@@ -901,17 +903,17 @@ impl Writer {
             // The group's name under it, and a rule after it.
             let name = popup::fit(&g.name, g.w.saturating_sub(2) as usize);
             let nx = g.x + (g.w.saturating_sub(name.width() as u16)) / 2;
-            buf.set_string(nx, body.y + 2, &name, faint);
+            popup::put(buf, nx, body.y + 2, &name, faint);
             for dy in 0..3 {
-                buf.set_string(g.x + g.w, body.y + dy, "│", faint);
+                popup::put(buf, g.x + g.w, body.y + dy, "│", faint);
             }
         }
         // The rule under it all, and the fold mark at its right end.
         let rule_y = body.y + 3;
-        buf.set_string(area.x, rule_y, "─".repeat(area.width as usize), faint);
+        popup::put(buf, area.x, rule_y, "─".repeat(area.width as usize), faint);
         let fold = if over { " ⌄ " } else { " ⌃ " };
         let fx = area.x + area.width.saturating_sub(4);
-        buf.set_string(fx, rule_y, fold, muted);
+        popup::put(buf, fx, rule_y, fold, muted);
         self.ribbon_hits.push((
             Rect {
                 x: fx,
@@ -1288,7 +1290,8 @@ impl Writer {
 /// A letter on a dark band, as Word shows its key tips.
 fn badge(f: &mut Frame, x: u16, y: u16, c: char) {
     let t: String = c.to_uppercase().collect();
-    f.buffer_mut().set_string(
+    popup::put(
+        f.buffer_mut(),
         x,
         y,
         t,

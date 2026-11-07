@@ -62,7 +62,8 @@ impl Writer {
             y: area.y + top,
             height: self.text_height() as u16,
             ..area
-        };
+        }
+        .intersection(area);
         self.text_top = body.y;
         self.glide_scroll();
         self.draw_sheet(f, body);

@@ -5,6 +5,7 @@ use super::theme::{self, BEIGE, CLARET, FAINT, FG, MUTED, SELECTION};
 use dactile::complete::{self, Item};
 use dactile::lang;
 use ratatui::Frame;
+use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -266,6 +267,14 @@ pub fn panel(title: &str) -> Block<'_> {
             Style::default().fg(BEIGE),
         ))
         .style(theme::base())
+}
+
+/// `s` at `x`, `y`, as much of it as is on the screen.
+pub fn put(buf: &mut Buffer, x: u16, y: u16, s: impl AsRef<str>, style: Style) {
+    if buf.area.contains(Position::new(x, y)) {
+        let room = buf.area.right() - x;
+        buf.set_stringn(x, y, s, room as usize, style);
+    }
 }
 
 /// Clears `r` for a window.
