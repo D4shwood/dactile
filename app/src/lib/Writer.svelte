@@ -51,6 +51,8 @@
   /// The rest of the look; the page's zoom and theme have keys of their own.
   let look = $state(pickLook(first));
   let source = $state(false);
+  /// Where the play's class option puts its scene headings.
+  let sceneAlign = $state("center");
   let typewriter = $state(false);
   /// What stands beside the page.
   let side = $state<"" | "pdf" | "notes" | "cast" | "files" | "look">("");
@@ -117,6 +119,7 @@
         const doc = view.state.doc;
         const v = await api.view(doc.toString());
         // Typed on meanwhile: the next one is on its way.
+        sceneAlign = v.scene_align;
         if (view.state.doc === doc) view.dispatch({ effects: setView.of(v) });
         if (board && view.state.doc === doc) cards = await api.board(doc.toString());
         if (focused && view.state.doc === doc) await refocus();
@@ -607,6 +610,9 @@
         source = !source;
         view.dispatch({ effects: setSource.of(source) });
         break;
+      case "scene-align":
+        if (!opened.read_only) void castCall(() => api.sceneAlignNext(view.state.doc.toString()));
+        break;
       case "pdf-show":
         void showInPdf();
         break;
@@ -976,7 +982,7 @@
   <main class="body" class:split={side !== ""}>
     <div class="left">
       <div class="desk" class:gone={board || casting || memo} class:plain={!sheet} {onwheel}>
-        <div class="page" class:source class:typewriter style={`--z: ${zoom / 100}`}>
+        <div class="page" class:source class:typewriter data-scene-align={sceneAlign} style={`--z: ${zoom / 100}`}>
           <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
           <div
             bind:this={host}
@@ -1533,6 +1539,12 @@
   .page :global(.cm-dimmed .cm-cover) {
     opacity: 0.32;
     transition: opacity 0.15s;
+  }
+  .page[data-scene-align="left"] :global(.cm-b-scene) {
+    text-align: left;
+  }
+  .page[data-scene-align="right"] :global(.cm-b-scene) {
+    text-align: right;
   }
   .page :global(.cm-summary) {
     margin: -0.4em auto 0.8em;

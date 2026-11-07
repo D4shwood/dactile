@@ -167,6 +167,7 @@ export interface View {
   cast: Person[];
   blocks: Block[];
   tail: { start: number; end: number } | null;
+  scene_align: string;
 }
 
 export interface Card {
@@ -268,6 +269,7 @@ export const api = {
     invoke<{ at: number; title: string; text: string }>("summary_here", { text, at }),
   summarySet: (text: string, at: number, summary: string) =>
     invoke<Change | null>("summary_set", { text, at, summary }),
+  sceneAlignNext: (text: string) => invoke<Made>("scene_align_next", { text }),
   sceneSplit: (text: string, at: number) => invoke<Made>("scene_split", { text, at }),
   sceneJoin: (text: string, at: number) => invoke<Made>("scene_join", { text, at }),
   fields: (text: string) => invoke<{ places: string[]; times: string[] }>("fields", { text }),
@@ -407,6 +409,7 @@ export type ImportEdit =
   | { kind: "unmerge"; i: number }
   | { kind: "not-character"; i: number }
   | { kind: "mark"; from: number; to: number; page: string }
+  | { kind: "scene"; from: number; to: number; on: boolean }
   | { kind: "start"; i: number }
   | { kind: "end"; i: number }
   | { kind: "add-play"; i: number; title: string }

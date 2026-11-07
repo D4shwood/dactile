@@ -13,6 +13,7 @@ dactile-light import oyun.docx
 - The title and author
 - A cast list (`KİŞİLER`, `CHARACTERS`) and what it says of each
 - Act and scene headings (`BİRİNCİ PERDE`, `2. Sahne: Ahır`, `ACT ONE`)
+- Numbered scenes with names (`1. KIYI KAHVESİ`, `2. FENER YOLU`)
 - A preface and notes
 - Lines: `NAME: …`, `NAME — …`, `NAME. …`, or the name on its own line above
 - Directions: paragraphs in parentheses or all in italics; `(laughing)` inside a line
@@ -46,8 +47,9 @@ A choice brings two rows of tools:
 
 - **This part:** Marks it as the cover, imprint, contents, preface, author, cast,
   notes or end of book.
-- **Play:** Says where the play starts or ends, that this is the cast page, or that
-  a new play starts here.
+- **Play:** Says where the play starts or ends, that this is the cast page or a scene
+  heading, or that a new play starts here. **Scene heading** marks one that was missed,
+  **Not a scene heading** takes back a wrong one. In Dactile Light, `h` and `H`.
 
 In the people table you can change a name or alias, merge two names for one person,
 and mark one as "Not a character". Its lines stay as text.

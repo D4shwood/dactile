@@ -259,6 +259,12 @@ pub enum Edit {
     NotCharacter {
         i: usize,
     },
+    /// Paragraphs `from` to `to` are scene headings, or are not.
+    Scene {
+        from: usize,
+        to: usize,
+        on: bool,
+    },
     /// Paragraphs `from` to `to` taken for a page of the book, or the play.
     Mark {
         from: usize,
@@ -341,6 +347,7 @@ pub fn edit(d: &mut Draft, e: Edit) -> Result<(), String> {
             let page = Page::named(&page).ok_or("no such page")?;
             d.mark(from, to, page);
         }
+        Edit::Scene { from, to, on } => d.mark_scene(from, to, on),
         Edit::Start { i } => d.play_from(i),
         Edit::End { i } => d.play_to(i),
         Edit::AddPlay { i, title } => {

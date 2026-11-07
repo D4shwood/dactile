@@ -87,6 +87,8 @@ pub struct View {
     pub blocks: Vec<Block>,
     /// `\end{document}` and after: hidden.
     pub tail: Option<Range<usize>>,
+    /// Where the scene headings stand: left, center or right.
+    pub scene_align: &'static str,
 }
 
 /// Byte offsets to UTF-16 ones.
@@ -427,6 +429,7 @@ pub fn view(text: &str) -> View {
         cast,
         blocks,
         tail,
+        scene_align: dactile::info::scene_align(text),
     }
 }
 

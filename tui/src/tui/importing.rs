@@ -606,6 +606,12 @@ impl Preview {
                     .collect();
                 self.set_cast(&kept.join("\n"));
             }
+            KeyCode::Char(c @ ('h' | 'H')) if self.view == View::Document => {
+                self.draft
+                    .mark_scene(self.doc.at(), self.doc.end(), c == 'h');
+                self.doc.stop_ranging();
+                self.people_changed();
+            }
             KeyCode::Char('k') if self.view == View::Document => {
                 self.draft.mark_cast(self.doc.at(), self.doc.end());
                 self.doc.stop_ranging();
@@ -1086,8 +1092,8 @@ impl Preview {
                 View::Document => {
                     self.doc.help()
                         + lang::l(
-                            " · k kişi sayfası bu · y burada yeni oyun",
-                            " · k this is the cast page · y a new play here",
+                            " · k kişi sayfası bu · h sahne başlığı (H değil) · y burada yeni oyun",
+                            " · k this is the cast page · h scene heading (H not) · y a new play here",
                         )
                 }
                 View::Cast => lang::l(

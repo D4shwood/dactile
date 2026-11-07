@@ -311,6 +311,11 @@ fn build(text: &str, doc: &Doc, opts: Options<'_>, mut cache: Option<&mut Cache>
         out: Layout::default(),
         width: opts.width.max(20),
         summaries: opts.summaries,
+        scene_align: match crate::info::scene_align(text) {
+            "left" => Align::Left,
+            "right" => Align::Right,
+            _ => Align::Center,
+        },
     };
     b.out.name_width = name_column(doc, b.width);
     let mut old = std::collections::HashMap::new();
@@ -570,6 +575,8 @@ struct Builder<'a> {
     out: Layout,
     width: u16,
     summaries: Option<&'a std::collections::BTreeMap<String, String>>,
+    /// Where the class's option puts scene headings.
+    scene_align: Align,
 }
 
 impl Builder<'_> {
@@ -1142,7 +1149,7 @@ impl Builder<'_> {
                     &glyphs,
                     0,
                     self.width,
-                    Align::Center,
+                    self.scene_align,
                     Some(span.end),
                     row,
                 );
@@ -1158,8 +1165,15 @@ impl Builder<'_> {
                         .chars()
                         .map(|c| Glyph::deco(c, Style::SceneCast, None))
                         .collect();
-                    let more =
-                        self.flow(b, &glyphs, 0, self.width, Align::Center, None, row + used);
+                    let more = self.flow(
+                        b,
+                        &glyphs,
+                        0,
+                        self.width,
+                        self.scene_align,
+                        None,
+                        row + used,
+                    );
                     used += more;
                 }
                 // The summary, faint: Dactile's, not the play's.
@@ -1173,7 +1187,15 @@ impl Builder<'_> {
                         .chars()
                         .map(|c| Glyph::deco(c, Style::Summary, None))
                         .collect();
-                    self.flow(b, &glyphs, 0, self.width, Align::Center, None, row + used);
+                    self.flow(
+                        b,
+                        &glyphs,
+                        0,
+                        self.width,
+                        self.scene_align,
+                        None,
+                        row + used,
+                    );
                 }
             }
             Kind::Move { enter, aliases } => {

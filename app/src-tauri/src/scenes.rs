@@ -34,6 +34,37 @@ pub fn keep_shape(play: &Path, text: &str, kept: &mut Option<PathBuf>) -> String
 }
 
 /// A new scene from the line at UTF-16 `at` on.
+/// Where the scene headings stand, the next way round: center, left, right.
+pub fn next_align(text: &str) -> Result<Made, String> {
+    let (side, said) = match dactile::info::scene_align(text) {
+        "center" => (
+            "left",
+            lang::l("Sahne başlıkları solda.", "Scene headings on the left."),
+        ),
+        "left" => (
+            "right",
+            lang::l("Sahne başlıkları sağda.", "Scene headings on the right."),
+        ),
+        _ => (
+            "center",
+            lang::l("Sahne başlıkları ortada.", "Scene headings in the middle."),
+        ),
+    };
+    let e = dactile::info::set_scene_align(text, side).ok_or_else(|| {
+        lang::l(
+            "Oyunun \\documentclass satırı yok.",
+            "The play has no \\documentclass line.",
+        )
+        .to_string()
+    })?;
+    let new = tex::apply(text, &[e]);
+    Ok(Made {
+        change: diff(text, &new),
+        cursor: None,
+        message: said.to_string(),
+    })
+}
+
 pub fn split(
     text: &str,
     at: usize,

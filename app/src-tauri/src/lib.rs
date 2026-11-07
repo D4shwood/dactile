@@ -388,6 +388,11 @@ fn scene_split(app: Shared, text: String, at: usize) -> Res<people::Made> {
 }
 
 #[tauri::command]
+fn scene_align_next(text: String) -> Res<people::Made> {
+    scenes::next_align(&text)
+}
+
+#[tauri::command]
 fn scene_join(app: Shared, text: String, at: usize) -> Res<people::Made> {
     let mut a = app.lock().unwrap();
     let path = a.open.as_ref().ok_or("no play open")?.path.clone();
@@ -926,6 +931,7 @@ pub fn run() {
             summary_set,
             scene_split,
             scene_join,
+            scene_align_next,
         ])
         .run(tauri::generate_context!())
         .expect("the window could not open");

@@ -754,6 +754,21 @@ impl Writer {
             })
             .collect();
         fields.push(Field::flag("Final (baskı)", info::is_final(&self.buf.text)));
+        let sides = [
+            lang::l("orta", "center"),
+            lang::l("sol", "left"),
+            lang::l("sağ", "right"),
+        ];
+        let side = match info::scene_align(&self.buf.text) {
+            "left" => sides[1],
+            "right" => sides[2],
+            _ => sides[0],
+        };
+        fields.push(Field::text(
+            lang::l("Sahne başlıkları", "Scene headings"),
+            side,
+            sides.iter().map(ToString::to_string).collect(),
+        ));
         Form {
             kind: FormKind::Info,
             title: lang::l("oyun bilgisi", "cover details").into(),

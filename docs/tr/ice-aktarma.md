@@ -13,6 +13,7 @@ dactile-light import oyun.docx
 - Başlık ve yazar
 - Kişi listesi (`KİŞİLER`, `CHARACTERS`) ve kişiler hakkında yazılanlar
 - Perde ve sahne başlıkları (`BİRİNCİ PERDE`, `2. Sahne: Ahır`, `ACT ONE`)
+- Adı olan numaralı sahneler (`1. KIYI KAHVESİ`, `2. FENER YOLU`)
 - Önsöz ve notlar
 - Replikler: `AD: …`, `AD — …`, `AD. …` ya da ad üstte ayrı satırda
 - Yönergeler: parantezli ya da tamamı italik paragraflar; replik içinde `(gülerek)`
@@ -47,8 +48,9 @@ Seçim yapınca iki satır araç çıkar:
 
 - **Bu bölüm:** Seçimi kapak, künye, içindekiler, önsöz, yazar, kişiler, notlar ya
   da kitabın sonu olarak işaretler.
-- **Oyun:** Oyunun başladığı ve bittiği yeri, kişi sayfasını ya da burada yeni bir
-  oyun başladığını söyler.
+- **Oyun:** Oyunun başladığı ve bittiği yeri, kişi sayfasını, sahne başlığını ya da
+  burada yeni bir oyun başladığını söyler. **Sahne başlığı** kaçırılan bir başlığı
+  işaretler, **Sahne başlığı değil** yanlış bulunanı kaldırır. Dactile Light'ta `h` ve `H`.
 
 Kişiler tablosunda adı ve kısaltmayı değiştirebilir, aynı kişi olan iki adı
 birleştirebilir, yanlışlıkla ad sanılanı "Karakter değil" diye işaretleyebilirsin.

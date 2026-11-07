@@ -500,6 +500,11 @@
             <div class="toolrow">
               <span class="lbl">{l("Oyun", "Play")}</span>
               <button onclick={startHere}>{l("Oyun buradan başlıyor", "The play starts here")}</button>
+            <button
+              title={l("Seçili paragraflar sahne başlığı sayılır", "The chosen paragraphs count as scene headings")}
+              onclick={() => edit({ kind: "scene", from: lo, to: hi, on: true })}>{l("Sahne başlığı", "Scene heading")}</button
+            >
+            <button onclick={() => edit({ kind: "scene", from: lo, to: hi, on: false })}>{l("Sahne başlığı değil", "Not a scene heading")}</button>
             <button onclick={endHere}>{l("Oyun burada bitiyor", "The play ends here")}</button>
             <button
               title={l("Seçili paragraflar kişi sayfası sayılır, listesi onlardan çıkarılır", "The chosen paragraphs are the cast page, and a list is made from them")}

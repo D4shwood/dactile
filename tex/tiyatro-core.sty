@@ -685,7 +685,7 @@
       { \__tiy_toc:nn { section } { #2 \sceneseparator #1 } }
     \vspace* { \beforesceneskip }
     \group_begin:
-    \centering
+    \tiyatrosceneflush
     { \scenetitlefont #2 \tl_if_blank:nF {#1} { \sceneseparator #1 } }
     \par \nobreak
     { \scenecastfont \__tiy_scene_cast:V \g__tiy_scene_tl }

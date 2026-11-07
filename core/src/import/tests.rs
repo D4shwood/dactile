@@ -1,6 +1,6 @@
 //! Made-up documents, built here, read and shaped end to end.
 
-use super::shape::{Item, shape};
+use super::shape::{Draft, Item, shape};
 use super::*;
 use crate::lang::Lang;
 use crate::render::Doc;
@@ -481,6 +481,77 @@ fn notes_go_where_they_are_marked() {
 
 /// Two plays in a book, each with a page of its title; a book's PDF comes
 /// so, with pages.
+fn numbered(lines: &[&str]) -> Draft {
+    let mut text = String::new();
+    for l in lines {
+        text.push_str(l);
+        text.push_str("\n\n");
+    }
+    shape(&plain::read(&text, false), Lang::Tr)
+}
+
+fn scenes_of(d: &Draft) -> Vec<String> {
+    d.items
+        .iter()
+        .filter_map(|i| match i {
+            Item::Scene(s) => Some(s.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn scenes_named_with_a_number_are_scenes() {
+    let d = numbered(&[
+        "1. KIYI KAHVESİ",
+        "RÜYA: Burası kapalı.",
+        "MERT: Açılır.",
+        "2. FENER YOLU",
+        "RÜYA: Yürüyelim.",
+    ]);
+    assert_eq!(scenes_of(&d), ["KIYI KAHVESİ", "FENER YOLU"]);
+    assert!(d.tex().contains("#sahne KIYI KAHVESİ"));
+    // A number left out of the count doesn't end it.
+    let d = numbered(&[
+        "1. KIYI",
+        "RÜYA: Evet.",
+        "2. YOL",
+        "MERT: Evet.",
+        "4. LİMAN",
+        "RÜYA: Evet.",
+    ]);
+    assert_eq!(scenes_of(&d), ["KIYI", "YOL", "LİMAN"]);
+}
+
+#[test]
+fn a_numbered_speaker_or_a_lone_number_is_no_scene() {
+    let d = numbered(&["1. ASKER", "Dur!", "2. ASKER", "Kim o?", "RÜYA: Benim."]);
+    assert!(scenes_of(&d).is_empty());
+    let d = numbered(&["1. KIYI KAHVESİ", "RÜYA: Burası kapalı.", "MERT: Açılır."]);
+    assert!(scenes_of(&d).is_empty());
+    let d = numbered(&["1. Elma", "2. Armut", "RÜYA: Liste bu.", "MERT: Tamam."]);
+    assert!(scenes_of(&d).is_empty());
+}
+
+#[test]
+fn scene_headings_are_marked_by_hand_both_ways() {
+    let mut d = numbered(&[
+        "1. KIYI KAHVESİ",
+        "RÜYA: Burası kapalı.",
+        "Fener Yolu",
+        "MERT: Açılır.",
+        "2. LİMAN",
+        "RÜYA: Geldik.",
+    ]);
+    let at = |d: &Draft, t: &str| d.source.paras.iter().position(|p| p.text() == t).unwrap();
+    let road = at(&d, "Fener Yolu");
+    d.mark_scene(road, road, true);
+    assert_eq!(scenes_of(&d), ["KIYI KAHVESİ", "Fener Yolu", "LİMAN"]);
+    let port = at(&d, "2. LİMAN");
+    d.mark_scene(port, port, false);
+    assert_eq!(scenes_of(&d), ["KIYI KAHVESİ", "Fener Yolu"]);
+}
+
 fn volume() -> Source {
     let mut paras = Vec::new();
     let mut add = |page: usize, t: String| {

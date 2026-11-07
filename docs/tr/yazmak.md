@@ -16,7 +16,9 @@ Her kişinin bir adı ve bir kısaltması vardır:
 
 - `{SELİN}`: replik üstünde görünen ad.
 - `{se}`: yazarken kullandığın kısaltma, `\se`.
-- `*`: kişi son sürümün kapağında görünür.
+- `*`: başrol; kişi tabloda vurgulanır, son sürümün kapağında görünür.
+
+Bütün biçimler için [tiyatro sınıfı](tiyatro-sinifi.md#kişiler) sayfasına bak.
 
 Kişileri kişiler panelinden (**Ctrl+O**) yönetmek daha kolaydır: düzenleme,
 kısaltmayı her yerde değiştirme, sıralama, kişi kartları. Dactile Light'ta aynı

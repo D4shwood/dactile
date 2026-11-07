@@ -93,6 +93,50 @@ fn documentclass_option(text: &str) -> Option<(std::ops::Range<usize>, &str)> {
     Some((o.inner_span.clone(), o.inner))
 }
 
+/// Where the scene headings stand, by the class's option: `left`, `right`
+/// or `center`.
+pub fn scene_align(text: &str) -> &'static str {
+    let Some((_, opts)) = documentclass_option(text) else {
+        return "center";
+    };
+    // The last one counts, as in the class.
+    let side = opts.split(',').rev().find_map(|o| match o.trim() {
+        "left" | "sol" => Some("left"),
+        "right" | "sag" => Some("right"),
+        "center" | "orta" => Some("center"),
+        _ => None,
+    });
+    side.unwrap_or("center")
+}
+
+/// Sets where the scene headings stand; `center`, the class's own, leaves no
+/// option behind.
+pub fn set_scene_align(text: &str, side: &str) -> Option<Edit> {
+    if scene_align(text) == side {
+        return None;
+    }
+    const SIDES: [&str; 6] = ["left", "sol", "right", "sag", "center", "orta"];
+    let want = (side != "center").then_some(side);
+    match documentclass_option(text) {
+        Some((range, opts)) => {
+            let mut parts: Vec<&str> = opts
+                .split(',')
+                .map(str::trim)
+                .filter(|o| !o.is_empty() && !SIDES.contains(o))
+                .collect();
+            parts.extend(want);
+            Some(Edit::new(range, parts.join(",")))
+        }
+        None => {
+            let pre = source::split(text).preamble;
+            let c = tex::commands(text, pre)
+                .into_iter()
+                .find(|c| c.name == "documentclass")?;
+            Some(Edit::new(c.span.end..c.span.end, format!("[{}]", want?)))
+        }
+    }
+}
+
 /// Switches `\documentclass[draft]` and `[final]`.
 pub fn set_final(text: &str, fin: bool) -> Option<Edit> {
     let (want, other) = if fin {
@@ -129,6 +173,26 @@ mod tests {
     use crate::tex::apply;
 
     const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
+
+    #[test]
+    fn scene_headings_stand_where_the_class_says() {
+        assert_eq!(scene_align(PLAY), "center");
+        let left = apply(PLAY, &[set_scene_align(PLAY, "left").unwrap()]);
+        assert!(left.contains("\\documentclass[draft,left]{tiyatro}"));
+        assert_eq!(scene_align(&left), "left");
+        let right = apply(&left, &[set_scene_align(&left, "right").unwrap()]);
+        assert!(right.contains("\\documentclass[draft,right]{tiyatro}"));
+        let back = apply(&right, &[set_scene_align(&right, "center").unwrap()]);
+        assert_eq!(back, PLAY);
+        assert!(set_scene_align(PLAY, "center").is_none());
+        assert_eq!(
+            scene_align("\\documentclass[sag]{tiyatro}\n\\begin{document}"),
+            "right"
+        );
+        let bare = "\\documentclass{tiyatro}\n\\begin{document}";
+        let t = apply(bare, &[set_scene_align(bare, "left").unwrap()]);
+        assert!(t.starts_with("\\documentclass[left]{tiyatro}"));
+    }
 
     #[test]
     fn reading_and_writing() {

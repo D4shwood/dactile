@@ -139,6 +139,8 @@ export const TABS: Tab[] = [
         b("Özet", "Summary", "≣", "Alt+E", k("summary")),
         b("Böl", "Split", "⫶", "Alt+B", k("split")),
         b("Birleştir", "Join", "⋈", "Alt+J", k("join")),
+        // Last in its group: the letters before it stay the terminal app's.
+        b("Başlık hizası", "Heading side", "⇔", "", k("scene-align")),
       ]),
       g("Prova", "Rehearsal", [
         b("Dağıtım", "Casting", "☍", "F9", k("casting")),

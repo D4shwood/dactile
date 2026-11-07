@@ -41,6 +41,8 @@ pub struct Para {
     pub foot: bool,
     /// The same speaker going on after a direction.
     pub resumes: bool,
+    /// Said by hand to be a scene's heading, or not to be one.
+    pub scene: Option<bool>,
 }
 
 impl Para {

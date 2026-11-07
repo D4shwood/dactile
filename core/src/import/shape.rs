@@ -11,7 +11,7 @@ use crate::buffer::escape_pasted;
 use crate::cast::{Cast, upper_tr};
 use crate::lang::Lang;
 use crate::writing::is_caps_name;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
 pub struct Person {
@@ -225,6 +225,63 @@ pub(super) fn heading(text: &str) -> Option<(Level, String)> {
         .trim_start_matches(|c: char| c.is_whitespace() || "-–—:.,".contains(c))
         .trim();
     Some((level, rest.to_string()))
+}
+
+/// `1. TELEVİZYON PROGRAMI`: its number, name, and whether it is in capitals.
+fn numbered_title(text: &str) -> Option<(u32, String, bool)> {
+    let t = text.trim();
+    let digits = t.find(|c: char| !c.is_ascii_digit())?;
+    let n = t[..digits].parse().ok()?;
+    let name = t[digits..].strip_prefix(['.', ')'])?.trim();
+    let words = name.split_whitespace().count();
+    if t.contains('\n') || !(1..=8).contains(&words) || name.ends_with(['.', '?', '!', ':']) {
+        return None;
+    }
+    let first = name.chars().next()?;
+    if !first.is_uppercase() || name.contains(':') {
+        return None;
+    }
+    let caps = !name.chars().any(char::is_lowercase);
+    Some((n, name.to_string(), caps))
+}
+
+/// Paragraphs that count up from 1 with a name each are the scenes of a play
+/// that has no word for them: `1. KIYI KAHVESİ`, `2. FENER YOLU`. Two in
+/// capitals are enough, three otherwise; a name again and again is a speaker's.
+fn numbered_scenes(paras: &[Para]) -> HashSet<usize> {
+    let mut run: Vec<(usize, String, bool)> = Vec::new();
+    let mut next = 1;
+    for (i, p) in paras.iter().enumerate() {
+        let t = p.text();
+        if heading(&t).is_some() {
+            continue;
+        }
+        let Some((n, name, caps)) = numbered_title(&t) else {
+            continue;
+        };
+        // A number or two can be missing; a new act can start counting again.
+        if (next..next + 3).contains(&n) || n == 1 {
+            run.push((i, name, caps));
+            next = n + 1;
+        }
+    }
+    // A scene's name can come back; a speaker's comes back again and again.
+    let mut names: HashSet<String> = HashSet::new();
+    let total = run.len();
+    run.retain(|r| names.insert(r.1.clone()));
+    let enough = if run.iter().all(|r| r.2) { 2 } else { 3 };
+    if run.len() < enough || total - run.len() >= run.len() {
+        return HashSet::new();
+    }
+    run.into_iter().map(|r| r.0).collect()
+}
+
+/// What a paragraph marked as a scene's heading says: its place or name.
+fn scene_name(text: &str) -> String {
+    match heading(text) {
+        Some((Level::Scene, rest)) => rest,
+        _ => numbered_title(text).map_or_else(|| text.trim().to_string(), |t| t.1),
+    }
 }
 
 /// A few words, no sentence, nothing else: an act's title.
@@ -831,6 +888,7 @@ fn shape_as(src: &Source, lang: Lang, labels: Vec<Page>) -> Draft {
             }),
         }
     }
+    let numbered = numbered_scenes(paras);
     let mut started = book;
     let mut in_list = false;
     let mut i = 0;
@@ -838,8 +896,14 @@ fn shape_as(src: &Source, lang: Lang, labels: Vec<Page>) -> Draft {
         let p = &paras[i];
         let t = p.text();
         let t = t.trim();
+        let found = match p.scene {
+            Some(true) => Some((Level::Scene, scene_name(t))),
+            Some(false) => None,
+            None if numbered.contains(&i) => Some((Level::Scene, scene_name(t))),
+            None => heading(t),
+        };
         i += 1;
-        if let Some((level, mut rest)) = heading(t) {
+        if let Some((level, mut rest)) = found {
             started = true;
             in_list = false;
             // "BİRİNCİ PERDE", and its title on the line under it.
@@ -1532,6 +1596,15 @@ impl Draft {
         let end = (to + 1).min(self.labels.len());
         if let Some(part) = self.labels.get_mut(from..end) {
             part.fill(page);
+            self.reread();
+        }
+    }
+
+    /// Paragraphs `from` to `to` said to be scene headings, or not to be.
+    pub fn mark_scene(&mut self, from: usize, to: usize, on: bool) {
+        let end = (to + 1).min(self.source.paras.len());
+        if let Some(part) = self.source.paras.get_mut(from..end) {
+            part.iter_mut().for_each(|p| p.scene = Some(on));
             self.reread();
         }
     }

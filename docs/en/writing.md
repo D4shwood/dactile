@@ -16,7 +16,9 @@ Each character has a name and an alias:
 
 - `{SELİN}`: the name over the lines.
 - `{se}`: what you type, `\se`.
-- `*`: the character appears on the final version's cover.
+- `*`: a lead, stressed in the table and on the final version's cover.
+
+Every form is on the [tiyatro class](tiyatro-class.md#characters) page.
 
 The cast panel (**Ctrl+O**) is the easier way: edit, rename an alias everywhere,
 order, character cards. In Dactile Light the same panel has `m` to merge two
