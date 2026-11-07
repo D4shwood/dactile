@@ -1376,17 +1376,11 @@
     outline: none;
   }
   .page :global(.cm-content) {
-    caret-color: var(--accent-ink);
     padding: 0;
   }
+  /* `drawSelection` blinks the layer around it. */
   .page :global(.cm-cursor) {
     border-left: 2px solid var(--accent-ink);
-    animation: blink 1.1s steps(1) infinite;
-  }
-  @keyframes blink {
-    50% {
-      opacity: 0;
-    }
   }
   .page :global(.cm-selectionBackground),
   .page :global(.cm-focused .cm-selectionBackground) {

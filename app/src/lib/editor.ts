@@ -12,6 +12,7 @@ import {
   type DecorationSet,
   EditorView,
   WidgetType,
+  drawSelection,
   keymap,
 } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
@@ -472,6 +473,8 @@ export function extensions(hooks: Hooks): Extension {
     page,
     decorations,
     noteMarks,
+    // Our own caret: WebKit's blinks only if the desktop says so.
+    drawSelection({ cursorBlinkRate: 1100 }),
     history(),
     search({ top: true }),
     highlightSelectionMatches(),
