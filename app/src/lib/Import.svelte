@@ -1043,6 +1043,12 @@
     white-space: nowrap;
     text-align: right;
   }
+  .left .acts select,
+  .left .acts button {
+    display: block;
+    width: 100%;
+    margin-bottom: 3px;
+  }
   tbody .acts > * {
     opacity: 0.55;
   }

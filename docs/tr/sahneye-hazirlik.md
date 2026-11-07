@@ -7,6 +7,8 @@ Oyun bitince Dactile provaya da hazırlar.
 **Ctrl+G** panoyu açar. Dactile Light'ta bir kez basmak yanda sahne şeridini,
 çabuk iki kez basmak tam ekran panoyu açar; Tab liste ve kartlar arasında geçer.
 
+![Pano](../board.png)
+
 - ⏎ sahneye gider, `e` özetini yazar. Özet PDF'e girmez.
 - Alt+↑↓ sahneyi taşır. `m` alır, oklar yer seçer, ⏎ bırakır.
 - `j` sonrakiyle birleştirir; Alt+B yazarken sahneyi imleçten böler.

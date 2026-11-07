@@ -39,6 +39,8 @@ cd dactile-light-*-x86_64-linux
 - **A Turkish Hunspell dictionary for spell checking:** on Arch,
   `paru -S hunspell-tr`. Everything else works without one.
 
+![The start screen](../start.png)
+
 ## The first run
 
 The first run asks for the language, the folder your plays live in, your name,

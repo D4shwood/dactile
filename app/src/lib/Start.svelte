@@ -9,12 +9,15 @@
   import LookForm from "./LookForm.svelte";
   import { applyLook, pickLook } from "./look";
   import Temporary from "./Temporary.svelte";
+  import { getVersion } from "@tauri-apps/api/app";
 
   let { home, tr, open, reload }: { home: Home; tr: boolean; open: (path: string) => void; reload: () => Promise<void> } =
     $props();
 
   type Section = "home" | "new" | "open" | "settings" | "keys";
   let section = $state<Section>("home");
+  let version = $state("");
+  void getVersion().then((v) => (version = v));
   let chosen = $state<PlayCard | null>(null);
   let preview = $state<Preview | null>(null);
   let files = $state<Files | null>(null);
@@ -337,7 +340,7 @@
       </button>
     {/each}
     <div class="grow"></div>
-    <div class="ver">0.2.0-beta.6</div>
+    <div class="ver">{version}</div>
   </nav>
 
   <main>

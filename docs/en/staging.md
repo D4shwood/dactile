@@ -7,6 +7,8 @@ Once the play is written, Dactile helps with rehearsals too.
 **Ctrl+G** opens the board. In Dactile Light, once gives the scene strip beside the
 writing and twice quickly the full-screen board; Tab goes between list and cards.
 
+![The board](../board.png)
+
 - ⏎ goes to the scene, `e` writes its summary. A summary is never printed.
 - Alt+↑↓ moves a scene. `m` picks it up, the arrows choose where, ⏎ puts it down.
 - `j` joins it with the next; Alt+B in the writer splits it at the cursor.

@@ -3,6 +3,8 @@
 Oyun, [tiyatro sınıfının](tiyatro-sinifi.md) yazımıyla yazılır. Yazdıkça
 komutlar canlanır: `\se Amca` hemen `SELİN   Amca` olur.
 
+![Yazı ekranı](../writer.png)
+
 ## Kişiler
 
 Her kişinin bir adı ve bir kısaltması vardır:
@@ -20,6 +22,8 @@ Kişileri kişiler panelinden (**Ctrl+O**) yönetmek daha kolaydır: düzenleme,
 kısaltmayı her yerde değiştirme, sıralama, kişi kartları. Dactile Light'ta aynı
 panelde `m` iki kişiyi birleştirir, `b` birini seçtiğin sahnelerle ikiye ayırır,
 `g` yeni grup açar.
+
+![Kişiler paneli](../cast.png)
 
 ## Replik ve yönerge
 
@@ -55,6 +59,8 @@ Sahnede kim varsa başlığının altında kendiliğinden toplanır.
 **F6** temayı değiştirir: kâğıt, sepya, gece, yüksek kontrast, koyu. Dactile'da
 Ayarlar'daki **Sürpriz yap** düğmesi her basışta yeni renkler üretir. Vurgu
 rengi, yazı tipi, boyut, satır aralığı ve sayfa genişliği de oradadır.
+
+![Tema seçimi ve Sürpriz yap](../look.png)
 
 **F7** A4 sayfa görünümüdür: sayfalar PDF'in kırıldığı yerde kırılır.
 

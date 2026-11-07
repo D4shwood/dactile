@@ -40,6 +40,8 @@ the parts and the people. On the right, three tabs:
 - **Cast list:** The list, put right as text.
 - **Play:** How the result will read.
 
+![The preview](../import-play.png)
+
 A choice brings two rows of tools:
 
 - **This part:** Marks it as the cover, imprint, contents, preface, author, cast,
@@ -56,6 +58,8 @@ A volume is told by its contents and title pages. Without them Dactile looks at 
 speaks, and a play found that way is marked as a **guess**.
 
 The volume opens on a list of its plays with their pages, lines and people:
+
+![The volume screen](../import-volume.png)
 
 1. Tick those to take.
 2. Click a play's name to look it over. **← Volume** goes back.

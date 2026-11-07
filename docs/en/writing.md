@@ -3,6 +3,8 @@
 A play is written in the syntax of the [tiyatro class](tiyatro-class.md). The
 commands come alive as you type: `\se Amca` turns into `SELİN   Amca` on the spot.
 
+![The writer](../writer.png)
+
 ## Characters
 
 Each character has a name and an alias:
@@ -19,6 +21,8 @@ Each character has a name and an alias:
 The cast panel (**Ctrl+O**) is the easier way: edit, rename an alias everywhere,
 order, character cards. In Dactile Light the same panel has `m` to merge two
 characters, `b` to split one by the scenes you pick, `g` for a new group.
+
+![The cast panel](../cast.png)
 
 ## Lines and directions
 
@@ -54,6 +58,8 @@ Who appears in a scene gathers under its heading by itself.
 **F6** changes the theme: paper, sepia, night, high contrast, dark. In Dactile,
 **Surprise me** under Settings makes new colours at every press. The accent, font,
 size, line spacing and page width are there too.
+
+![Themes and Surprise me](../look.png)
 
 **F7** is the A4 page view: sheets break where the PDF breaks.
 

@@ -89,7 +89,7 @@ dactile-light import oyun.docx  # a play made of a document (see Importing)
 The first run asks for the language (Turkish or English), the folder your
 plays live in, your name, and how the suggestion menu opens.
 
-![Home](docs/home.png)
+![Home](docs/start.png)
 
 The home screen is laid out like a word processor's start screen. A column
 on the left goes to Giriş (home), Yeni (new), Aç (open), Ayarlar (settings)
@@ -135,8 +135,6 @@ into A4 sheets where the PDF starts a new page (the cover, the preface, the
 cast table, each act) and where a sheet fills up, with page numbers. On a wide
 screen the play's outline sits in the margin; a click goes there.
 
-![Suggestions](docs/menu.png)
-
 | Key | |
 |---|---|
 | F10 | the ribbon along the top, as in a word processor: tabs (File, Home, Insert, View, Play, Notes, Help) and their buttons in groups; F10 shows a letter on each tab, then on each button (F10 N A puts in a stage direction), the arrows work too, and the mouse. File opens a page of its own: the play's details, PDF, copies, templates. ^F1 folds the ribbon to its tabs |
@@ -159,8 +157,6 @@ screen the play's outline sits in the margin; a click goes there.
 | ^Z ^Y, ^C ^X ^V | undo, redo, copy, cut, paste |
 | ^S, ^Q | save (it saves by itself anyway), quit |
 | F1 | a keyboard: press any key to see what it does |
-
-![The keys](docs/help.png)
 
 ![The cast](docs/cast.png)
 

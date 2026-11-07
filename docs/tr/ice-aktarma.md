@@ -41,6 +41,8 @@ sağda üç sekme vardır:
 - **Kişi listesi:** Listeyi metin olarak düzeltirsin.
 - **Oyun:** Sonucun nasıl görüneceği.
 
+![Önizleme](../import-play.png)
+
 Seçim yapınca iki satır araç çıkar:
 
 - **Bu bölüm:** Seçimi kapak, künye, içindekiler, önsöz, yazar, kişiler, notlar ya
@@ -58,6 +60,8 @@ Cilt, içindekiler ve başlık sayfalarından tanınır. Bunlar yoksa kimin konu
 bakılır; böyle bulunan oyun **tahmin** diye işaretlenir.
 
 Cilt, oyunların sayfa, replik ve kişi sayılarıyla bir listede açılır:
+
+![Cilt ekranı](../import-volume.png)
 
 1. Almak istediklerini işaretle.
 2. Bakmak ve düzeltmek için oyunun adına tıkla. **← Cilt** listeye döner.

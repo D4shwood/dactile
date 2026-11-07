@@ -90,7 +90,7 @@ dactile-light import oyun.docx  # bir belgeden oyun (bkz. İçe aktarma)
 İlk açılışta dil (Türkçe ya da İngilizce), oyunların duracağı klasör, adın ve
 öneri menüsünün nasıl açılacağı sorulur.
 
-![Ana ekran](docs/home.png)
+![Ana ekran](docs/start.png)
 
 Ana ekran bir kelime işlemcinin açılış ekranı gibi dizilir. Soldaki sütun
 Giriş, Yeni, Aç, Ayarlar ve Tuşlar bölümlerine götürür; Tab sütun, kutucuklar
@@ -136,8 +136,6 @@ yapraklara böler: PDF'in yeni sayfa açtığı yerlerde (kapak, önsöz, kişil
 her perde) ve yaprak dolunca; altta sayfa numarasıyla. Geniş ekranda oyunun iskeleti kenarda
 durur; tıklayınca oraya gider.
 
-![Öneri menüsü](docs/menu.png)
-
 | Tuş | |
 |---|---|
 | F10 | üstteki şerit, bir kelime işlemcideki gibi: sekmeler (Dosya, Giriş, Ekle, Görünüm, Oyun, Notlar, Yardım) ve altında gruplanmış düğmeler; F10 her sekmenin, sonra her düğmenin üstünde bir harf gösterir (F10 E A bir sahne yönergesi ekler), oklar ve fare de çalışır. Dosya ayrı bir sayfa açar: oyunun bilgileri, PDF, kopyalar, şablonlar. ^F1 şeridi sekmelerine katlar |
@@ -160,8 +158,6 @@ durur; tıklayınca oraya gider.
 | ^Z ^Y, ^C ^X ^V | geri al, yinele, kopyala, kes, yapıştır |
 | ^S, ^Q | kaydet (zaten kendiliğinden kaydeder), çık |
 | F1 | bir klavye: bir tuşa bas, ne yaptığını görürsün |
-
-![Tuşlar](docs/help.png)
 
 ![Kişiler](docs/cast.png)
 

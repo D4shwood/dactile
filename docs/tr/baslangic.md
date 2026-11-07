@@ -39,6 +39,8 @@ cd dactile-light-*-x86_64-linux
 - **Yazım denetimi için Türkçe Hunspell sözlüğü:** Arch'ta `paru -S hunspell-tr`.
   Sözlük yoksa geri kalan her şey çalışır.
 
+![Başlangıç ekranı](../start.png)
+
 ## İlk açılış
 
 İlk açılışta dil, oyunların duracağı klasör, adın ve öneri menüsünün nasıl
