@@ -1,8 +1,8 @@
 //! Where a play's things are: its folder, its PDF, the actors' copies, the
 //! role table and its drafts. And whether a place is one the system empties.
 
-use crate::library::{self, Play};
-use crate::{build, casting, file, lang, timing};
+use crate::sidecar::Sidecar;
+use crate::{build, casting, file, info, lang, library};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -51,6 +51,8 @@ pub fn of(play: &Path) -> Outputs {
         copies: copies(play),
         table: named(|tr| casting::table_path_in(play, "pdf", tr))
             .into_iter()
+            // `kar-tablo.tex` is a play of its own, with its own PDF.
+            .filter(|p| !p.with_extension("tex").exists())
             .find_map(made),
         drafts: drafts(play),
     }
@@ -77,10 +79,19 @@ fn named(name: impl Fn(bool) -> PathBuf) -> [PathBuf; 2] {
     [name(tr), name(!tr)]
 }
 
+/// The folder with PDFs in it: an empty one in the other language doesn't
+/// hide them.
 fn copies(play: &Path) -> Option<Copies> {
-    let path = named(|tr| casting::copies_dir_in(play, tr))
+    let mut found: Vec<Copies> = named(|tr| casting::copies_dir_in(play, tr))
         .into_iter()
-        .find(|d| d.is_dir())?;
+        .filter(|d| d.is_dir())
+        .map(copies_in)
+        .collect();
+    let best = found.iter().position(|c| c.pdfs > 0).unwrap_or(0);
+    (!found.is_empty()).then(|| found.swap_remove(best))
+}
+
+fn copies_in(path: PathBuf) -> Copies {
     let pdfs: Vec<PathBuf> = fs::read_dir(&path)
         .into_iter()
         .flatten()
@@ -88,7 +99,7 @@ fn copies(play: &Path) -> Option<Copies> {
         .map(|e| e.path())
         .filter(|p| p.is_file() && p.extension().is_some_and(|x| x == "pdf"))
         .collect();
-    Some(Copies {
+    Copies {
         modified: pdfs
             .iter()
             .filter_map(|p| file::modified(p))
@@ -96,98 +107,127 @@ fn copies(play: &Path) -> Option<Copies> {
             .or_else(|| file::modified(&path)),
         pdfs: pdfs.len(),
         path,
+    }
+}
+
+/// What a `.tex` beside the play is linked to: by its notes file, or, for a
+/// draft older than the link, by its name alone (false).
+fn link(path: &Path) -> Option<(PathBuf, bool)> {
+    let kept = Sidecar::load(path).ok().and_then(|s| s.parent);
+    match kept {
+        Some(name) => Some((path.with_file_name(name), true)),
+        None => library::old_parent(path).map(|up| (up, false)),
+    }
+}
+
+/// A draft's row, from its preamble: no need to read its scenes.
+fn row(path: &Path) -> Option<Draft> {
+    let text = fs::read_to_string(path).ok()?;
+    library::is_play(&text).then(|| Draft {
+        title: library::title_of(&text, path),
+        draft: info::get(&text, "draft").filter(|d| !d.trim().is_empty()),
+        modified: file::modified(path),
+        path: path.to_path_buf(),
     })
 }
 
 /// A draft is always beside what it comes from, so its folder has them all,
-/// wherever the play is.
+/// wherever the play is. The names and links tell which they are: a big
+/// play nearby that is no kin is never opened.
 fn drafts(play: &Path) -> Vec<Draft> {
-    let mut all: Vec<Play> = fs::read_dir(folder(play))
+    let dir = folder(play);
+    let root = dir.join(play.file_name().unwrap_or_default());
+    let mut links: Vec<(PathBuf, PathBuf, bool)> = fs::read_dir(&dir)
         .into_iter()
         .flatten()
         .flatten()
         .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|x| x == "tex"))
-        .filter_map(|p| library::read(&p, timing::WPM))
+        .filter(|p| p.extension().is_some_and(|x| x == "tex") && *p != root)
+        .filter_map(|p| link(&p).map(|(up, kept)| (p, up, kept)))
         .collect();
-    library::link_old_drafts(&mut all);
-    let root = folder(play).join(play.file_name().unwrap_or_default());
-    all.retain(|p| p.path != root);
-    let mut found: Vec<Play> = Vec::new();
+    let mut found: Vec<Draft> = Vec::new();
     let mut ups = vec![root];
     // Taken out as they are found: a loop of links ends by itself.
     while let Some(up) = ups.pop() {
-        let (kids, rest): (Vec<Play>, Vec<Play>) = all
-            .into_iter()
-            .partition(|p| p.parent.as_deref() == Some(up.as_path()));
-        all = rest;
-        ups.extend(kids.iter().map(|p| p.path.clone()));
-        found.extend(kids);
+        let (kids, rest): (Vec<_>, Vec<_>) = links.into_iter().partition(|l| l.1 == up);
+        links = rest;
+        let title = kids
+            .iter()
+            .any(|k| !k.2)
+            .then(|| row(&up).map(|d| d.title))
+            .flatten();
+        for (path, _, kept) in kids {
+            let Some(d) = row(&path) else { continue };
+            if kept || title.as_ref() == Some(&d.title) {
+                ups.push(path);
+                found.push(d);
+            }
+        }
     }
-    found.sort_by_key(|p| std::cmp::Reverse(p.modified));
+    found.sort_by_key(|d| std::cmp::Reverse(d.modified));
     found
-        .into_iter()
-        .map(|p| Draft {
-            path: p.path,
-            title: p.title,
-            draft: p.draft,
-            modified: p.modified,
-        })
-        .collect()
 }
 
 /// Whether a path, there or still to be made, is somewhere the system
 /// empties: the temporary folders, or a user's runtime folder.
 pub fn is_temporary(path: &Path) -> bool {
-    under(path, &temporary_roots())
+    let (roots, mounts) = places(Path::new("/run/user"));
+    under(path, &roots, &mounts)
 }
 
-fn temporary_roots() -> Vec<PathBuf> {
+/// The temporary folders, and what is mounted inside them and stays: in
+/// each `/run/user/<id>` (`run` is `/run/user`), the network shares of
+/// `gvfs` and the documents of `doc`.
+fn places(run: &Path) -> (Vec<PathBuf>, Vec<PathBuf>) {
     let mut roots = vec![
         std::env::temp_dir(),
         PathBuf::from("/tmp"),
         PathBuf::from("/var/tmp"),
         PathBuf::from("/dev/shm"),
     ];
-    // `/run/user/<id>`, anyone's: no need for a user id here.
-    roots.extend(
-        fs::read_dir("/run/user")
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter(|e| {
-                e.file_name()
-                    .to_string_lossy()
-                    .bytes()
-                    .all(|b| b.is_ascii_digit())
-            })
-            .map(|e| e.path()),
-    );
-    roots
+    let mut mounts = Vec::new();
+    // Anyone's: no need for a user id here.
+    for e in fs::read_dir(run).into_iter().flatten().flatten() {
+        let id = e.file_name();
+        if id.to_string_lossy().bytes().all(|b| b.is_ascii_digit()) {
+            mounts.push(e.path().join("gvfs"));
+            mounts.push(e.path().join("doc"));
+            roots.push(e.path());
+        }
+    }
+    (roots, mounts)
 }
 
-/// Both sides as they really are: `path`, or the nearest parent of it that
-/// exists, and each root.
-fn under(path: &Path, roots: &[PathBuf]) -> bool {
-    let Some(real) = path.ancestors().find_map(|a| {
-        let a = if a.as_os_str().is_empty() {
+/// `path` as it really is: its nearest parent that exists, resolved, and
+/// the rest as written.
+fn real(path: &Path) -> Option<PathBuf> {
+    path.ancestors().find_map(|a| {
+        let at = if a.as_os_str().is_empty() {
             Path::new(".")
         } else {
             a
         };
-        a.canonicalize().ok()
-    }) else {
+        let rest = path.strip_prefix(a).ok()?;
+        at.canonicalize().ok().map(|r| r.join(rest))
+    })
+}
+
+/// Both sides as they really are.
+fn under(path: &Path, roots: &[PathBuf], mounts: &[PathBuf]) -> bool {
+    let Some(path) = real(path) else {
         return false;
     };
-    roots
-        .iter()
-        .any(|r| real.starts_with(r.canonicalize().unwrap_or_else(|_| r.clone())))
+    let inside = |places: &[PathBuf]| {
+        places
+            .iter()
+            .any(|p| path.starts_with(real(p).unwrap_or_else(|| p.clone())))
+    };
+    inside(roots) && !inside(mounts)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sidecar::Sidecar;
 
     fn play(title: &str, draft: &str) -> String {
         format!(
@@ -249,6 +289,62 @@ mod tests {
     }
 
     #[test]
+    fn another_plays_pdf_is_not_the_table() {
+        let d = tmp("table");
+        let p = d.join("kar.tex");
+        fs::write(&p, play("Kar", "")).unwrap();
+        for tr in [true, false] {
+            let t = casting::table_path_in(&p, "pdf", tr);
+            fs::write(&t, "x").unwrap();
+            fs::write(t.with_extension("tex"), play("Başka Oyun", "")).unwrap();
+        }
+        assert_eq!(of(&p).table, None);
+        // In one language it is another play's, in the other the table.
+        let table = casting::table_path_in(&p, "pdf", false);
+        fs::remove_file(table.with_extension("tex")).unwrap();
+        assert_eq!(of(&p).table.unwrap().path, table);
+        let _ = fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn an_empty_folder_does_not_hide_the_copies() {
+        for empty_tr in [true, false] {
+            let d = tmp(&format!("copies-{empty_tr}"));
+            let p = d.join("kar.tex");
+            let (empty, full) = (
+                casting::copies_dir_in(&p, empty_tr),
+                casting::copies_dir_in(&p, !empty_tr),
+            );
+            fs::create_dir_all(&empty).unwrap();
+            fs::create_dir_all(&full).unwrap();
+            fs::write(full.join("Can Demir.pdf"), "x").unwrap();
+            let c = of(&p).copies.unwrap();
+            assert_eq!((c.path, c.pdfs), (full.clone(), 1));
+            // Only the empty one: still shown, with nothing in it.
+            fs::remove_dir_all(&full).unwrap();
+            let c = of(&p).copies.unwrap();
+            assert_eq!((c.path, c.pdfs), (empty, 0));
+            let _ = fs::remove_dir_all(d);
+        }
+    }
+
+    #[test]
+    fn a_big_neighbour_is_not_read() {
+        let d = tmp("big");
+        let p = d.join("kar.tex");
+        fs::write(&p, play("Kar", "")).unwrap();
+        let body = "\\replik{ay}{Bir gün daha geçti, kar yağdı.}\n".repeat(500_000);
+        let big = play("Komşu", "").replace("\\end{document}", &body);
+        // No kin, and kin with a big body: neither reads its scenes.
+        fs::write(d.join("komsu.tex"), &big).unwrap();
+        fs::write(d.join("kar-0.2.tex"), big.replace("Komşu", "Kar")).unwrap();
+        let start = std::time::Instant::now();
+        assert_eq!(of(&p).drafts.len(), 1);
+        assert!(start.elapsed() < std::time::Duration::from_secs(5));
+        let _ = fs::remove_dir_all(d);
+    }
+
+    #[test]
     fn drafts_by_link_by_name_and_of_drafts() {
         let d = tmp("drafts");
         let p = d.join("oyun.tex");
@@ -290,35 +386,61 @@ mod tests {
     }
 
     #[test]
+    fn mounts_in_the_runtime_folder_stay() {
+        let d = tmp("run");
+        let user = d.join("1000");
+        fs::create_dir_all(user.join("gvfs/smb-share:server=ev,share=oyunlar")).unwrap();
+        fs::create_dir_all(user.join("doc/abc")).unwrap();
+        fs::create_dir_all(d.join("yabanci")).unwrap();
+        let (roots, mounts) = places(&d);
+        let temporary = |p: &Path| under(p, &roots, &mounts);
+        assert!(temporary(&user));
+        assert!(temporary(&user.join("oyun.tex")));
+        // A share, there or not mounted yet, and a document.
+        assert!(!temporary(
+            &user.join("gvfs/smb-share:server=ev,share=oyunlar/kar.tex")
+        ));
+        assert!(!temporary(&user.join("doc/abc/kar.tex")));
+        fs::remove_dir_all(user.join("gvfs")).unwrap();
+        assert!(!temporary(
+            &user.join("gvfs/smb-share:server=ev,share=oyunlar/kar.tex")
+        ));
+        // Only a whole name, and only under a user's number.
+        assert!(temporary(&user.join("gvfs-eski/kar.tex")));
+        assert_eq!(roots.iter().filter(|r| r.starts_with(&d)).count(), 1);
+        let _ = fs::remove_dir_all(d);
+    }
+
+    #[test]
     fn temporary_places() {
         let d = tmp("temp");
         let (temp, home) = (d.join("temp"), d.join("home"));
         fs::create_dir_all(temp.join("oyunlar")).unwrap();
         fs::create_dir_all(&home).unwrap();
         let roots = [temp.clone()];
-        assert!(under(&temp.join("oyunlar"), &roots));
-        assert!(!under(&home, &roots));
+        assert!(under(&temp.join("oyunlar"), &roots, &[]));
+        assert!(!under(&home, &roots, &[]));
         // Not there yet: its nearest parent says.
-        assert!(under(&temp.join("yok/daha/oyun.tex"), &roots));
-        assert!(!under(&home.join("yok/daha/oyun.tex"), &roots));
+        assert!(under(&temp.join("yok/daha/oyun.tex"), &roots, &[]));
+        assert!(!under(&home.join("yok/daha/oyun.tex"), &roots, &[]));
         // Only a whole folder's name counts.
         fs::create_dir_all(d.join("temporary")).unwrap();
-        assert!(!under(&d.join("temporary"), &roots));
+        assert!(!under(&d.join("temporary"), &roots, &[]));
         #[cfg(unix)]
         {
             use std::os::unix::fs::symlink;
             // A link in a safe place to a temporary one, and the other way.
             let link = home.join("baglanti");
             symlink(temp.join("oyunlar"), &link).unwrap();
-            assert!(under(&link, &roots));
-            assert!(under(&link.join("yeni.tex"), &roots));
+            assert!(under(&link, &roots, &[]));
+            assert!(under(&link.join("yeni.tex"), &roots, &[]));
             let out = temp.join("disari");
             symlink(&home, &out).unwrap();
-            assert!(!under(&out, &roots));
+            assert!(!under(&out, &roots, &[]));
             // A root that is itself a link.
             let root = d.join("root");
             symlink(&temp, &root).unwrap();
-            assert!(under(&temp.join("oyunlar"), &[root]));
+            assert!(under(&temp.join("oyunlar"), &[root], &[]));
         }
         assert!(is_temporary(&std::env::temp_dir().join("yok/oyun.tex")));
         assert!(is_temporary(Path::new("/tmp/yok/oyun.tex")));

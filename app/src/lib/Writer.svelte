@@ -999,7 +999,7 @@
           <button title={l("Kapat", "Close")} onclick={() => key("files")}>✕</button>
         </div>
         {#if files}
-          <div class="list"><FileList {tr} {files} open={leave} /></div>
+          <div class="list"><FileList {tr} {files} open={leave} reload={loadFiles} /></div>
         {/if}
       </aside>
     {:else if side === "cast"}

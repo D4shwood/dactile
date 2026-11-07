@@ -53,6 +53,13 @@
     preview = await api.preview(p.path).catch(() => null);
   }
 
+  async function reloadFiles() {
+    const p = chosen;
+    if (!p) return;
+    const f = await api.files(p.path).catch(() => null);
+    if (f && chosen === p) files = f;
+  }
+
   async function openFolder() {
     error = "";
     await api.launch(home.folder.path).catch((e) => (error = String(e)));
@@ -405,7 +412,7 @@
                 <Temporary {tr} shown={files.folder.shown} />
               {/if}
               <h3 class="fileshead">{l("Bu oyunun dosyaları", "This play's files")}</h3>
-              <FileList {tr} {files} {open} />
+              <FileList {tr} {files} {open} reload={reloadFiles} />
             {/if}
             <div class="path">{chosen.path}</div>
           {/if}

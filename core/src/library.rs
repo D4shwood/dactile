@@ -47,17 +47,9 @@ pub fn read(path: &Path, wpm: u32) -> Option<Play> {
     let cast = Cast::of_play(&text);
     let blocks = lex::blocks(&text, source::split(&text).body, &cast);
     let o = Outline::of(&text, &blocks, &cast);
-    let title = info::get(&text, "title")
-        .map(|t| t.split("\\\\").next().unwrap_or("").trim().to_string())
-        .filter(|t| !t.is_empty())
-        .unwrap_or_else(|| {
-            path.file_stem()
-                .map(|s| s.to_string_lossy().to_string())
-                .unwrap_or_default()
-        });
     Some(Play {
         path: path.to_path_buf(),
-        title,
+        title: title_of(&text, path),
         author: info::get(&text, "author").unwrap_or_default(),
         acts: o.acts.len(),
         scenes: o.scenes.len(),
@@ -79,6 +71,18 @@ pub fn read(path: &Path, wpm: u32) -> Option<Play> {
             .and_then(|s| s.parent)
             .map(|name| path.with_file_name(name)),
     })
+}
+
+/// The title on the cover's first line, or the file's name.
+pub fn title_of(text: &str, path: &Path) -> String {
+    info::get(text, "title")
+        .map(|t| t.split("\\\\").next().unwrap_or("").trim().to_string())
+        .filter(|t| !t.is_empty())
+        .unwrap_or_else(|| {
+            path.file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default()
+        })
 }
 
 /// The plays folder (one level of subfolders too) and the recent ones,
@@ -118,23 +122,23 @@ pub fn list(cfg: &Config) -> Vec<Play> {
     out
 }
 
-/// Drafts made before the link was kept: `oyun-0.2.tex` of the same title
-/// next to `oyun.tex`.
-pub fn link_old_drafts(plays: &mut [Play]) {
+/// `oyun-0.2.tex` → `oyun.tex`: what a draft from before the link was kept
+/// would come from, if its title is the same.
+pub fn old_parent(path: &Path) -> Option<PathBuf> {
+    let stem = path.file_stem()?.to_string_lossy().to_string();
+    let base = draft_base(&stem);
+    (base != stem).then(|| path.with_file_name(format!("{base}.tex")))
+}
+
+/// Links the drafts made before the link was kept.
+fn link_old_drafts(plays: &mut [Play]) {
     for i in 0..plays.len() {
         if plays[i].parent.is_some() {
             continue;
         }
-        let stem = plays[i]
-            .path
-            .file_stem()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_default();
-        let base = draft_base(&stem);
-        if base == stem {
+        let Some(up) = old_parent(&plays[i].path) else {
             continue;
-        }
-        let up = plays[i].path.with_file_name(format!("{base}.tex"));
+        };
         if plays
             .iter()
             .any(|p| p.path == up && p.title == plays[i].title)
