@@ -285,29 +285,33 @@
 
 <div class="import">
   <div class="head">
-    <strong>{l("İçe aktar", "Import")}</strong>
-    <span class="muted">{file}</span>
     {#if s.plays.length > 1 && !overview}
-      <button onclick={toOverview}>{l("Cilt", "Volume")}</button>
-      <button onclick={nextPlay}>{l("Sonraki oyun", "Next play")}</button>
-      <label class="muted">
-        {l("Bu ciltte", "In this volume")}
-        <select value={s.picked} onchange={pickPlay}>
+      <button class="ghost" onclick={toOverview}>← {l("Cilt", "Volume")}</button>
+    {/if}
+    <div class="what">
+      <strong>{l("İçe aktar", "Import")}</strong>
+      <span class="muted file" title={file}>{file}</span>
+    </div>
+    {#if s.plays.length > 1 && !overview}
+      <div class="stepper">
+        <select aria-label={l("Bu ciltte", "In this volume")} value={s.picked} onchange={pickPlay}>
           {#each s.plays as p, i}<option value={i}>{p}</option>{/each}
         </select>
-      </label>
+        <button class="ghost" title={l("Sonraki oyun", "Next play")} aria-label={l("Sonraki oyun", "Next play")} onclick={nextPlay}>→</button>
+      </div>
     {/if}
     <span class="grow"></span>
     {#if ocr}
       <span class="muted">{l(`OCR ${ocr[0]}/${ocr[1]} sayfa`, `OCR ${ocr[0]}/${ocr[1]} pages`)}</span>
-      <button onclick={() => api.importStop()}>{l("Durdur", "Stop")}</button>
+      <button class="ghost" onclick={() => api.importStop()}>{l("Durdur", "Stop")}</button>
     {:else if s.ocr}
       <button
+        class="ghost"
         title={l("Sayfa görüntülerini baştan okur; işaretlediğin bölümler sıfırlanır", "Reads the page images afresh; the parts you marked start over")}
         onclick={readAgain}>{l("OCR ile yeniden oku", "Read again with OCR")}</button
       >
     {/if}
-    <button onclick={drop}>{written ? l("Kapat", "Close") : l("Vazgeç", "Cancel")}</button>
+    <button class="ghost" onclick={drop}>{written ? l("Kapat", "Close") : l("Vazgeç", "Cancel")}</button>
     {#if overview}
       <button class="primary" disabled={!count || writing || !!written} onclick={writeAll}>
         {l(`Seçilenleri oluştur (${count})`, `Make the chosen (${count})`)}
@@ -319,6 +323,7 @@
   {#if error}<div class="error">{error}</div>{/if}
   {#if overview}
     <div class="volume">
+      <div class="sheet">
       {#if written}
         <h3>{l("Oluşturulanlar", "Made")}</h3>
         <ul class="made">
@@ -335,12 +340,8 @@
           {/each}
         </ul>
       {:else}
-        <p class="muted">
-          {l(
-            `Bu kitapta ${volume.length} oyun bulundu. Almak istediklerini seç; bakmak ve düzeltmek için oyunun adına tıkla.`,
-            `${volume.length} plays were found in this book. Choose those to take; click a play's name to look it over.`,
-          )}
-        </p>
+        <h2>{l(`${volume.length} oyun bulundu`, `${volume.length} plays found`)}</h2>
+        <p class="muted">{l("Almak istediklerini seç. Bakmak ve düzeltmek için oyunun adına tıkla.", "Choose those to take. Click a play's name to look it over.")}</p>
         <div class="bookopts">
           <label><input type="checkbox" bind:checked={asBook} /> {l("Tek kitap altında topla", "Gather them under one book")}</label>
           {#if asBook}
@@ -378,6 +379,7 @@
                 <td class="num">{p.people}</td>
                 <td class="acts">
                   <button
+                    class="ghost"
                     title={l("Yanlış bulundu: metni bir öncekine katılır", "Wrongly found: its text joins the one before")}
                     onclick={() => dropPlay(i)}>{l("Oyun değil", "Not a play")}</button
                   >
@@ -387,6 +389,7 @@
           </tbody>
         </table>
       {/if}
+      </div>
     </div>
   {:else}
   <div class="body">
@@ -403,12 +406,13 @@
           </label>
         </div>
       {/key}
-      <p class="muted">
-        {l(
-          `${s.lines} replik · ${s.directions} yönerge · ${s.acts} perde · ${s.scenes} sahne`,
-          `${s.lines} lines · ${s.directions} directions · ${s.acts} acts · ${s.scenes} scenes`,
-        )}{s.plain ? l(` · ${s.plain} düz paragraf`, ` · ${s.plain} plain paragraphs`) : ""}
-      </p>
+      <ul class="stats">
+        <li><b>{s.lines}</b> {l("replik", "lines")}</li>
+        <li><b>{s.directions}</b> {l("yönerge", "directions")}</li>
+        <li><b>{s.acts}</b> {l("perde", "acts")}</li>
+        <li><b>{s.scenes}</b> {l("sahne", "scenes")}</li>
+        {#if s.plain}<li class="warn"><b>{s.plain}</b> {l("düz paragraf", "plain paragraphs")}</li>{/if}
+      </ul>
       <h3>{l("Bölümler", "Parts")}</h3>
       <div class="parts">
         {#each parts as p (p.from)}
@@ -430,7 +434,6 @@
               <th>{l("Ad", "Name")}</th>
               <th>{l("Kısaltma", "Alias")}</th>
               <th>{l("Replik", "Lines")}</th>
-              <th>{l("İlk repliği", "First line")}</th>
               <th></th>
             </tr>
           </thead>
@@ -438,10 +441,9 @@
             {#key round}
               {#each s.people as p, i (i)}
                 <tr class:off={p.not_character || p.merged}>
-                  <td><input class="who" value={p.name} disabled={!!p.merged || p.not_character} onchange={(e) => edit({ kind: "person", i, name: name(e), alias: p.alias })} /></td>
+                  <td><input class="who" value={p.name} disabled={!!p.merged || p.not_character} onchange={(e) => edit({ kind: "person", i, name: name(e), alias: p.alias })} /><div class="sample" title={p.sample}>{p.sample}</div></td>
                   <td><input class="alias" value={p.alias} disabled={!!p.merged || p.not_character} onchange={(e) => edit({ kind: "person", i, name: p.name, alias: name(e) })} /></td>
                   <td class="num">{p.lines}</td>
-                  <td class="sample">{p.sample}</td>
                   <td class="acts">
                     {#if p.merged}
                       <span class="muted">→ {p.merged}</span>
@@ -471,18 +473,33 @@
     </div>
     <div class="right">
       <div class="tabs">
+        <div class="seg">
         <button class:on={tab === "doc"} onclick={() => (tab = "doc")}>{l("Belge", "Document")}</button>
         <button class:on={tab === "cast"} onclick={toCast}>{l("Kişi listesi", "Cast list")}</button>
         <button class:on={tab === "play"} onclick={() => (tab = "play")}>{l("Oyun", "Play")}</button>
+        </div>
         <span class="grow"></span>
-        <button title="Shift+F3" onclick={() => step(-1)}>← {l("Önceki", "Previous")}</button>
-        <button title="F3" onclick={() => step(1)}>{l("Sonraki", "Next")} →</button>
+        <button class="ghost" title="Shift+F3" onclick={() => step(-1)}>← {l("Önceki", "Previous")}</button>
+        <button class="ghost" title="F3" onclick={() => step(1)}>{l("Sonraki", "Next")} →</button>
       </div>
       {#if tab === "doc"}
         <div class="tools">
           {#if sel}
-            <span class="muted">{l(`${hi - lo + 1} paragraf seçili`, `${hi - lo + 1} paragraphs chosen`)}</span>
-            <button class="primary" onclick={startHere}>{l("Oyun buradan başlıyor", "The play starts here")}</button>
+            <div class="toolhead">
+              <b>{l(`${hi - lo + 1} paragraf seçili`, `${hi - lo + 1} paragraphs chosen`)}</b>
+              <label class="onward"><input type="checkbox" bind:checked={onward} /> {l("İşaretleyince sonrakine geç", "Go on to the next after marking")}</label>
+            </div>
+            <div class="toolrow">
+              <span class="lbl">{l("Bu bölüm", "This part")}</span>
+              <span class="row">
+              {#each PAGES as [id, t, e] (id)}
+                <button class="tag {id}" onclick={() => mark(id)}>{l(t, e)}</button>
+              {/each}
+            </span>
+            </div>
+            <div class="toolrow">
+              <span class="lbl">{l("Oyun", "Play")}</span>
+              <button onclick={startHere}>{l("Oyun buradan başlıyor", "The play starts here")}</button>
             <button onclick={endHere}>{l("Oyun burada bitiyor", "The play ends here")}</button>
             <button
               title={l("Seçili paragraflar kişi sayfası sayılır, listesi onlardan çıkarılır", "The chosen paragraphs are the cast page, and a list is made from them")}
@@ -504,12 +521,7 @@
                 <button onclick={() => (naming = null)}>{l("Vazgeç", "Cancel")}</button>
               </span>
             {/if}
-            <span class="row">
-              {#each PAGES as [id, t, e] (id)}
-                <button class="tag {id}" onclick={() => mark(id)}>{l(t, e)}</button>
-              {/each}
-            </span>
-            <label class="onward"><input type="checkbox" bind:checked={onward} /> {l("İşaretleyince sonrakine geç", "Go on to the next after marking")}</label>
+            </div>
           {:else}
             <span class="muted">{l("Bir paragrafa ya da soldaki bir bölüme tıkla; Shift ile toplu seç.", "Click a paragraph or a part on the left; Shift chooses many.")}</span>
           {/if}
@@ -529,10 +541,13 @@
               "A person a line. Choose the cast page under Document and say \"This is the cast page\" for a list from it; put it right here.",
             )}
           </p>
-          <pre class="muted syntax">{l(
+          <details class="syntax">
+            <summary>{l("Yazım kuralları", "How to write it")}</summary>
+            <pre class="muted">{l(
               "AD | hakkında not\nLİSTEDEKİ AD = REPLİKTEKİ AD | not\n\\chargroup Grubun adı\n\\gkarakter AD | not\n+ yalnızca toplu anılanlar\n# yorum",
               "NAME | a note on them\nNAME ON THE LIST = NAME OVER THE LINES | note\n\\chargroup The group's name\n\\gkarakter NAME | note\n+ those named only in a group\n# a comment",
             )}</pre>
+          </details>
           <textarea aria-label={l("Kişi listesi", "Cast list")} spellcheck="false" bind:value={castText}></textarea>
           <div class="castfoot">
             <button class="primary" disabled={castText === s.cast_text} onclick={putCast}>{l("Uygula", "Put it in")}</button>
@@ -571,7 +586,19 @@
     gap: 14px;
     align-items: center;
     flex-wrap: wrap;
-    margin: 8px 0 12px;
+    margin: 14px 0;
+    padding: 10px 12px;
+    border: 1px solid var(--chrome-line);
+    border-radius: 8px;
+    background: var(--chrome-2);
+  }
+  .bookopts label,
+  .onward {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--chrome-fg);
   }
   .castlist {
     flex: 1;
@@ -585,9 +612,18 @@
   .castlist p {
     margin: 0;
   }
-  .castlist .syntax {
-    margin: 0;
-    font: 12px/1.4 var(--mono);
+  .syntax summary {
+    font-size: 13px;
+    color: var(--chrome-muted);
+    cursor: pointer;
+  }
+  .syntax pre {
+    margin: 6px 0 0;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: var(--chrome-2);
+    font: 12px/1.5 var(--mono);
+    white-space: pre-wrap;
   }
   .castlist textarea {
     flex: 1;
@@ -604,12 +640,18 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
-    padding: 16px 20px;
+    padding: 28px 20px;
   }
-  .volume table {
-    width: 100%;
+  .sheet {
     max-width: 860px;
-    border-collapse: collapse;
+    margin: 0 auto;
+  }
+  h2 {
+    margin: 0 0 4px;
+    font: 600 22px var(--serif);
+  }
+  .sheet > p {
+    margin: 0;
   }
   .volume th {
     text-align: left;
@@ -618,8 +660,11 @@
   }
   .volume th,
   .volume td {
-    padding: 6px 8px;
+    padding: 8px;
     border-bottom: 1px solid var(--chrome-line);
+  }
+  .volume tbody tr:hover {
+    background: var(--chrome-2);
   }
   .volume .num {
     font-variant-numeric: tabular-nums;
@@ -640,9 +685,9 @@
   .guess {
     margin-left: 6px;
     padding: 0 6px;
-    border: 1px solid var(--claret);
-    border-radius: 3px;
-    color: var(--claret);
+    border: 1px solid var(--accent-ink);
+    border-radius: 999px;
+    color: var(--accent-ink);
     font-size: 11px;
   }
   .made {
@@ -659,7 +704,7 @@
     flex-wrap: wrap;
   }
   .fail {
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   .naming {
     min-width: 220px;
@@ -680,8 +725,53 @@
     padding: 10px 16px;
     border-bottom: 1px solid var(--chrome-line);
   }
+  .what {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    max-width: 34vw;
+    line-height: 1.2;
+  }
   .head strong {
     font: 600 17px var(--serif);
+    color: var(--accent-ink);
+  }
+  .file {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-size: 12px;
+  }
+  .stepper {
+    display: flex;
+    gap: 4px;
+    min-width: 0;
+    margin-left: 8px;
+  }
+  .stepper select {
+    min-width: 0;
+    max-width: 280px;
+  }
+  .stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 12px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .stats li {
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: var(--chrome-2);
+    color: var(--chrome-muted);
+    font-size: 12px;
+  }
+  .stats b {
+    color: var(--chrome-fg);
+    font-variant-numeric: tabular-nums;
+  }
+  .stats .warn b {
     color: var(--accent-ink);
   }
   .grow {
@@ -692,22 +782,24 @@
     font-size: 13px;
   }
   h3 {
-    margin: 16px 0 6px;
-    font: 600 14px var(--serif);
-    color: var(--accent-ink);
+    margin: 20px 0 6px;
+    font: 600 12px var(--sans);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--chrome-muted);
   }
   .parts {
     max-height: 38vh;
     overflow: auto;
     border: 1px solid var(--chrome-line);
-    border-radius: 4px;
+    border-radius: 8px;
   }
   .part {
     display: grid;
     grid-template-columns: 88px 74px minmax(0, 1fr) 36px;
     gap: 8px;
     width: 100%;
-    padding: 4px 8px;
+    padding: 5px 8px;
     border: 0;
     border-left: 3px solid var(--chrome-line);
     border-radius: 0;
@@ -716,6 +808,9 @@
   }
   .part.play {
     border-left-color: var(--accent-ink);
+  }
+  .part:hover {
+    background: var(--chrome-2);
   }
   .part.on {
     background: var(--chrome-line);
@@ -741,34 +836,72 @@
     border-bottom: 1px solid var(--chrome-line);
     font-size: 13px;
   }
-  .tabs .on {
-    color: var(--accent-ink);
-    border-color: var(--claret);
+  .seg {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 8px;
+    background: var(--chrome-2);
+  }
+  .seg button {
+    border-color: transparent;
+    background: none;
+    color: var(--chrome-muted);
+  }
+  .seg .on {
+    background: var(--chrome);
+    color: var(--chrome-fg);
+    font-weight: 600;
+  }
+  .tools {
+    flex-direction: column;
+    align-items: stretch;
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .toolhead {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .toolrow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+  }
+  .lbl {
+    width: 64px;
+    flex: none;
+    color: var(--chrome-muted);
+    font-size: 12px;
   }
   .tools .row {
     display: flex;
+    flex: 1;
     flex-wrap: wrap;
     gap: 4px;
-    width: 100%;
+    min-width: 0;
+  }
+  .tools .toolrow button {
+    font-size: 12px;
   }
   .tag {
-    font-size: 12px;
-    padding: 2px 7px;
+    border-radius: 999px;
+    padding: 2px 9px;
   }
   .tag.play {
-    border-color: var(--claret);
+    border-color: var(--accent-ink);
     color: var(--accent-ink);
-  }
-  .onward {
-    flex-direction: row;
-    align-items: center;
-    gap: 5px;
   }
   .doc {
     flex: 1;
     min-height: 0;
     overflow: auto;
-    padding: 12px 20px;
+    padding: 16px 24px;
+    background: var(--page);
     font: 15px/1.45 var(--serif);
     user-select: none;
   }
@@ -784,18 +917,18 @@
   }
   .doc p.play {
     border-left-color: var(--accent-ink);
-    color: var(--chrome-fg);
+    color: var(--fg);
   }
   .doc p.on {
-    background: var(--chrome-line);
-    color: var(--chrome-fg);
+    background: var(--selection);
+    color: var(--fg);
   }
   .pageno {
     margin: 10px 0 6px;
     font: 11px var(--sans, sans-serif);
     letter-spacing: 0.04em;
-    color: var(--chrome-muted);
-    border-bottom: 1px dashed var(--chrome-line);
+    color: var(--muted);
+    border-bottom: 1px dashed var(--faint);
   }
   .error {
     padding: 6px 16px;
@@ -811,7 +944,7 @@
   }
   .left {
     overflow: auto;
-    padding: 14px 16px;
+    padding: 16px;
   }
   .info {
     display: grid;
@@ -829,18 +962,43 @@
   select,
   button {
     border: 1px solid var(--chrome-line);
-    border-radius: 4px;
-    padding: 3px 7px;
+    border-radius: 6px;
+    padding: 4px 9px;
     background: var(--chrome);
     color: var(--chrome-fg);
+  }
+  input:focus-visible,
+  select:focus-visible,
+  button:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--accent-ink);
+    outline-offset: 1px;
+  }
+  input[type="checkbox"] {
+    accent-color: var(--accent-ink);
   }
   button {
     cursor: pointer;
   }
-  .primary {
+  button:hover:not(:disabled) {
+    background: var(--chrome-2);
+  }
+  button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+  .ghost {
+    border-color: transparent;
+    background: none;
+  }
+  .primary,
+  .primary:hover:not(:disabled) {
     background: var(--claret);
     color: #f6efe4;
     border-color: var(--claret);
+  }
+  .primary:hover:not(:disabled) {
+    background: var(--claret-deep);
   }
   table {
     width: 100%;
@@ -857,7 +1015,8 @@
     color: var(--chrome-muted);
   }
   .who {
-    width: 130px;
+    width: 100%;
+    min-width: 120px;
     font-weight: 700;
   }
   .alias {
@@ -867,15 +1026,29 @@
     text-align: right;
   }
   .sample {
-    max-width: 200px;
+    max-width: 240px;
+    padding: 2px 2px 0;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
     color: var(--chrome-muted);
-    font-size: 13px;
+    font-size: 12px;
+  }
+  .left td {
+    padding: 5px 6px;
+    border-bottom: 1px solid var(--chrome-line);
+    vertical-align: top;
   }
   .acts {
     white-space: nowrap;
+    text-align: right;
+  }
+  tbody .acts > * {
+    opacity: 0.55;
+  }
+  tr:hover .acts > *,
+  .acts > *:focus-visible {
+    opacity: 1;
   }
   .acts select,
   .acts button {
@@ -888,11 +1061,16 @@
     opacity: 0.5;
   }
   .reading {
+    flex: 1;
+    min-height: 0;
     overflow: auto;
-    padding: 16px 20px;
-    border-left: 1px solid var(--chrome-line);
+    padding: 20px 24px;
+    background: var(--page);
+    color: var(--fg);
   }
   .column {
+    max-width: 62ch;
+    margin: 0 auto;
     font: 15px/1.45 var(--serif);
   }
   .column p {
@@ -911,9 +1089,9 @@
   }
   .direction {
     font-style: italic;
-    color: var(--chrome-muted);
+    color: var(--muted);
   }
   .plain {
-    color: var(--chrome-muted);
+    color: var(--muted);
   }
 </style>
