@@ -6,31 +6,12 @@ Stage play writer for the tiyatro XeLaTeX class. Rust workspace: `core` (crate `
 
 Checks: `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all --check`, `npm run check` in `app/`, `tex/test/run.sh`.
 
-## Team
+## Working
 
-The session in this repository is the team lead; `.claude/agents/` holds the architect, developer, designer and qa. Who checks what is under Checks.
+One session does the work, directly on `main`. Agents in `.claude/agents/` are there if a job really needs one; none run by default, and two only one after the other. This is a small project on a small machine: no team reports, no worktrees.
 
-- At most 2 agents of this team active at once. The machine has 8 cores and 15 GB, shared with the user and the other team.
-- One compile at a time across both teams: `flock ~/.cache/dactile-team/build.lock cargo ...`.
-- One headless UI test at a time: `flock ~/.cache/dactile-team/ui.lock ...`.
-- Agents that write code in parallel use separate worktrees and separate files.
-- An agent's worktree can start behind `main`: bring it to `main` first.
-- Follow-up work goes to the agent that has the context, by message; a new agent only for a new area.
-- A refused command is a stop: say so in the report, never work around it. Write files with the edit tools, not heredocs.
-
-## Where things are
-
-- `core/src`: `config` settings, `build` XeLaTeX, opening and showing files, `outputs` a play's files, `library` and `shelf` plays and drafts, `render` and `lex` the text, `cast` and `casting` people, `notes`, `structure` and `outline` acts and scenes, `import/` other formats.
-- `app/src-tauri/src/lib.rs`: every Tauri command; `app/src/lib/api.ts` types them. `Start.svelte` home, `Writer.svelte` the page, `Ribbon.svelte` and `ribbon.ts` the ribbon, `Pdf.svelte` the viewer, `theme.css` the look.
-- `tui/src/tui`: `home.rs`, `writer/`, `importing.rs`, `theme.rs`, `keys.rs`; `tui/src/install.rs` menu entry and icons.
-
-## Checks
-
-- Every change: the fast checks above, by whoever made it. `cargo test` and `npm run check` at least.
-- qa, before it is reported done: anything that can lose data or touch the user's files (saving, import, delete, settings, the play's files), every change to `core/` and `tex/`.
-- The user, not qa: how it looks and feels (menus, icons, themes, the PDF viewer's use, the files panel). Collect these into one install and a short list of what to look at.
-- Long visual tests run once at the end of a batch, not after each step.
-- Before each push: fictional names only, checked on the diff.
+- Tests and clippy pass, the code that writes files gets a look, the user judges how it looks.
+- One compile at a time: `flock ~/.cache/dactile-team/build.lock cargo ...`.
 
 ## Rules
 
