@@ -147,7 +147,11 @@
     release?.();
     release = null;
     clearTimeout(following);
-    clearTimeout(saving);
+    // A change made just before closing is kept too.
+    if (saving) {
+      clearTimeout(saving);
+      save();
+    }
   });
 
   // ------------------------------------------------------- SyncTeX
@@ -212,9 +216,12 @@
   /// The choices kept, a moment after the last change.
   function keep() {
     clearTimeout(saving);
-    saving = window.setTimeout(() => {
-      if (o) api.set("viewer", $state.snapshot(o)).catch((e) => say(String(e), true));
-    }, 400);
+    saving = window.setTimeout(save, 400);
+  }
+
+  function save() {
+    saving = 0;
+    if (o) api.set("viewer", $state.snapshot(o)).catch((e) => say(String(e), true));
   }
 
   function apply() {
