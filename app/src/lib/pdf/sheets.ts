@@ -217,16 +217,39 @@ export class Sheets {
 
   /// A zoom in percent, keeping the point at (x, y) of the view in place.
   setZoom(percent: number, x?: number, y?: number) {
-    this.fitting = "";
     const px = x ?? this.host.clientWidth / 2;
     const py = y ?? this.host.clientHeight / 2;
-    const ratio = percent / this.zoom;
-    const sx = this.host.scrollLeft + px;
-    const sy = this.host.scrollTop + py;
+    this.zoomAt(percent, px, py, px, py);
+  }
+
+  /// A zoom that brings the point at (x, y) of the view to (toX, toY). The
+  /// point is held as a share of its sheet: the gaps between sheets don't
+  /// grow with the zoom, so a share of the whole scroll would drift.
+  private zoomAt(percent: number, x: number, y: number, toX: number, toY: number) {
+    this.fitting = "";
+    const inGrid = (): [number, number] => [this.grid.offsetLeft, this.grid.offsetTop];
+    const [gx, gy] = inGrid();
+    const cx = this.host.scrollLeft + x - gx;
+    const cy = this.host.scrollTop + y - gy;
+    let at: Sheet | null = null;
+    let nearest = Infinity;
+    for (const s of this.sheets) {
+      if (s.el.hidden) continue;
+      const { offsetLeft: l, offsetTop: t, offsetWidth: w, offsetHeight: h } = s.el;
+      const off = Math.hypot(Math.max(l - cx, 0, cx - l - w), Math.max(t - cy, 0, cy - t - h));
+      if (off < nearest) {
+        nearest = off;
+        at = s;
+      }
+    }
+    const share = at && [(cx - at.el.offsetLeft) / (at.el.offsetWidth || 1), (cy - at.el.offsetTop) / (at.el.offsetHeight || 1)];
     this.zoom = percent;
     this.size();
-    this.host.scrollLeft = sx * ratio - px;
-    this.host.scrollTop = sy * ratio - py;
+    if (at && share) {
+      const [nx, ny] = inGrid();
+      this.host.scrollLeft = nx + at.el.offsetLeft + share[0] * at.el.offsetWidth - toX;
+      this.host.scrollTop = ny + at.el.offsetTop + share[1] * at.el.offsetHeight - toY;
+    }
     this.on.zoom(percent);
     this.redraw();
   }
@@ -706,8 +729,6 @@ export class Sheets {
     const midX = (left + right) / 2 - r.left;
     const midY = (top + bottom) / 2 - r.top;
     const z = Math.min(400, Math.max(12.5, this.zoom * k));
-    this.setZoom(z, midX, midY);
-    this.host.scrollLeft += midX - r.width / 2;
-    this.host.scrollTop += midY - r.height / 2;
+    this.zoomAt(z, midX, midY, r.width / 2, r.height / 2);
   }
 }
