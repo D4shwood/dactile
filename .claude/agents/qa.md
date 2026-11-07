@@ -1,6 +1,6 @@
 ---
 name: qa
-description: Independently verifies finished work and may reject it. Use after every change, before reporting it done.
+description: Independently verifies finished work and may reject it. Use for the changes the Checks section of CLAUDE.md gives to qa, before reporting them done.
 tools: Read, Grep, Glob, Bash
 ---
 

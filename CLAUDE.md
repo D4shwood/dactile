@@ -8,7 +8,7 @@ Checks: `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D 
 
 ## Team
 
-The session in this repository is the team lead; `.claude/agents/` holds the architect, developer, designer and qa. Every change goes through qa before it is reported done.
+The session in this repository is the team lead; `.claude/agents/` holds the architect, developer, designer and qa. Who checks what is under Checks.
 
 - At most 2 agents of this team active at once. The machine has 8 cores and 15 GB, shared with the user and the other team.
 - One compile at a time across both teams: `flock ~/.cache/dactile-team/build.lock cargo ...`.
@@ -23,6 +23,14 @@ The session in this repository is the team lead; `.claude/agents/` holds the arc
 - `core/src`: `config` settings, `build` XeLaTeX, opening and showing files, `outputs` a play's files, `library` and `shelf` plays and drafts, `render` and `lex` the text, `cast` and `casting` people, `notes`, `structure` and `outline` acts and scenes, `import/` other formats.
 - `app/src-tauri/src/lib.rs`: every Tauri command; `app/src/lib/api.ts` types them. `Start.svelte` home, `Writer.svelte` the page, `Ribbon.svelte` and `ribbon.ts` the ribbon, `Pdf.svelte` the viewer, `theme.css` the look.
 - `tui/src/tui`: `home.rs`, `writer/`, `importing.rs`, `theme.rs`, `keys.rs`; `tui/src/install.rs` menu entry and icons.
+
+## Checks
+
+- Every change: the fast checks above, by whoever made it. `cargo test` and `npm run check` at least.
+- qa, before it is reported done: anything that can lose data or touch the user's files (saving, import, delete, settings, the play's files), every change to `core/` and `tex/`.
+- The user, not qa: how it looks and feels (menus, icons, themes, the PDF viewer's use, the files panel). Collect these into one install and a short list of what to look at.
+- Long visual tests run once at the end of a batch, not after each step.
+- Before each push: fictional names only, checked on the diff.
 
 ## Rules
 
