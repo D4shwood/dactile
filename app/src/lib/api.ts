@@ -28,6 +28,8 @@ export interface TemplateCard {
 /// How the app and its page look.
 export interface Look {
   theme: string;
+  /// The surprise theme's hue and brightness, as `newSurprise` makes them.
+  surprise: string;
   accent: string;
   page_font: string;
   page_size: number;

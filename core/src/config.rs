@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 const RECENT: usize = 12;
 
 /// The accent colours, by the name the settings keep.
-pub const ACCENTS: [&str; 5] = ["claret", "blue", "green", "plum", "ochre"];
+pub const ACCENTS: [&str; 6] = ["claret", "blue", "green", "plum", "ochre", "clay"];
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -30,8 +30,10 @@ pub struct Config {
     /// The play on a paper page; dark otherwise. Kept for older settings:
     /// `theme` says more.
     pub paper: bool,
-    /// paper, sepia, night, contrast or dark; empty in older settings.
+    /// paper, sepia, night, contrast, dark or surprise; empty in older settings.
     pub theme: String,
+    /// The desktop app's surprise theme: a hue and `dark` or `light`.
+    pub surprise: String,
     /// One of `ACCENTS`.
     pub accent: String,
     /// The desktop app's page: a font's name, empty for its own; its size in
@@ -143,6 +145,7 @@ impl Default for Config {
             dim: false,
             paper: true,
             theme: String::new(),
+            surprise: String::new(),
             accent: "claret".into(),
             page_font: String::new(),
             page_size: 17,

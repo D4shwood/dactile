@@ -51,6 +51,7 @@ pub struct Settings {
     pub author: String,
     pub lang: &'static str,
     pub theme: String,
+    pub surprise: String,
     pub accent: String,
     pub page_font: String,
     pub page_size: u16,
@@ -86,6 +87,7 @@ pub fn settings(cfg: &Config) -> Settings {
         author: cfg.author.clone(),
         lang: if lang::is_tr() { "tr" } else { "en" },
         theme: cfg.theme().to_string(),
+        surprise: cfg.surprise.clone(),
         accent: cfg.accent.clone(),
         page_font: cfg.page_font.clone(),
         page_size: cfg.page_size,
@@ -438,6 +440,7 @@ fn change(cfg: &mut Config, key: &str, value: &serde_json::Value) -> anyhow::Res
     };
     match key {
         "theme" => cfg.theme = value.as_str().unwrap_or("paper").to_string(),
+        "surprise" => cfg.surprise = value.as_str().unwrap_or("").to_string(),
         "page_zoom" => cfg.page_zoom = value.as_u64().unwrap_or(100).clamp(50, 300) as u16,
         "ribbon_folded" => cfg.ribbon_folded = value.as_bool().unwrap_or(false),
         "author" => cfg.author = value.as_str().unwrap_or("").to_string(),

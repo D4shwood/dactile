@@ -530,7 +530,7 @@
 
   function setTheme(t: string) {
     theme = t;
-    document.documentElement.dataset.theme = t;
+    applyLook({ ...look, theme: t, page_zoom: zoom });
     api.set("theme", t);
   }
 
@@ -868,7 +868,7 @@
   // ------------------------------------------------------------ life
 
   onMount(() => {
-    document.documentElement.dataset.theme = theme;
+    applyLook({ ...look, theme, page_zoom: zoom });
     void loadFiles();
     view = new EditorView({
       parent: host,

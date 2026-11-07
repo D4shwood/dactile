@@ -2,7 +2,7 @@
   // The app's look, applied as it is chosen: on the start screen's settings
   // and in the writer's panel. No setting for the cursor: it always blinks.
   import type { Look } from "./api";
-  import { ACCENTS, THEMES, installedFonts } from "./look";
+  import { ACCENTS, THEMES, installedFonts, newSurprise } from "./look";
 
   let {
     tr,
@@ -13,6 +13,10 @@
   const l = (t: string, e: string) => (tr ? t : e);
   const fonts = $derived(installedFonts(look.page_font));
   const dark = $derived(look.theme === "night" || look.theme === "dark");
+  function surprise() {
+    set("surprise", newSurprise(look.surprise));
+    set("theme", "surprise");
+  }
   const SPACINGS: [number, string, string][] = [
     [130, "Sık", "Tight"],
     [155, "Olağan", "Normal"],
@@ -37,9 +41,20 @@
           <small>{l(t, e)}</small>
         </button>
       {/each}
+      <button
+        class="theme"
+        class:on={look.theme === "surprise"}
+        aria-pressed={look.theme === "surprise"}
+        title={l("Her basışta yeni renkler", "New colours at every press")}
+        onclick={surprise}
+      >
+        <span class="sheet dice">?</span>
+        <small>{l("Sürpriz yap", "Surprise me")}</small>
+      </button>
     </div>
   </div>
 
+  {#if look.theme !== "surprise"}
   <div class="field">
     <span class="name">{l("Vurgu rengi", "Accent colour")}</span>
     <div class="swatches">
@@ -50,6 +65,7 @@
       {/each}
     </div>
   </div>
+  {/if}
 
   <label class="field">
     <span class="name">{l("Sayfanın yazı tipi", "Page font")}</span>
@@ -138,6 +154,11 @@
     border: 1px solid var(--chrome-line);
     border-radius: 3px;
     font: 18px var(--serif);
+  }
+  .dice {
+    background: conic-gradient(#d97757, #d9a95a, #7cc4a0, #8ab4e8, #c79ad6, #d97757);
+    color: #1f1e1d;
+    font-weight: 700;
   }
   .accent {
     display: grid;

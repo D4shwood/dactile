@@ -8,7 +8,7 @@ export const THEMES: [string, string, string, string, string][] = [
   ["sepia", "Sepya", "Sepia", "#f6ead2", "#3a2a1a"],
   ["night", "Gece", "Night", "#1f2530", "#d6dbe4"],
   ["contrast", "Yüksek kontrast", "High contrast", "#ffffff", "#000000"],
-  ["dark", "Koyu", "Dark", "#151515", "#e6e6e6"],
+  ["dark", "Koyu", "Dark", "#262624", "#e8e6dd"],
 ];
 
 /// Name, Turkish, English, on a light page, on a dark one.
@@ -18,7 +18,68 @@ export const ACCENTS: [string, string, string, string, string][] = [
   ["green", "Yeşil", "Green", "#2f6f4f", "#7cc4a0"],
   ["plum", "Erik", "Plum", "#7a3f8a", "#c79ad6"],
   ["ochre", "Toprak", "Ochre", "#8a5a10", "#d9a95a"],
+  ["clay", "Kiremit", "Clay", "#963f20", "#d97757"],
 ];
+
+/// A new surprise: a hue, and a dark or light page. Never close to the last.
+export function newSurprise(last: string): string {
+  const was = parseInt(last, 10);
+  let hue = Math.floor(Math.random() * 360);
+  if (Math.abs(hue - was) < 40) hue = (hue + 120) % 360;
+  return `${hue} ${Math.random() < 0.5 ? "dark" : "light"}`;
+}
+
+/// The colours of a surprise: the page and chrome in its hue, what stands out
+/// in one across the wheel. The lightnesses keep every hue readable.
+export function surpriseColours(surprise: string): Record<string, string> {
+  const hue = parseInt(surprise, 10) || 0;
+  const other = (hue + 150) % 360;
+  const h = (s: number, l: number) => `hsl(${hue} ${s}% ${l}%)`;
+  const a = (s: number, l: number) => `hsl(${other} ${s}% ${l}%)`;
+  return surprise.endsWith("light")
+    ? {
+        "--desk": h(30, 84),
+        "--page": h(40, 96),
+        "--chrome": h(30, 93),
+        "--chrome-2": h(26, 88),
+        "--chrome-line": h(20, 78),
+        "--chrome-fg": h(30, 14),
+        "--chrome-muted": h(14, 34),
+        "--fg": h(30, 12),
+        "--muted": h(14, 36),
+        "--faint": h(12, 60),
+        "--star": a(60, 26),
+        "--name-ref": a(35, 26),
+        "--heading": a(65, 25),
+        "--accent-ink": a(65, 25),
+        "--claret": a(55, 27),
+        "--claret-deep": a(55, 20),
+        "--warn": "hsl(24 75% 32%)",
+        "--selection": a(45, 84),
+        "color-scheme": "light",
+      }
+    : {
+        "--desk": h(16, 10),
+        "--page": h(16, 14),
+        "--chrome": h(16, 11),
+        "--chrome-2": h(14, 18),
+        "--chrome-line": h(12, 26),
+        "--chrome-fg": h(12, 92),
+        "--chrome-muted": h(10, 66),
+        "--fg": h(12, 88),
+        "--muted": h(10, 62),
+        "--faint": h(10, 38),
+        "--star": a(55, 78),
+        "--name-ref": a(30, 76),
+        "--heading": a(60, 74),
+        "--accent-ink": a(60, 74),
+        "--claret": a(45, 30),
+        "--claret-deep": a(45, 23),
+        "--warn": "hsl(30 70% 68%)",
+        "--selection": a(30, 28),
+        "color-scheme": "dark",
+      };
+}
 
 /// Fonts a desktop is likely to have; `installedFonts` keeps those it does.
 const FONTS = [
@@ -58,8 +119,8 @@ export function installedFonts(chosen: string): string[] {
 }
 
 export function pickLook(s: Look): Look {
-  const { theme, accent, page_font, page_size, line_spacing, page_width, page_zoom, animations } = s;
-  return { theme, accent, page_font, page_size, line_spacing, page_width, page_zoom, animations };
+  const { theme, surprise, accent, page_font, page_size, line_spacing, page_width, page_zoom, animations } = s;
+  return { theme, surprise, accent, page_font, page_size, line_spacing, page_width, page_zoom, animations };
 }
 
 export function applyLook(s: Look) {
@@ -67,6 +128,10 @@ export function applyLook(s: Look) {
   root.dataset.theme = s.theme || "paper";
   root.dataset.accent = s.accent || "claret";
   root.dataset.animations = s.animations ? "on" : "off";
+  for (const key of Object.keys(surpriseColours("0 dark"))) root.style.removeProperty(key);
+  if (s.theme === "surprise") {
+    for (const [key, value] of Object.entries(surpriseColours(s.surprise))) root.style.setProperty(key, value);
+  }
   root.style.setProperty("--page-font", s.page_font ? `"${s.page_font}", var(--serif)` : "var(--serif)");
   root.style.setProperty("--page-size", `${within(s.page_size, 12, 28)}px`);
   root.style.setProperty("--line-spacing", String(within(s.line_spacing, 120, 220) / 100));

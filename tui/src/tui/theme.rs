@@ -6,18 +6,18 @@ use dactile::render::Style as S;
 use ratatui::style::{Color, Modifier, Style};
 use std::sync::Mutex;
 
-pub const BG: Color = Color::Rgb(0x15, 0x15, 0x15);
-pub const FG: Color = Color::Rgb(0xe6, 0xe6, 0xe6);
-pub const MUTED: Color = Color::Rgb(0x88, 0x88, 0x88);
-pub const FAINT: Color = Color::Rgb(0x4a, 0x4a, 0x4a);
+pub const BG: Color = Color::Rgb(0x26, 0x26, 0x24);
+pub const FG: Color = Color::Rgb(0xe8, 0xe6, 0xdd);
+pub const MUTED: Color = Color::Rgb(0x9c, 0x9a, 0x92);
+pub const FAINT: Color = Color::Rgb(0x5f, 0x5d, 0x56);
 /// Starred characters and names inside a line.
 pub const BEIGE: Color = Color::Rgb(0xd8, 0xcf, 0xc0);
 /// Acts, scenes and what has focus.
 pub const CLARET: Color = Color::Rgb(0xb0, 0x44, 0x4a);
 pub const WARN: Color = Color::Rgb(0xc8, 0x8a, 0x5a);
-pub const SELECTION: Color = Color::Rgb(0x3a, 0x2a, 0x2c);
+pub const SELECTION: Color = Color::Rgb(0x4a, 0x3a, 0x32);
 /// The paper page's shadow on the dark around it.
-pub const SHADOW: Color = Color::Rgb(0x08, 0x08, 0x08);
+pub const SHADOW: Color = Color::Rgb(0x14, 0x14, 0x13);
 
 /// The colours the play's text is drawn in.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -41,7 +41,7 @@ pub const DARK: Palette = Palette {
     star: BEIGE,
     name_ref: BEIGE,
     // Lighter than the claret around the page: it reads on this black.
-    heading: Color::Rgb(0xd9, 0x75, 0x7b),
+    heading: Color::Rgb(0xe0, 0x8f, 0x94),
     warn: WARN,
     selection: SELECTION,
 };
@@ -104,7 +104,7 @@ pub const THEMES: [&str; 5] = ["paper", "sepia", "night", "contrast", "dark"];
 /// The accents, as the settings name them, on a light page and on a dark
 /// one (the desktop app's, in its theme.css). The first leaves each theme
 /// its own headings.
-pub const ACCENTS: [(&str, Color, Color); 5] = [
+pub const ACCENTS: [(&str, Color, Color); 6] = [
     (
         "claret",
         Color::Rgb(0xb0, 0x44, 0x4a),
@@ -129,6 +129,11 @@ pub const ACCENTS: [(&str, Color, Color); 5] = [
         "ochre",
         Color::Rgb(0x8a, 0x5a, 0x10),
         Color::Rgb(0xd9, 0xa9, 0x5a),
+    ),
+    (
+        "clay",
+        Color::Rgb(0x96, 0x3f, 0x20),
+        Color::Rgb(0xd9, 0x77, 0x57),
     ),
 ];
 
@@ -283,6 +288,7 @@ pub fn accent_name(accent: &str) -> &'static str {
         "green" => l("yeşil", "green"),
         "plum" => l("erik", "plum"),
         "ochre" => l("toprak", "ochre"),
+        "clay" => l("kiremit", "clay"),
         _ => l("bordo", "claret"),
     }
 }

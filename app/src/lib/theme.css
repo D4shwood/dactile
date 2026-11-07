@@ -91,16 +91,21 @@
 }
 
 :root[data-theme="dark"] {
-  --desk: #0e0e0e;
-  --page: #151515;
-  --fg: #e6e6e6;
-  --muted: #888888;
-  --faint: #4a4a4a;
-  --star: #d8cfc0;
+  --chrome: #1f1e1d;
+  --chrome-2: #30302e;
+  --chrome-line: #3e3e38;
+  --chrome-fg: #faf9f5;
+  --chrome-muted: #a3a198;
+  --desk: #1f1e1d;
+  --page: #262624;
+  --fg: #e8e6dd;
+  --muted: #9c9a92;
+  --faint: #5f5d56;
+  --star: #e3cdb0;
   --name-ref: #d8cfc0;
-  --heading: #d9757b;
-  --warn: #c88a5a;
-  --selection: #3a2a2c;
+  --heading: #e08f94;
+  --warn: #e0a458;
+  --selection: #4a3a32;
 }
 
 /* The accents: for fills and light pages, and as ink on dark ones. Each
@@ -155,6 +160,19 @@
 :root[data-theme="dark"][data-accent="ochre"] {
   --accent-ink: #d9a95a;
   --heading: #d9a95a;
+}
+
+:root[data-accent="clay"] {
+  --claret: #963f20;
+  --accent-ink: #963f20;
+  --claret-deep: #7a3218;
+  --heading: #963f20;
+}
+
+:root[data-theme="night"][data-accent="clay"],
+:root[data-theme="dark"][data-accent="clay"] {
+  --accent-ink: #d97757;
+  --heading: #d97757;
 }
 
 /* Everything appears at once; the cursor still blinks. */
