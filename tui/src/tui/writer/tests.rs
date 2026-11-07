@@ -72,9 +72,9 @@ fn find_one(w: &Writer, needle: &str) -> Option<String> {
 fn find_goes_by_its_options() {
     let mut o = open("find");
     let w = &mut o.w;
-    // By default small and capital are one, the Turkish way: the first
-    // is in the cast list's "amcası".
-    assert_eq!(find_one(w, "AMCA").as_deref(), Some("amca"));
+    // By default small and capital are one, the Turkish way; the cast list
+    // before the play is out of the search.
+    assert_eq!(find_one(w, "AMCA").as_deref(), Some("Amca"));
     w.find_options.case = true;
     assert_eq!(find_one(w, "AMCA"), None);
     assert_eq!(find_one(w, "Amca").as_deref(), Some("Amca"));

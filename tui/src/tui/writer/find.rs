@@ -86,7 +86,9 @@ impl Writer {
                     && !t[end..].chars().next().is_some_and(char::is_alphanumeric);
             apart.then_some(end)
         };
-        let after = starts.iter().filter(|&&i| i >= from && i < area.end);
+        let after = starts
+            .iter()
+            .filter(|&&i| i >= from.max(area.start) && i < area.end);
         let before = starts.iter().filter(|&&i| i >= area.start && i < from);
         after.chain(before).find_map(|&i| try_at(i).map(|e| i..e))
     }
