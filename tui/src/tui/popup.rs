@@ -311,7 +311,7 @@ fn near(area: Rect, at: Position, w: u16, h: u16) -> Rect {
     let h = h.min(area.height);
     let x =
         at.x.saturating_sub(2)
-            .min(area.x + area.width - w - 1)
+            .min((area.x + area.width).saturating_sub(w + 1))
             .max(area.x);
     let below = at.y + 1;
     let y = if below + h < area.y + area.height {
@@ -420,11 +420,12 @@ pub fn draw_verbs(f: &mut Frame, area: Rect, at: Position, v: &Verbs) {
 
 /// The search window (^K): the same list, full height, with its query line.
 pub fn draw_search(f: &mut Frame, area: Rect, m: &Menu, query: &str) {
-    let w = area.width.saturating_sub(8).clamp(30, 80);
-    let h = area.height.saturating_sub(4).max(6);
+    let w = area.width.saturating_sub(8).clamp(30, 80).min(area.width);
+    let top = 2.min(area.height);
+    let h = area.height.saturating_sub(4).max(6).min(area.height - top);
     let r = Rect {
         x: area.x + (area.width - w) / 2,
-        y: area.y + 2,
+        y: area.y + top,
         width: w,
         height: h,
     };
@@ -492,8 +493,8 @@ pub fn draw_form(f: &mut Frame, area: Rect, form: &Form) {
         .max()
         .unwrap_or(4) as u16
         + 2;
-    let w = area.width.saturating_sub(8).clamp(36, 70);
-    let h = form.fields.len() as u16 + 4 + u16::from(form.error.is_some());
+    let w = area.width.saturating_sub(8).clamp(36, 70).min(area.width);
+    let h = (form.fields.len() as u16 + 4 + u16::from(form.error.is_some())).min(area.height);
     let r = Rect {
         x: area.x + (area.width - w) / 2,
         y: area.y + area.height.saturating_sub(h) / 3,

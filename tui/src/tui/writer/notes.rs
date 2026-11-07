@@ -1192,7 +1192,7 @@ impl Writer {
                 },
             );
         }
-        let fy = inner.y + inner.height - foot.len() as u16;
+        let fy = (inner.y + inner.height).saturating_sub(foot.len() as u16);
         for (k, l) in foot.iter().enumerate() {
             f.render_widget(
                 Paragraph::new(*l).style(Style::default().bg(bg).fg(FAINT)),

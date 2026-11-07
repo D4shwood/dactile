@@ -591,7 +591,8 @@ pub fn draw_suggest(
         y,
         width: w,
         height: rows + 2,
-    };
+    }
+    .intersection(area);
     float(f, r);
     f.render_widget(panel(word), r);
     let lines: Vec<Line> = items

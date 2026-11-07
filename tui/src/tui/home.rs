@@ -1632,7 +1632,7 @@ impl Home {
             let t = (i + fade + 1).saturating_sub(room) as f32 / (fade + 1) as f32;
             for c in &row.cells {
                 let x = paper.x + 3 + c.col;
-                if x >= paper.x + paper.width - 3 {
+                if x >= (paper.x + paper.width).saturating_sub(3) {
                     continue;
                 }
                 let mut st = theme::on(c.style, pal);
@@ -2242,6 +2242,22 @@ mod tests {
             panic!("nothing opened");
         };
         assert!(p.to_string_lossy().contains("deniz-feneri"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_settings_draw_at_any_size() {
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        let (mut h, mut cfg, dir) = shelf("sizes");
+        press(&mut h, &mut cfg, KeyCode::Char('s'));
+        h.form = Some(settings_form(&cfg, false));
+        for width in [1, 2, 3, 8, 20, 30, 35, 36, 44, 60] {
+            for height in [1, 2, 3, 5, 8, 12, 24] {
+                let mut t = Terminal::new(TestBackend::new(width, height)).unwrap();
+                t.draw(|f| h.draw(f, &cfg)).unwrap();
+            }
+        }
         std::fs::remove_dir_all(&dir).unwrap();
     }
 

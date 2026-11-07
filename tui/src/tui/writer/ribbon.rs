@@ -795,7 +795,7 @@ impl Writer {
             if area.width > used + right_w + search_w {
                 spans.push(state);
                 spans.push(Span::raw("  "));
-                let sx = area.x + area.width - search_w - 1;
+                let sx = (area.x + area.width).saturating_sub(search_w + 1);
                 spans.push(Span::styled(
                     search,
                     Style::default().fg(MUTED).bg(SELECTION),
