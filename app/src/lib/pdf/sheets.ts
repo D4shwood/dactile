@@ -79,6 +79,10 @@ export class Sheets {
   private fitting: Fit = "width";
   /// The first page shown, when pages come a screen at a time.
   private first = 1;
+  /// The page jumped to, and where that left the view: the page stays the
+  /// one asked for, whatever is in the middle, until the view moves.
+  private held = 0;
+  private heldTop = 0;
   zoom = 100;
   page = 1;
 
@@ -123,6 +127,7 @@ export class Sheets {
     }
     this.sheets[0].page = one;
     this.page = Math.min(keep?.page ?? 1, doc.numPages);
+    this.held = Math.min(this.held, doc.numPages);
     this.first = screenStart(this.page, this.lay);
     await this.arrange(keep && { ...keep, page: this.page });
     void this.measure(doc);
@@ -290,7 +295,16 @@ export class Sheets {
     this.size();
     this.scrollTo(keep);
     if (box) this.host.scrollLeft = PAD - 6 + (box[0] * this.zoom * UNIT) / 100;
+    this.heldTop = this.host.scrollTop;
     this.update();
+  }
+
+  /// The page after a jump, the view being where the jump left it.
+  private hold(n: number) {
+    this.held = n;
+    this.heldTop = this.host.scrollTop;
+    this.page = n;
+    this.on.page(n);
   }
 
   private scrollTo(p: Place) {
@@ -369,6 +383,16 @@ export class Sheets {
         best = s;
       }
       if (b < top - 3 * height || a > top + 4 * height) this.drop(s);
+    }
+    const end = this.host.scrollHeight - height;
+    if (this.held && Math.abs(top - this.heldTop) < 2) best = this.sheets[this.held - 1];
+    else {
+      this.held = 0;
+      // At either end of a long scroll, the page is the end's, even with
+      // many small pages in the view.
+      const shown = this.shown();
+      if (end > 1 && top <= 1) best = shown[0];
+      else if (end > 1 && top >= end - 1) best = shown[shown.length - 1];
     }
     if (best && best.n !== this.page) {
       this.page = best.n;
@@ -548,8 +572,7 @@ export class Sheets {
     const left = s.el.offsetLeft + Math.min(a, c) * f;
     const right = s.el.offsetLeft + Math.max(a, c) * f;
     if (left < this.host.scrollLeft || right > this.host.scrollLeft + this.host.clientWidth) this.host.scrollLeft = left - PAD;
-    this.page = n;
-    this.on.page(n);
+    this.hold(n);
     if (flash.length) {
       clearTimeout(this.fading);
       const old = [...this.flashed.keys()];
@@ -641,8 +664,7 @@ export class Sheets {
     if (!this.sheets[p.page - 1]) return;
     this.show(p.page);
     this.scrollTo(p);
-    this.page = p.page;
-    this.on.page(p.page);
+    this.hold(p.page);
     this.update();
   }
 
@@ -659,8 +681,7 @@ export class Sheets {
     if (!s) return;
     this.show(s.n);
     this.host.scrollTop = s.el.offsetTop - PAD + (y * this.zoom * UNIT) / 100;
-    this.page = s.n;
-    this.on.page(s.n);
+    this.hold(s.n);
     this.update();
   }
 
