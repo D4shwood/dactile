@@ -272,6 +272,20 @@ fn marking_keeps_the_play_of_a_volume() {
 }
 
 #[test]
+fn marks_stay_with_their_play_when_v_goes_away_and_back() {
+    let mut p = preview(&volume());
+    press(&mut p, KeyCode::Tab);
+    press(&mut p, KeyCode::Char('e'));
+    let marked = p.draft.labels.clone();
+    assert_ne!(marked, shape_play(&volume(), Lang::Tr, 0).labels);
+    press(&mut p, KeyCode::Char('v'));
+    assert_eq!(p.draft.title, "İkinci Oyun");
+    press(&mut p, KeyCode::Char('v'));
+    assert_eq!(p.draft.play, Some(0));
+    assert_eq!(p.draft.labels, marked);
+}
+
+#[test]
 fn v_does_nothing_with_one_play() {
     let mut p = preview(&book());
     press(&mut p, KeyCode::Char('v'));

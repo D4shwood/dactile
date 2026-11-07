@@ -67,6 +67,8 @@ enum View {
 pub struct Preview {
     file: PathBuf,
     draft: Draft,
+    /// The other plays of a volume as they were left, marks and all.
+    left: Vec<Draft>,
     ocr: bool,
     /// `o` pressed once: it asks before the marks start over.
     again: bool,
@@ -365,6 +367,7 @@ impl Preview {
             view: View::People,
             doc: Marking::new(&read.draft),
             draft: read.draft,
+            left: Vec::new(),
             sel: 0,
             merging: None,
             form: None,
@@ -372,11 +375,16 @@ impl Preview {
         }
     }
 
-    /// Another play of the volume: what was put right was for the last one.
+    /// Another play of the volume. What was put right stays with its play,
+    /// for when `v` comes back to it.
     fn next_play(&mut self) {
         let d = &self.draft;
         let at = d.play.map_or(0, |p| p + 1) % d.source.plays.len();
-        self.draft = shape_play(&d.source, d.lang, at);
+        let next = match self.left.iter().position(|p| p.play == Some(at)) {
+            Some(i) => self.left.swap_remove(i),
+            None => shape_play(&d.source, d.lang, at),
+        };
+        self.left.push(std::mem::replace(&mut self.draft, next));
         self.doc.refresh(&self.draft);
         self.doc.go_to_play(&self.draft);
         self.sel = 0;
