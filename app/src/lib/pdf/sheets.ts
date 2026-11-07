@@ -128,6 +128,7 @@ export class Sheets {
     this.sheets[0].page = one;
     this.page = Math.min(keep?.page ?? 1, doc.numPages);
     this.held = Math.min(this.held, doc.numPages);
+    this.on.page(this.page);
     this.first = screenStart(this.page, this.lay);
     await this.arrange(keep && { ...keep, page: this.page });
     void this.measure(doc);
