@@ -128,6 +128,7 @@
     const v = (await api.settings()).viewer;
     if (!host) return;
     o = v;
+    kept = { ...v };
     sheets = new Sheets(host, {
       page: (n) => (page = n),
       zoom: (z) => (zoom = z),
@@ -215,15 +216,24 @@
   // ------------------------------------------------------- the choices
 
   let saving = 0;
+  /// The choices as last sent.
+  let kept: Viewer | Record<string, never> = {};
   /// The choices kept, a moment after the last change.
   function keep() {
     clearTimeout(saving);
     saving = window.setTimeout(save, 400);
   }
 
+  /// Only what changed goes out: another window has its own choices.
   function save() {
     saving = 0;
-    if (o) api.set("viewer", $state.snapshot(o)).catch((e) => say(String(e), true));
+    if (!o) return;
+    const now = $state.snapshot(o) as Viewer;
+    const was = kept as Record<string, unknown>;
+    const changed = Object.entries(now).filter(([k, v]) => v !== was[k]);
+    if (!changed.length) return;
+    kept = now;
+    api.set("viewer", Object.fromEntries(changed)).catch((e) => say(String(e), true));
   }
 
   function apply() {
@@ -324,9 +334,12 @@
     printNote = "";
   }
 
+  /// A double click is one print.
+  let sending = false;
+
   async function print() {
     const p = printing;
-    if (!p || result?.kind !== "built") return;
+    if (!p || sending || result?.kind !== "built") return;
     const notes = {
       first: l(`İlk sayfa 1 ile ${pages} arasında bir tam sayı olmalı.`, `The first page must be a whole number from 1 to ${pages}.`),
       last: l(`Son sayfa 1 ile ${pages} arasında bir tam sayı olmalı.`, `The last page must be a whole number from 1 to ${pages}.`),
@@ -335,6 +348,7 @@
     };
     const problem = printProblem(p.first, p.last, p.copies, pages);
     if (problem) return void (printNote = notes[problem]);
+    sending = true;
     try {
       await api.pdfPrint(result.pdf, p.first!, p.last!, p.copies!);
       printing = null;
@@ -342,6 +356,7 @@
     } catch (e) {
       printNote = String(e);
     }
+    sending = false;
   }
 
   /// A quarter turn, for the session: the file stays as it is.

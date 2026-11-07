@@ -440,7 +440,14 @@ fn change(cfg: &mut Config, key: &str, value: &serde_json::Value) -> anyhow::Res
         "author" => cfg.author = value.as_str().unwrap_or("").to_string(),
         "plays_dir" => cfg.plays_dir = value.as_str().unwrap_or("~/Oyunlar").to_string(),
         "lang" => cfg.lang = value.as_str().unwrap_or("auto").to_string(),
-        "viewer" => cfg.viewer = serde_json::from_value(value.clone())?,
+        // Only what the window changed: another window's choices stay.
+        "viewer" => {
+            let mut now = serde_json::to_value(&cfg.viewer)?;
+            if let (Some(now), Some(new)) = (now.as_object_mut(), value.as_object()) {
+                now.extend(new.clone());
+            }
+            cfg.viewer = serde_json::from_value(now)?;
+        }
         "accent" => {
             let a = value.as_str().filter(|a| config::ACCENTS.contains(a));
             cfg.accent = a.unwrap_or(config::ACCENTS[0]).to_string();
@@ -477,6 +484,14 @@ mod tests {
         let mut u: Vec<u16> = text.encode_utf16().collect();
         u.splice(c.from..c.to, c.insert.encode_utf16());
         String::from_utf16(&u).unwrap()
+    }
+
+    #[test]
+    fn a_viewer_change_leaves_the_other_viewer_choices() {
+        let mut c = Config::default();
+        c.viewer.columns = 2;
+        change(&mut c, "viewer", &serde_json::json!({ "invert": true })).unwrap();
+        assert_eq!((c.viewer.columns, c.viewer.invert), (2, true));
     }
 
     #[test]

@@ -265,9 +265,13 @@ impl Config {
             return unreadable(aside(p, &bytes));
         };
         let mut fields = Vec::new();
-        if let Some(toml::Value::Table(v)) = table.remove("viewer") {
-            let v = readable::<Viewer>(v, "viewer.", &mut fields);
-            table.insert("viewer".into(), toml::Value::Table(v));
+        match table.remove("viewer") {
+            Some(toml::Value::Table(v)) => {
+                let v = readable::<Viewer>(v, "viewer.", &mut fields);
+                table.insert("viewer".into(), toml::Value::Table(v));
+            }
+            Some(_) => fields.push("viewer".to_string()),
+            None => {}
         }
         let table = readable::<Config>(table, "", &mut fields);
         let mut cfg: Config = toml::Value::Table(table).try_into().unwrap_or_default();
@@ -304,6 +308,10 @@ impl Config {
     }
 
     fn update_at(p: &Path, change: impl FnOnce(&mut Config) -> Result<()>) -> Result<()> {
+        // Of two windows the second waits and reads what the first wrote.
+        // Without the lock file it goes on: a setting matters more.
+        let _held =
+            std::fs::File::create(p.with_extension("lock")).and_then(|f| f.lock().map(|()| f));
         let mut now = Config::read_at(p);
         change(&mut now)?;
         now.save_at(p)
@@ -442,6 +450,14 @@ mod tests {
         c.save_at(&p).unwrap();
         let c = Config::read_at(&p);
         assert_eq!((c.author.as_str(), c.unread), ("Ayşe Yılmaz", None));
+        // A viewer that isn't a table at all is a bad field like any other.
+        let file = "author = \"Ayşe Yılmaz\"\nviewer = 3\n";
+        fs::write(&p, file).unwrap();
+        let c = Config::read_at(&p);
+        assert_eq!(c.author, "Ayşe Yılmaz");
+        assert_eq!(c.unread.clone().unwrap().fields, ["viewer"]);
+        c.save_at(&p).unwrap();
+        assert_eq!(fs::read_to_string(&p).unwrap(), file);
         let _ = fs::remove_dir_all(d);
     }
 
