@@ -7,7 +7,7 @@
   import { openSearchPanel } from "@codemirror/search";
   import { api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Files, type Look, type Made, type Memo, type Summary, type NoteCard, type Opened, type PlaySettings, type Preview, type Settings } from "./api";
   import { focus, setCards, setDim, setFocus } from "./focus";
-  import { blockAt, currentView, extensions, insertSnippet, typeBackslash, coverClicked, openCover, pickNote, wrapSelection, setNotes, setSource, setView } from "./editor";
+  import { blockAt, currentView, extensions, insertSnippet, typeBackslash, coverClicked, openCover, pickNote, wrapSelection, unwrapSelection, setNotes, setSource, setView } from "./editor";
   import { BACKSTAGE, type Act } from "./ribbon";
   import { closeMenu, nextWord, recheck, showMenu, spelling } from "./spelling";
   import { completion, openMenu } from "./completion";
@@ -107,6 +107,7 @@
   /// The rest of the look; the page's zoom and theme have keys of their own.
   let look = $state(pickLook(first));
   let playFont = $state("");
+  let playSize = $state("");
   let source = $state(false);
   /// Where the play's class option puts its scene headings.
   let sceneAlign = $state("center");
@@ -178,6 +179,7 @@
         const v = await api.view(doc.toString());
         // Typed on meanwhile: the next one is on its way.
         sceneAlign = v.scene_align;
+        playSize = v.play_font_size;
         if (playFont !== v.play_font) {
           playFont = v.play_font;
           applyLook(shownLook());
@@ -607,6 +609,11 @@
     void castCall(() => api.playFontWrite(view.state.doc.toString(), f));
   }
 
+  function setPlaySize(s: string) {
+    if (opened.read_only) return;
+    void castCall(() => api.playFontSizeWrite(view.state.doc.toString(), s));
+  }
+
   function setTheme(t: string) {
     theme = t;
     applyLook(shownLook());
@@ -803,6 +810,15 @@
         break;
       case "underline":
         wrapSelection(view, "\\underline{", "}");
+        break;
+      case "smallcaps":
+        wrapSelection(view, "\\textsc{", "}");
+        break;
+      case "superscript":
+        wrapSelection(view, "\\textsuperscript{", "}");
+        break;
+      case "plain-text":
+        unwrapSelection(view);
         break;
       case "keys":
         help = "keys";
@@ -1072,6 +1088,8 @@
     font={playFont}
     fonts={installedFonts(playFont)}
     setFont={setPlayFont}
+    size={playSize}
+    setSize={setPlaySize}
     bind:this={ribbon}
     {tr}
     {folded}

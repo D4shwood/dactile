@@ -13,6 +13,8 @@
     font,
     fonts,
     setFont,
+    size,
+    setSize,
   }: {
     tr: boolean;
     folded: boolean;
@@ -27,6 +29,9 @@
     font: string;
     fonts: string[];
     setFont: (f: string) => void;
+    /// The play's text size in points; empty is the class's.
+    size: string;
+    setSize: (s: string) => void;
   } = $props();
 
   const LOW = 58;
@@ -211,26 +216,39 @@
   </nav>
 
   {#if !folded || peek}
-    <div class="groups" class:over={folded} class:short={rowHeight < 76} style={`height:${rowHeight}px`}>
+    <div class="groups" onwheel={(e) => (e.currentTarget.scrollLeft += e.deltaY)} class:over={folded} class:short={rowHeight < 76} style={`height:${rowHeight}px`}>
       {#each TABS[tab].groups as grp, gi}
-        <section class="group" class:end={grp.end}>
+        <section class="group" class:end={grp.end} class:shrinks={grp.shrinks}>
           {#if grp.font}
-            <select
-              class="font"
-              title={tr ? "Oyunun yazı tipi: sayfa, PDF ve Word buna uyar" : "The play's font: the page, the PDF and Word follow it"}
-              value={font}
-              onchange={(e) => setFont(e.currentTarget.value)}
-            >
-              <option value="">{tr ? "Kendi yazı tipi" : "Its own font"}</option>
-              {#each fonts as f (f)}<option value={f}>{f}</option>{/each}
-            </select>
+            <div class="fontrow">
+              <select
+                class="font"
+                title={tr ? "Oyunun yazı tipi: sayfa, PDF ve Word buna uyar" : "The play's font: the page, the PDF and Word follow it"}
+                value={font}
+                onchange={(e) => setFont(e.currentTarget.value)}
+              >
+                <option value="">{tr ? "Kendi yazı tipi" : "Its own font"}</option>
+                {#each fonts as f (f)}<option value={f}>{f}</option>{/each}
+              </select>
+              <select
+                class="size"
+                title={tr ? "Oyun metninin boyutu: PDF ve Word buna uyar" : "The play's text size: the PDF and Word follow it"}
+                value={size}
+                onchange={(e) => setSize(e.currentTarget.value)}
+              >
+                <option value="">12</option>
+                {#each ["10", "11", "13", "14"] as n (n)}<option value={n}>{n}</option>{/each}
+                {#if size && !["10", "11", "13", "14"].includes(size)}<option value={size}>{size}</option>{/if}
+              </select>
+            </div>
           {/if}
-          <div class="btns" class:small={grp.small}>
+          <div class="btns" class:small={grp.small} class:icons={grp.icons}>
             {#each grp.btns as btn, bi}
               {@const n = TABS[tab].groups.slice(0, gi).reduce((s, x) => s + x.btns.length, 0) + bi}
               <button
                 class="btn"
                 class:small={grp.small}
+                class:icons={grp.icons}
                 disabled={btn.act.do === "soon"}
                 title={(btn.act.do === "soon" ? (tr ? "Yakında · " : "Soon · ") : "") +
                   name(btn) +
@@ -238,7 +256,7 @@
                 onclick={() => press(btn)}
               >
                 <span class="icon">{btn.icon}</span>
-                {#if !grp.small}<span class="label">{name(btn)}</span>{/if}
+                {#if !grp.icons}<span class="label">{name(btn)}</span>{/if}
                 {#if tipMode === "btns"}<span class="tip">{btnTips[n]}</span>{/if}
               </button>
             {/each}
@@ -440,21 +458,33 @@
     display: grid;
     grid-template-rows: repeat(2, minmax(0, 30px));
     grid-auto-flow: column;
-    grid-auto-columns: 30px;
+    grid-auto-columns: max-content;
     align-content: center;
+    column-gap: 4px;
   }
-  .group:has(.font) .btns.small {
+  .btns.icons {
     grid-template-rows: minmax(0, 30px);
+    grid-auto-columns: 40px;
+    justify-content: space-between;
   }
-  .font {
-    width: 112px;
-    height: 24px;
-    margin-bottom: 2px;
-    font-size: 12px;
+  .fontrow {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 3px;
+  }
+  .fontrow select {
+    height: 26px;
+    font-size: 12.5px;
     color: var(--chrome-fg);
     background: var(--chrome-2);
     border: 1px solid var(--chrome-line);
     border-radius: 4px;
+  }
+  .font {
+    width: 196px;
+  }
+  .size {
+    width: 58px;
   }
   .btn {
     position: relative;
@@ -472,11 +502,36 @@
     cursor: pointer;
   }
   .btn.small {
-    min-width: 0;
-    padding: 0;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 7px;
+    min-width: 84px;
+    max-width: none;
+    padding: 0 8px;
   }
   .btn.small .icon {
-    font-size: 17px;
+    width: 18px;
+    font-size: 16px;
+    text-align: center;
+  }
+  .btn.small .label {
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  @media (max-width: 1520px) {
+    .shrinks .btn.small {
+      justify-content: center;
+      min-width: 34px;
+      padding: 0;
+    }
+    .shrinks .btn.small .label {
+      display: none;
+    }
+  }
+  .btn.icons {
+    justify-content: center;
+    min-width: 0;
+    padding: 0;
   }
   .btn:hover:not(:disabled) {
     background: var(--chrome-2);

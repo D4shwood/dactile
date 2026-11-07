@@ -194,3 +194,14 @@ sed 's/\\begin{document}/\\playfont{No Such Font}\n&/' cover.tex > nofont.tex
 xelatex -interaction=nonstopmode -halt-on-error nofont.tex > /dev/null 2>&1 || { grep -A6 '^! ' nofont.log; echo "FAIL: a missing font stopped the build"; exit 1; }
 grep -q 'No Such Font' nofont.log || { echo "FAIL: no warning for a missing font"; exit 1; }
 echo "ok: play font"
+
+# \playfontsize: the text grows; a wrong word stops the build.
+body=$(for i in $(seq 60); do printf 'Karlar yağdı, yollar kapandı, değirmen sustu ve köy uykuya daldı.\n\n'; done)
+printf '\\documentclass[final]{tiyatro}\n\\begin{document}\n%s\n\\end{document}\n' "$body" > plain.tex
+sed 's/\\begin{document}/\\playfontsize{20}\n&/' plain.tex > size.tex
+xelatex -interaction=nonstopmode -halt-on-error plain.tex > /dev/null 2>&1 || { grep -A6 '^! ' plain.log; echo "FAIL: plain"; exit 1; }
+xelatex -interaction=nonstopmode -halt-on-error size.tex > /dev/null 2>&1 || { grep -A6 '^! ' size.log; echo "FAIL: playfontsize"; exit 1; }
+[ "$(pdfinfo size.pdf | sed -n 's/^Pages: *//p')" -gt "$(pdfinfo plain.pdf | sed -n 's/^Pages: *//p')" ] || { echo "FAIL: playfontsize changed nothing"; exit 1; }
+sed 's/\\begin{document}/\\playfontsize{big}\n&/' cover.tex > wrong.tex
+! xelatex -interaction=nonstopmode -halt-on-error wrong.tex > /dev/null 2>&1 || { echo "FAIL: took a size that isn't one"; exit 1; }
+echo "ok: play font size"

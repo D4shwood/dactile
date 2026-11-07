@@ -366,13 +366,23 @@ fn document_xml(text: &str, doc: &Doc, title: &str, author: &str) -> String {
 }
 
 /// The play as the bytes of a `.docx`.
-/// The styles, in the play's own font when it has one.
+/// The styles, in the play's own font and size when it has them.
 fn styles_for(text: &str) -> String {
     let font = crate::info::play_font(text);
-    if font.is_empty() {
-        return STYLES.to_string();
+    let mut styles = STYLES.to_string();
+    if !font.is_empty() {
+        styles = styles.replace("Liberation Serif", &escape(&font).replace('"', "&quot;"));
     }
-    STYLES.replace("Liberation Serif", &escape(&font).replace('"', "&quot;"))
+    // Word counts in half points.
+    if let Ok(size) = crate::info::play_font_size(text).parse::<f32>() {
+        let half = (size * 2.0).round() as u32;
+        styles = styles.replacen(
+            "<w:sz w:val=\"24\"/>",
+            &format!("<w:sz w:val=\"{half}\"/>"),
+            1,
+        );
+    }
+    styles
 }
 
 pub fn document(text: &str) -> Result<Vec<u8>> {

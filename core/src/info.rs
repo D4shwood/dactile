@@ -348,34 +348,53 @@ pub fn set_scene_align(text: &str, side: Side) -> Option<Edit> {
 }
 
 const FONT: &str = "playfont";
+const FONT_SIZE: &str = "playfontsize";
 
-/// The play's font, by `\playfont{…}` in the preamble; empty is the class's.
-/// The last one counts, as in the class.
-pub fn play_font(text: &str) -> String {
+/// A one-word setting of the preamble; the last one counts, as in the class.
+fn setting(text: &str, name: &str) -> String {
     tex::commands(text, source::split(text).preamble)
         .iter()
-        .rfind(|c| c.name == FONT)
+        .rfind(|c| c.name == name)
         .and_then(|c| tex::group(text, c.span.end))
         .map_or(String::new(), |g| g.inner.trim().to_string())
 }
 
-/// Sets the play's font; the class's own leaves no line behind.
-pub fn set_play_font(text: &str, font: &str) -> Option<Edit> {
-    let font = font.trim();
-    if play_font(text) == font {
+/// Sets it; empty, the class's own, leaves no line behind.
+fn set_setting(text: &str, name: &str, value: &str) -> Option<Edit> {
+    let value = value.trim();
+    if setting(text, name) == value {
         return None;
     }
     let cmds = tex::commands(text, source::split(text).preamble);
-    let mut lines = cmds.iter().filter(|c| c.name == FONT);
+    let mut lines = cmds.iter().filter(|c| c.name == name);
     let Some(c) = lines.next_back() else {
-        return add_line(text, &format!("\\{FONT}{{{font}}}"));
+        return add_line(text, &format!("\\{name}{{{value}}}"));
     };
     let g = tex::group(text, c.span.end)?;
     // With one before it, taking this one out would bring that one back.
-    if font.is_empty() && lines.next().is_none() {
+    if value.is_empty() && lines.next().is_none() {
         return Some(remove_line(text, c.span.start..g.span.end));
     }
-    Some(Edit::new(g.inner_span, font))
+    Some(Edit::new(g.inner_span, value))
+}
+
+/// The play's font, by `\playfont{…}`; empty is the class's.
+pub fn play_font(text: &str) -> String {
+    setting(text, FONT)
+}
+
+pub fn set_play_font(text: &str, font: &str) -> Option<Edit> {
+    set_setting(text, FONT, font)
+}
+
+/// The size of the play's text in points, by `\playfontsize{…}`; empty is
+/// the class's 12.
+pub fn play_font_size(text: &str) -> String {
+    setting(text, FONT_SIZE)
+}
+
+pub fn set_play_font_size(text: &str, size: &str) -> Option<Edit> {
+    set_setting(text, FONT_SIZE, size)
 }
 
 /// Switches `\documentclass[draft]` and `[final]`.
@@ -426,6 +445,10 @@ mod tests {
         assert_eq!(play_font(&tex::apply(&with, &[e])), "Noto Serif");
         let e = set_play_font(&with, "").unwrap();
         assert_eq!(tex::apply(&with, &[e]), plain);
+        let e = set_play_font_size(&plain, "13").unwrap();
+        let sized = tex::apply(&plain, &[e]);
+        assert_eq!(play_font_size(&sized), "13");
+        assert_eq!(play_font(&sized), "");
     }
 
     #[test]

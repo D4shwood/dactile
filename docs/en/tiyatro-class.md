@@ -71,6 +71,7 @@ These go before `\begin{document}`. All are optional.
 | `\email{…}` | An email address | `\email{ornek@example.com}` |
 | `\telephone{…}` | Telephone | `\telephone{000 000 00 00}` |
 | `\playfont{…}` | The play's font. If it isn't installed, a warning, and the class's stays | `\playfont{Noto Serif}` |
+| `\playfontsize{…}` | The size of the play's text in points; headings keep theirs | `\playfontsize{13}` |
 | `\maketitle` | Prints the cover, after `\begin{document}` | |
 
 A line left empty isn't printed.

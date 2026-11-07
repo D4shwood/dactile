@@ -138,6 +138,20 @@ pub fn tabs() -> Vec<Tab> {
                             "",
                             PAct::InsertInline("\\underline{‸}"),
                         ),
+                        b(
+                            "Küçük büyük harf",
+                            "Small caps",
+                            "ᴀʙ",
+                            "",
+                            PAct::InsertInline("\\textsc{‸}"),
+                        ),
+                        b(
+                            "Üst simge",
+                            "Superscript",
+                            "x²",
+                            "",
+                            PAct::InsertInline("\\textsuperscript{‸}"),
+                        ),
                     ],
                 ),
                 g(

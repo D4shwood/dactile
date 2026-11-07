@@ -41,6 +41,21 @@
       }
   }
 
+% The size of the play's text in points. Headings keep their own.
+\NewDocumentCommand \playfontsize { m }
+  {
+    \tl_if_blank:nF {#1}
+      {
+        \regex_match:nnF { \A \d+ (\.\d+)? \Z } {#1}
+          { \msg_error:nnn { tiyatro } { fontsize } {#1} }
+        \AtBeginDocument
+          {
+            \cs_gset_protected:Npn \normalsize { \fontsize {#1} { \fp_eval:n { #1 * 1.2 } } \selectfont }
+            \normalsize
+          }
+      }
+  }
+
 % Line numbers use the mono font.
 \cs_new_protected:Npn \__tiy_mono_font:n #1
   { \clist_map_inline:nn {#1} { \IfFontExistsTF {##1} { \setmonofont {##1} \clist_map_break: } { } } }

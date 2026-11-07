@@ -420,6 +420,11 @@ fn cover_write(text: String, form: cover::CoverForm) -> people::Made {
 }
 
 #[tauri::command]
+fn play_font_size_write(text: String, size: String) -> people::Made {
+    cover::font_size(&text, &size)
+}
+
+#[tauri::command]
 fn play_font_write(text: String, font: String) -> people::Made {
     cover::font(&text, &font)
 }
@@ -1054,6 +1059,7 @@ pub fn run() {
             scene_join,
             scene_align_next,
             play_font_write,
+            play_font_size_write,
             cover_read,
             cover_write,
             docx_export,

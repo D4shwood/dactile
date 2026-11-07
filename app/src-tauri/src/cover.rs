@@ -88,6 +88,21 @@ pub fn write(text: &str, form: &CoverForm) -> Made {
     }
 }
 
+/// The ribbon's size list: the one line, nothing else.
+pub fn font_size(text: &str, size: &str) -> Made {
+    let new =
+        info::set_play_font_size(text, size).map_or(text.to_string(), |e| tex::apply(text, &[e]));
+    Made {
+        change: diff(text, &new),
+        cursor: None,
+        message: lang::l(
+            "Oyunun yazı boyutu değişti.",
+            "The play's text size changed.",
+        )
+        .to_string(),
+    }
+}
+
 /// The ribbon's font list: the one line, nothing else.
 pub fn font(text: &str, font: &str) -> Made {
     let new = info::set_play_font(text, font).map_or(text.to_string(), |e| tex::apply(text, &[e]));

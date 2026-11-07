@@ -286,6 +286,13 @@ pub const ENTRIES: &[Entry] = &[
     ),
     e(
         Cover,
+        "\\playfontsize",
+        "Oyun metninin punto boyutu; başlıklar kendi boyutunda kalır. Sınıfınki 12.",
+        "The size of the play's text in points; headings keep theirs. The class's is 12.",
+        "\\playfontsize{13}",
+    ),
+    e(
+        Cover,
         "\\scenetitleflush",
         "Sahne başlıklarını sola ya da sağa yaslar.",
         "Sets scene headings left or right.",

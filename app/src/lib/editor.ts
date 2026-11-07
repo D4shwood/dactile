@@ -523,6 +523,36 @@ export function wrapSelection(view: EditorView, open: string, close: string) {
   view.focus();
 }
 
+const LOOKS = /\\(?:textbf|textit|emph|underline|textsc|textsuperscript)\{$/;
+
+/// Takes off the formatting around the selection, or the one it holds whole.
+export function unwrapSelection(view: EditorView) {
+  const { from, to } = view.state.selection.main;
+  const doc = view.state.doc;
+  const before = LOOKS.exec(doc.sliceString(Math.max(0, from - 20), from));
+  if (before && doc.sliceString(to, to + 1) === "}") {
+    const open = before[0].length;
+    view.dispatch({
+      changes: [
+        { from: from - open, to: from },
+        { from: to, to: to + 1 },
+      ],
+      selection: { anchor: from - open, head: to - open },
+      userEvent: "input",
+    });
+  } else {
+    const held = /^(\\[a-z]+\{)([^{}]*)\}$/.exec(doc.sliceString(from, to));
+    if (held && LOOKS.test(held[1])) {
+      view.dispatch({
+        changes: { from, to, insert: held[2] },
+        selection: { anchor: from, head: from + held[2].length },
+        userEvent: "input",
+      });
+    }
+  }
+  view.focus();
+}
+
 export function insertSnippet(view: EditorView, s: string, block: boolean) {
   const state = view.state;
   const pos = state.selection.main.head;

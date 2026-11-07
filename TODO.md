@@ -6,9 +6,9 @@
   the board, casting, memorizing, notes, the trash, import, Word output.
 - Dactile, the desktop app: everything above on a page, the ribbon, the PDF
   beside the page, OCR for scanned books, an AppImage and an AUR package.
-- The tiyatro class 1.9: a cover and a cast page that can be styled, an editor
+- The tiyatro class 1.10: a cover and a cast page that can be styled, an editor
   on the cover, secret characters, a draft that reads like the final copy,
-  a font of the play's own.
+  a font and size of the play's own.
 
 ## Now
 

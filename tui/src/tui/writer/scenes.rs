@@ -830,6 +830,13 @@ impl Writer {
             &info::play_font(&self.buf.text),
             Vec::new(),
         ));
+        fields.push(Field::text(
+            lang::l("Yazı boyutu", "Text size"),
+            &info::play_font_size(&self.buf.text),
+            ["", "10", "11", "12", "13", "14"]
+                .map(String::from)
+                .to_vec(),
+        ));
         fields.push(Field::flag(
             "Kişiler ayrı sayfada",
             info::cast_own_page(&self.buf.text),

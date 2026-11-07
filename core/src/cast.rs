@@ -792,7 +792,7 @@ const RESERVED: &[&str] = &[
     // The class
     "karakter", "sirkarakter", "secretcharacter", "gizlikarakter", "karaktergrubu", "gkarakter", "gcharacter", "chargroup",
     "setinlinename", "setmaxnamewidth", "action", "stagedir", "middir", "ic", "beat", "sahne",
-    "scene", "perde", "act", "kisiler", "draft", "editedby", "dramatispersonae", "coverstyle", "caststyle", "scenetitleflush", "playfont", "copyrightnotice", "address", "telephone",
+    "scene", "perde", "act", "kisiler", "draft", "editedby", "dramatispersonae", "coverstyle", "caststyle", "scenetitleflush", "playfont", "playfontsize", "copyrightnotice", "address", "telephone",
     "email", "ru", "en", "de", "fr", "el", "yenidil", "fontyukle", "theact", "thescene",
     "namefont", "starfont", "actionfont", "castfont",
     // TeX and LaTeX

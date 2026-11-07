@@ -19,8 +19,12 @@ export interface Group {
   tr: string;
   en: string;
   btns: Btn[];
-  /// Small buttons, icons only, two to a column.
+  /// Small buttons with their names, two to a column.
   small?: boolean;
+  /// With `small`: icons only, in one row.
+  icons?: boolean;
+  /// With `small`: names go first when the window is narrow.
+  shrinks?: boolean;
   /// The font list sits above the buttons.
   font?: boolean;
   /// Stays at the right edge, however narrow the window.
@@ -49,7 +53,7 @@ export const TABS: Tab[] = [
     en: "Home",
     tip: ["G", "H"],
     groups: [
-      g("Kayıt", "Save", [b("Kaydet", "Save", "▣", "Ctrl+S", k("save"))], { small: true }),
+      g("Kayıt", "Save", [b("Kaydet", "Save", "▣", "Ctrl+S", k("save"))]),
       g("Geri al", "Undo", [
         b("Geri al", "Undo", "↶", "Ctrl+Z", k("undo")),
         b("Yinele", "Redo", "↷", "Ctrl+Y", k("redo")),
@@ -64,7 +68,10 @@ export const TABS: Tab[] = [
         b("Kalın", "Bold", "𝐁", "Ctrl+B", k("bold")),
         b("İtalik", "Italic", "𝐼", "Ctrl+I", k("italic")),
         b("Altı çizili", "Underline", "U̲", "Ctrl+U", k("underline")),
-      ], { small: true, font: true }),
+        b("Küçük büyük harf", "Small caps", "ᴀʙ", "", k("smallcaps")),
+        b("Üst simge", "Superscript", "x²", "", k("superscript")),
+        b("Biçimi temizle", "Clear formatting", "⌫", "", k("plain-text")),
+      ], { small: true, icons: true, font: true }),
       g("Yönerge", "Directions", [
         b("Eylem", "Action", "⁋", "", ins("\\action{‸}")),
         b("Sahne yönergesi", "Stage direction", "⌖", "", ins("\\stagedir{‸}")),
@@ -77,7 +84,7 @@ export const TABS: Tab[] = [
         b("Yazım", "Spelling", "✓", "Alt+S", k("spelling")),
         b("Ara", "Search", "⌘", "Ctrl+K", k("search")),
         b("Komutlar", "Commands", "≡", "Ctrl+P", k("commands")),
-      ]),
+      ], { small: true, shrinks: true }),
       g("Sayfa", "Page", [b("Kapak ve kişiler", "Cover and cast", "▧", "", k("cover-look"))]),
       // At the far right: what makes the play's files.
       g("Derleme", "Build", [

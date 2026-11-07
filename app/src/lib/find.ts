@@ -9,6 +9,35 @@ import FindBar from "./FindBar.svelte";
 /// The interface's language, set by the writer.
 export const findLang = { tr: true };
 
+export interface Hit {
+  from: number;
+  to: number;
+  line: number;
+  before: string;
+  match: string;
+  after: string;
+}
+
+/// The matches with their lines, for the advanced window's list.
+export function hitsOf(view: EditorView, q: SearchQuery, most = 200): Hit[] {
+  if (!q.valid) return [];
+  const cursor = q.getCursor(view.state) as Iterator<{ from: number; to: number }>;
+  const hits: Hit[] = [];
+  for (let m = cursor.next(); !m.done && hits.length < most; m = cursor.next()) {
+    const { from, to } = m.value;
+    const line = view.state.doc.lineAt(from);
+    hits.push({
+      from,
+      to,
+      line: line.number,
+      before: line.text.slice(Math.max(0, from - line.from - 28), from - line.from),
+      match: view.state.sliceDoc(from, Math.min(to, line.to)),
+      after: line.text.slice(Math.min(to, line.to) - line.from, Math.min(to, line.to) - line.from + 50),
+    });
+  }
+  return hits;
+}
+
 export interface FindOptions {
   text: string;
   replace: string;
@@ -55,6 +84,8 @@ export function countOf(view: EditorView, q: SearchQuery, most = 9999): { all: n
 }
 
 export function findPanel(view: EditorView): Panel {
+  // The panel itself stays empty: the bar sits in the corner of the writing
+  // area, not on the page, and doesn't grow with the page's zoom.
   const dom = document.createElement("div");
   dom.className = "find-host";
   let bar: ReturnType<typeof mount> | null = null;
@@ -62,7 +93,7 @@ export function findPanel(view: EditorView): Panel {
     dom,
     top: true,
     mount() {
-      bar = mount(FindBar, { target: dom, props: { view } });
+      bar = mount(FindBar, { target: view.dom.closest(".left") ?? dom, props: { view } });
     },
     destroy() {
       if (bar) void unmount(bar);

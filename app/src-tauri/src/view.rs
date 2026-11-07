@@ -91,6 +91,8 @@ pub struct View {
     pub scene_align: &'static str,
     /// `\playfont`, empty for the class's.
     pub play_font: String,
+    /// `\playfontsize`, empty for the class's.
+    pub play_font_size: String,
 }
 
 /// Byte offsets to UTF-16 ones.
@@ -433,6 +435,7 @@ pub fn view(text: &str) -> View {
         tail,
         scene_align: doc.scene_align.word(),
         play_font: dactile::info::play_font(text),
+        play_font_size: dactile::info::play_font_size(text),
     }
 }
 
