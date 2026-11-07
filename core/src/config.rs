@@ -297,6 +297,29 @@ impl Config {
         crate::file::write_atomic(p, &toml::to_string(self)?)
     }
 
+    /// Changes what the file holds now, not what this window read a while
+    /// ago: another window's settings stay.
+    pub fn update(change: impl FnOnce(&mut Config) -> Result<()>) -> Result<()> {
+        Config::update_at(&path(), change)
+    }
+
+    fn update_at(p: &Path, change: impl FnOnce(&mut Config) -> Result<()>) -> Result<()> {
+        let mut now = Config::read_at(p);
+        change(&mut now)?;
+        now.save_at(p)
+    }
+
+    /// Writes the recent plays and nothing else.
+    pub fn save_recent(&self) -> Result<()> {
+        if self.unread.is_some() {
+            return Ok(());
+        }
+        Config::update(|now| {
+            now.recent = self.recent.clone();
+            Ok(())
+        })
+    }
+
     pub fn plays_dir(&self) -> PathBuf {
         expand(&self.plays_dir)
     }
@@ -443,6 +466,36 @@ mod tests {
         let mut c = Config::default();
         c.normal();
         assert_eq!(c, Config::default());
+        let _ = fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn two_windows_keep_each_others_settings() {
+        let (d, p) = tmp("windows");
+        Config::default().save_at(&p).unwrap();
+        // Both read the file, then each sets one thing.
+        let (mut one, mut two) = (Config::read_at(&p), Config::read_at(&p));
+        one.theme = "night".into();
+        two.author = "Can Demir".into();
+        Config::update_at(&p, |now| {
+            now.theme = one.theme.clone();
+            Ok(())
+        })
+        .unwrap();
+        Config::update_at(&p, |now| {
+            now.author = two.author.clone();
+            Ok(())
+        })
+        .unwrap();
+        let c = Config::read_at(&p);
+        assert_eq!(
+            (c.theme.as_str(), c.author.as_str()),
+            ("night", "Can Demir")
+        );
+        // A file that broke meanwhile still stays.
+        fs::write(&p, "= kırık").unwrap();
+        Config::update_at(&p, |_| Ok(())).unwrap();
+        assert_eq!(fs::read_to_string(&p).unwrap(), "= kırık");
         let _ = fs::remove_dir_all(d);
     }
 

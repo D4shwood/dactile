@@ -276,7 +276,7 @@ pub fn restore(moved: &[Moved], cfg: &mut Config) -> Result<(), String> {
 /// The settings to disk; a test's stay in the test, off the real ones.
 fn keep(cfg: &Config) {
     if !cfg!(test) {
-        let _ = cfg.save();
+        let _ = cfg.save_recent();
     }
 }
 

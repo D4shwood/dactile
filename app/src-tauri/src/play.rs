@@ -253,7 +253,7 @@ pub struct Opened {
 pub fn open(cfg: &mut Config, path: &Path) -> anyhow::Result<(Open, Opened)> {
     let opened = open_at(path, &cfg.lang, file::history_dir(path))?;
     cfg.opened(path);
-    let _ = cfg.save();
+    let _ = cfg.save_recent();
     Ok(opened)
 }
 
@@ -413,11 +413,18 @@ pub fn relocate(text: &str, i: usize, to: usize) -> Option<Change> {
 
 /// The settings the app changes.
 pub fn set(cfg: &mut Config, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
-    change(cfg, key, value)?;
-    // The viewer keeps its layout by itself: nobody chose to write the file.
-    // And a file with no copy beside it stays, whatever is chosen.
-    cfg.unread.take_if(|u| key != "viewer" && u.copy.is_some());
-    cfg.save()
+    let apply = |c: &mut Config| -> anyhow::Result<()> {
+        change(c, key, value)?;
+        // The viewer keeps its layout by itself: nobody chose to write the file.
+        // And a file with no copy beside it stays, whatever is chosen.
+        c.unread.take_if(|u| key != "viewer" && u.copy.is_some());
+        Ok(())
+    };
+    apply(cfg)?;
+    if cfg.unread.is_some() {
+        return Ok(());
+    }
+    Config::update(apply)
 }
 
 fn change(cfg: &mut Config, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
