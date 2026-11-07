@@ -452,6 +452,7 @@ fn change(cfg: &mut Config, key: &str, value: &serde_json::Value) -> anyhow::Res
         "animations" => cfg.animations = value.as_bool().unwrap_or(true),
         _ => anyhow::bail!("no setting {key}"),
     }
+    cfg.normal();
     Ok(())
 }
 
@@ -507,6 +508,11 @@ mod tests {
         assert_eq!(c.page_font, "Noto Serif");
         change(&mut c, "animations", &json!(false)).unwrap();
         assert!(!settings(&c).animations);
+        let mut v = serde_json::to_value(config::Viewer::default()).unwrap();
+        v["columns"] = json!(0);
+        v["lens_size"] = json!(5000);
+        change(&mut c, "viewer", &v).unwrap();
+        assert_eq!((c.viewer.columns, c.viewer.lens_size), (1, 400));
     }
 
     #[test]

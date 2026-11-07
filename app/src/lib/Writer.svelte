@@ -46,7 +46,7 @@
   // Taken once: from here on the writer keeps them, and saves them.
   const first = untrack(() => settings);
   let folded = $state(first.ribbon_folded);
-  let zoom = $state(first.page_zoom || 100);
+  let zoom = $state(Math.min(300, Math.max(50, first.page_zoom || 100)));
   let theme = $state(first.theme || "paper");
   /// The rest of the look; the page's zoom and theme have keys of their own.
   let look = $state(pickLook(first));

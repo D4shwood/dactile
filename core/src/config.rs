@@ -208,9 +208,34 @@ impl Config {
     pub fn load() -> Result<Config> {
         let p = path();
         match std::fs::read_to_string(&p) {
-            Ok(t) => toml::from_str(&t).with_context(|| format!("reading {}", p.display())),
+            Ok(t) => {
+                let mut cfg: Config =
+                    toml::from_str(&t).with_context(|| format!("reading {}", p.display()))?;
+                cfg.normal();
+                Ok(cfg)
+            }
             Err(_) => Ok(Config::default()),
         }
+    }
+
+    /// Brings every number back to what the page can show, whatever the
+    /// file says: a size of 0 is no page.
+    pub fn normal(&mut self) {
+        self.page_size = self.page_size.clamp(12, 28);
+        self.line_spacing = self.line_spacing.clamp(120, 220);
+        self.page_width = self.page_width.clamp(32, 64);
+        self.page_zoom = self.page_zoom.clamp(50, 300);
+        let v = &mut self.viewer;
+        v.columns = v.columns.clamp(1, 9);
+        v.rows = v.rows.clamp(1, 9);
+        v.offset = v.offset.min(v.columns - 1);
+        v.lens_size = v.lens_size.clamp(80, 400);
+        // As `clampZoom` in the viewer.
+        v.zoom = if v.zoom.is_finite() {
+            v.zoom.clamp(12.5, 400.0)
+        } else {
+            100.0
+        };
     }
 
     /// `load` for a window, which can say what went wrong and go on: a bad
@@ -252,6 +277,7 @@ impl Config {
                 fields,
             });
         }
+        cfg.normal();
         cfg
     }
 
@@ -393,6 +419,30 @@ mod tests {
         c.save_at(&p).unwrap();
         let c = Config::read_at(&p);
         assert_eq!((c.author.as_str(), c.unread), ("Ayşe Yılmaz", None));
+        let _ = fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn numbers_come_back_to_what_the_page_can_show() {
+        let (d, p) = tmp("numbers");
+        let file = "page_size = 0\nline_spacing = 65535\npage_width = 0\npage_zoom = 65535\n[viewer]\ncolumns = 0\nrows = 200\noffset = 7\nlens_size = 1\nzoom = nan\n";
+        fs::write(&p, file).unwrap();
+        let c = Config::read_at(&p);
+        assert_eq!(
+            (c.page_size, c.line_spacing, c.page_width, c.page_zoom),
+            (12, 220, 32, 300)
+        );
+        let v = &c.viewer;
+        assert_eq!((v.columns, v.rows, v.offset, v.lens_size), (1, 9, 0, 80));
+        assert_eq!(v.zoom, 100.0);
+        // Numbers out of range read fine: nothing to warn about.
+        assert_eq!(c.unread, None);
+        fs::write(&p, "page_size = 65535\n[viewer]\nzoom = 9000.0\n").unwrap();
+        let c = Config::read_at(&p);
+        assert_eq!((c.page_size, c.viewer.zoom), (28, 400.0));
+        let mut c = Config::default();
+        c.normal();
+        assert_eq!(c, Config::default());
         let _ = fs::remove_dir_all(d);
     }
 

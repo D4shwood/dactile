@@ -68,7 +68,10 @@ export function applyLook(s: Look) {
   root.dataset.accent = s.accent || "claret";
   root.dataset.animations = s.animations ? "on" : "off";
   root.style.setProperty("--page-font", s.page_font ? `"${s.page_font}", var(--serif)` : "var(--serif)");
-  root.style.setProperty("--page-size", `${s.page_size}px`);
-  root.style.setProperty("--line-spacing", String(s.line_spacing / 100));
-  root.style.setProperty("--page-width", String(s.page_width));
+  root.style.setProperty("--page-size", `${within(s.page_size, 12, 28)}px`);
+  root.style.setProperty("--line-spacing", String(within(s.line_spacing, 120, 220) / 100));
+  root.style.setProperty("--page-width", String(within(s.page_width, 32, 64)));
 }
+
+/// The limits are `Config::normal`'s in core.
+const within = (n: number, least: number, most: number) => Math.min(most, Math.max(least, n || least));
