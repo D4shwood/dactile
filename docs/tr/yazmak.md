@@ -86,7 +86,7 @@ Her iki uygulamada:
 | Alt+B, Alt+J | Sahneyi imleçte böl; sonrakiyle birleştir |
 | Alt+S | Yazım önerileri |
 
-Yalnızca Dactile'da: **F12** PDF paneli, **Ctrl + / − / 0** sayfa yakınlığı,
+Yalnızca Dactile'da: **F12** PDF paneli (PDF'te bir yere tıklamak o satırı yazıda gösterir), **Ctrl + / − / 0** sayfa yakınlığı,
 **Ctrl+F1** şeridi katla, **Alt** şerit harfleri.
 
 Yalnızca Dactile Light'ta: **F10** şerit, **Ctrl+P** komut paleti, **F1**

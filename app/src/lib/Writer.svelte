@@ -281,7 +281,7 @@
     const n = Math.min(Math.max(line, 1), view.state.doc.lines);
     const pos = view.state.doc.line(n).from;
     board = false;
-    view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+    view.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: "center" }) });
     if (!quiet) view.focus();
   }
 

@@ -193,10 +193,10 @@
   }
 
   /// To the writer: the line behind a place of the PDF.
-  async function toSource(page: number, x: number, top: number, quiet = false) {
+  async function toSource(page: number, x: number, top: number, quiet = false, stay = quiet) {
     if (result?.kind !== "built") return;
     try {
-      goto(await api.syncEdit(result.pdf, page, x, top), quiet);
+      goto(await api.syncEdit(result.pdf, page, x, top), stay);
     } catch (e) {
       if (!quiet) say(String(e), true);
     }
@@ -654,6 +654,28 @@
     el.addEventListener("pointercancel", end);
   }
 
+  let clicking = 0;
+
+  /// A plain click, in any mode, shows its line in the writer. Dragging,
+  /// holding the lens and selecting don't; a second click selects a word,
+  /// so the first waits for it.
+  function watchClick(e: PointerEvent) {
+    clearTimeout(clicking);
+    const [x, y, at] = [e.clientX, e.clientY, Date.now()];
+    window.addEventListener(
+      "pointerup",
+      (u) => {
+        const still = Math.hypot(u.clientX - x, u.clientY - y) < 4 && Date.now() - at < 350;
+        if (!still || !window.getSelection()?.isCollapsed || e.detail > 1) return;
+        clicking = window.setTimeout(() => {
+          const s = sheets?.at(x, y);
+          if (s) void toSource(s.page, s.x, s.top, true, false);
+        }, 240);
+      },
+      { once: true },
+    );
+  }
+
   function ondown(e: PointerEvent) {
     if (present) return showDown(e);
     if (e.button !== 0 || !sheets || !host) return;
@@ -661,6 +683,7 @@
     const mod = e.ctrlKey || e.metaKey;
     // A plain click on a link follows it, in any mode.
     if (!mod && !e.shiftKey && !e.altKey && (e.target as HTMLElement).closest?.("a.link")) return;
+    if (!mod && !e.shiftKey && !e.altKey) watchClick(e);
     if (mod && e.shiftKey) {
       e.preventDefault();
       const s = sheets.at(e.clientX, e.clientY);
