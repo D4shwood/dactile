@@ -317,8 +317,8 @@ impl Writer {
             }
             PAct::About => self.say(
                 &lang::f(
-                    "Dactile {} · tiyatro sınıfı {}",
-                    "Dactile {} · the tiyatro class {}",
+                    "Dactile Light {} · tiyatro sınıfı {}",
+                    "Dactile Light {} · the tiyatro class {}",
                     &[&env!("CARGO_PKG_VERSION"), &dactile::class::version()],
                 ),
                 false,

@@ -867,7 +867,7 @@ impl Home {
         let side = 3u16.min(area.width / 10);
         let inner_w = area.width.saturating_sub(side * 2);
         // The masthead: the name spaced out, what it is, and a rule.
-        let spaced: String = "DACTILE".chars().map(|c| format!("{c} ")).collect();
+        let spaced: String = "DACTILE LIGHT".chars().map(|c| format!("{c} ")).collect();
         let folder = config::tilde(&cfg.plays_dir());
         // A typewriter's cursor after the name, blinking.
         let on = (self.born.elapsed().as_millis() / 600).is_multiple_of(2);
@@ -1799,7 +1799,7 @@ fn settings_form(cfg: &Config, first: bool) -> Form {
     Form {
         kind: FormKind::Settings,
         title: if first {
-            lang::l("Dactile'a hoş geldin", "welcome to Dactile")
+            lang::l("Dactile Light'a hoş geldin", "welcome to Dactile Light")
         } else {
             lang::l("ayarlar", "settings")
         }

@@ -1,0 +1,5 @@
+# `cargo test` and `cargo run` keep their settings here, whatever the shell says:
+# a test can never reach the real ones.
+[env]
+DACTILE_CONFIG = { value = "target/test-config/config.toml", relative = true, force = true }
+XDG_CONFIG_HOME = { value = "target/test-config", relative = true, force = true }

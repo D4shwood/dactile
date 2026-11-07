@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Dactile Light
+GenericName=Stage play writer
+Comment=Write plays for the tiyatro XeLaTeX class
+Exec=dactile-light
+Icon=io.github.d4shwood.dactile-light
+Terminal=true
+Categories=Office;WordProcessor;

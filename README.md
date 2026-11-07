@@ -2,8 +2,8 @@
 
 [Türkçe](README.tr.md)
 
-A desktop app for writing stage plays, with a terminal twin, Dactile Light. You
-write the play in the syntax of the **tiyatro** XeLaTeX class, and the macros come alive as you type: `\se Amca`
+Dactile is an app for writing stage plays, and Dactile Light is the same writer
+in a terminal. You write the play in the syntax of the **tiyatro** XeLaTeX class, and the macros come alive as you type: `\se Amca`
 turns into `SELİN   Amca` on the spot, `\sahne` asks for a place and a time
 and opens a numbered scene, and the characters who appear in a scene gather
 under its heading by themselves.
@@ -56,12 +56,12 @@ cd dactile-light-*-x86_64-linux
 ```
 
 `dactile-light install` puts the `dactile-light` command in `~/.local/bin`,
-adds a menu entry, and copies the tiyatro class into your TeX tree
+adds a menu entry with its icon, and copies the tiyatro class into your TeX tree
 (`~/texmf`), so plays compile from any folder. `dactile-light uninstall`
 removes all three; your plays and settings stay. From source:
 `cargo install --path tui`, then `dactile-light install`.
 
-Before 0.3 the terminal app was the `dactile` command: `dactile uninstall`
+Before 0.3 Dactile Light was the `dactile` command: `dactile uninstall`
 removes that one.
 
 - **Spell checking** needs a Turkish Hunspell dictionary (`tr_TR.aff` and
@@ -72,7 +72,7 @@ removes that one.
 
 ## Using it
 
-This page describes Dactile Light's keys and screens; the desktop app has the
+This page describes Dactile Light's keys and screens; Dactile has the
 same plays and tools on a page, with a ribbon and the mouse.
 
 ```sh
@@ -227,7 +227,7 @@ read-only. Earlier versions go to `~/.local/share/dactile/history`.
 `i` on the home screen opens the desktop's file chooser (where there is
 none, over SSH say, it asks for a path) for a play written elsewhere: a Word
 `.docx`, a LibreOffice `.odt`, a PDF with text in it, Markdown or plain
-text. Nothing else needs installing: the desktop app carries Tesseract and
+text. Nothing else needs installing: Dactile carries Tesseract and
 Poppler's tools. A scanned PDF is read from its page images by itself, and
 "Read again with OCR" in the preview does so for a PDF whose text is poor;
 `dactile-light import --ocr` does the same where Tesseract with Turkish is
@@ -261,8 +261,8 @@ as they come. A scanned PDF, pictures of pages, needs OCR first.
 A play in a book comes with what a publisher puts around it: the cover, the
 imprint, the contents, a foreword, the author's life. The play is found by
 where people answer each other, and only that part is read for who speaks;
-in a PDF, page 1 after Roman numerals says where it starts. In the desktop
-app's preview you see the whole document: click a paragraph or a part (Shift
+in a PDF, page 1 after Roman numerals says where it starts. In
+Dactile's preview you see the whole document: click a paragraph or a part (Shift
 for many, F3 for the next), mark it, or say the play starts or ends there. A
 foreword and notes stay, as the play's own sections.
 

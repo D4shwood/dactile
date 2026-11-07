@@ -14,10 +14,19 @@ The session in this repository is the team lead; `.claude/agents/` holds the arc
 - One compile at a time across both teams: `flock ~/.cache/dactile-team/build.lock cargo ...`.
 - One headless UI test at a time: `flock ~/.cache/dactile-team/ui.lock ...`.
 - Agents that write code in parallel use separate worktrees and separate files.
+- An agent's worktree can start behind `main`: bring it to `main` first.
+- Follow-up work goes to the agent that has the context, by message; a new agent only for a new area.
+- A refused command is a stop: say so in the report, never work around it. Write files with the edit tools, not heredocs.
+
+## Where things are
+
+- `core/src`: `config` settings, `build` XeLaTeX, opening and showing files, `outputs` a play's files, `library` and `shelf` plays and drafts, `render` and `lex` the text, `cast` and `casting` people, `notes`, `structure` and `outline` acts and scenes, `import/` other formats.
+- `app/src-tauri/src/lib.rs`: every Tauri command; `app/src/lib/api.ts` types them. `Start.svelte` home, `Writer.svelte` the page, `Ribbon.svelte` and `ribbon.ts` the ribbon, `Pdf.svelte` the viewer, `theme.css` the look.
+- `tui/src/tui`: `home.rs`, `writer/`, `importing.rs`, `theme.rs`, `keys.rs`; `tui/src/install.rs` menu entry and icons.
 
 ## Rules
 
-- Tests never touch real user settings or files: set `DACTILE_CONFIG` and `XDG_CONFIG_HOME` to a temporary place.
+- Tests never touch real user settings or files: `.cargo/config.toml` points `cargo test` and `cargo run` into `target`, and `core/tests/settings_stay_out.rs` checks it. A binary run directly needs `DACTILE_CONFIG` and `XDG_CONFIG_HOME` set to a temporary place.
 - This repository is public: fictional names only in code, tests, comments and commits. Book text never enters it. Check the diff before each commit.
 - Never take screenshots of the user's screen. Test in headless Weston or a browser pane.
 - Kill test processes by explicit PID after listing them. No `pkill`.

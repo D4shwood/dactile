@@ -1,6 +1,6 @@
 [package]
 name = "dactile-light"
-description = "Dactile Light: the terminal app for writing stage plays with the tiyatro class"
+description = "Dactile Light: write stage plays in a terminal, with the tiyatro class"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="432" height="432">
+  <!-- Dactile Light's mark: Dactile's D with a small l raised at its top
+       right, as in 6 to the 7th. All outlines, no font. The l's foot hooks
+       right so it doesn't read as a 1. From 32 px up; light-small.svg is
+       the drawing for 16 and 24. -->
+  <rect width="108" height="108" fill="#151515"/>
+  <g transform="translate(-22 -7) scale(1.2)">
+    <path d="M70.416 53.59Q70.416 43.561 65.01 38.387Q59.603 33.212 49.575 33.212H43.151V74.503Q47.433 74.788 53.322 74.788Q62.101 74.788 66.259 69.613Q70.416 64.439 70.416 53.59ZM51.859 30Q65.099 30 71.487 35.906Q77.875 41.813 77.875 53.661Q77.875 65.652 71.719 71.826Q65.563 78 53.322 78L36.263 77.857H30.125V75.966L36.263 75.002V32.819L30.125 31.891V30Z" fill="#D8CFC0"/>
+  </g>
+  <g transform="translate(65 55) scale(0.38)">
+    <path d="M24 -92L46 -100H56V-22Q56 -10 66 -10Q72 -10 78 -15L82 -11Q72 2 56 2Q40 2 40 -18V-78Q40 -84 34 -84L24 -85Z" fill="#B0444A"/>
+  </g>
+</svg>
