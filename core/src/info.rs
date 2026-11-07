@@ -6,14 +6,44 @@ use crate::source;
 use crate::tex::{self, Edit};
 
 /// The cover commands, in the order a new one is written.
-pub const FIELDS: [(&str, &str); 7] = [
+pub const FIELDS: [(&str, &str); 8] = [
     ("title", "Başlık"),
     ("author", "Yazar"),
+    ("editedby", "Düzenleyen"),
     ("draft", "Taslak no"),
     ("copyrightnotice", "Telif"),
     ("address", "Adres"),
     ("email", "E-posta"),
     ("telephone", "Telefon"),
+];
+
+/// What a new or imported play is asked, beside its title and author.
+pub const DETAILS: [&str; 5] = [
+    "editedby",
+    "copyrightnotice",
+    "address",
+    "email",
+    "telephone",
+];
+
+/// The parts of a page the class can restyle: its name and label.
+pub const COVER_PARTS: [(&str, &str); 9] = [
+    ("title", "Başlık"),
+    ("author", "Yazar"),
+    ("editedby", "Düzenleyen"),
+    ("draft", "Taslak"),
+    ("starred", "Yıldızlı kişiler"),
+    ("copyright", "Telif"),
+    ("address", "Adres"),
+    ("telephone", "Telefon"),
+    ("email", "E-posta"),
+];
+pub const CAST_PARTS: [(&str, &str); 5] = [
+    ("title", "Başlık"),
+    ("names", "Adlar"),
+    ("stars", "Yıldızlı adlar"),
+    ("descriptions", "Açıklamalar"),
+    ("others", "Diğer kişiler"),
 ];
 
 /// The value of `\name{…}` in the preamble.
@@ -41,6 +71,20 @@ pub fn set(text: &str, name: &str, value: &str) -> Option<Edit> {
         return None;
     }
     add_line(text, &format!("\\{name}{{{value}}}"))
+}
+
+/// Sets `\\name{value}`, keeping the line when the value is empty, so a
+/// new play's empty lines stay there to be filled.
+pub fn fill(text: &str, name: &str, value: &str) -> Option<Edit> {
+    let pre = source::split(text).preamble;
+    let cmds = tex::commands(text, pre);
+    match cmds.iter().find(|c| c.name == name) {
+        Some(c) => {
+            let g = tex::group(text, c.span.end)?;
+            (g.inner != value).then(|| Edit::new(g.inner_span, value))
+        }
+        None => set(text, name, value),
+    }
 }
 
 /// Takes a command out, and its line with it when it is alone there.
@@ -79,6 +123,126 @@ fn add_line(text: &str, line: &str) -> Option<Edit> {
         line_end
     };
     Some(Edit::new(line_end..line_end, format!("{nl}{line}")))
+}
+
+/// Whether the cast page has the Latin title, `\dramatispersonae`.
+pub fn latin_cast(text: &str) -> bool {
+    let pre = source::split(text).preamble;
+    tex::commands(text, pre)
+        .iter()
+        .any(|c| c.name == "dramatispersonae")
+}
+
+pub fn set_latin_cast(text: &str, on: bool) -> Option<Edit> {
+    let pre = source::split(text).preamble;
+    let cmds = tex::commands(text, pre);
+    match (cmds.iter().find(|c| c.name == "dramatispersonae"), on) {
+        (None, true) => add_line(text, "\\dramatispersonae"),
+        (Some(c), false) => Some(remove_line(text, c.span.clone())),
+        _ => None,
+    }
+}
+
+/// Where `\kisiler` ends, and whether a `*` lets the play go on under it.
+fn cast_page(text: &str) -> Option<(usize, bool)> {
+    let body = source::split(text).body;
+    let c = tex::commands(text, body)
+        .into_iter()
+        .find(|c| c.name == "kisiler")?;
+    Some((c.span.end, text[c.span.end..].starts_with('*')))
+}
+
+/// Whether the cast has pages of its own, as it does unless `\kisiler*` says.
+pub fn cast_own_page(text: &str) -> bool {
+    !cast_page(text).is_some_and(|(_, star)| star)
+}
+
+pub fn set_cast_own_page(text: &str, own: bool) -> Option<Edit> {
+    let (end, star) = cast_page(text)?;
+    match (star, own) {
+        (true, true) => Some(Edit::new(end..end + 1, "")),
+        (false, false) => Some(Edit::new(end..end, "*")),
+        _ => None,
+    }
+}
+
+/// How a part of the cover or the cast page looks, as `\coverstyle` or
+/// `\caststyle` says; what is empty is the class's own.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct PartLook {
+    pub align: String,
+    pub size: String,
+    pub style: String,
+    pub before: String,
+    pub after: String,
+}
+
+impl PartLook {
+    fn line(&self) -> String {
+        [
+            ("align", &self.align),
+            ("size", &self.size),
+            ("style", &self.style),
+            ("before", &self.before),
+            ("after", &self.after),
+        ]
+        .iter()
+        .filter(|(_, v)| !v.trim().is_empty())
+        .map(|(k, v)| format!("{k}={}", v.trim()))
+        .collect::<Vec<_>>()
+        .join(", ")
+    }
+}
+
+/// The last `\<command>{part}{…}`: its whole span and its second group.
+fn style_line(
+    text: &str,
+    command: &str,
+    part: &str,
+) -> Option<(std::ops::Range<usize>, std::ops::Range<usize>)> {
+    let pre = source::split(text).preamble;
+    tex::commands(text, pre).iter().rev().find_map(|c| {
+        if c.name != command {
+            return None;
+        }
+        let name = tex::group(text, c.span.end)?;
+        let keys = tex::group(text, name.span.end)?;
+        (name.inner.trim() == part).then(|| (c.span.start..keys.span.end, keys.inner_span))
+    })
+}
+
+/// `command` is `coverstyle` or `caststyle`.
+pub fn part_look(text: &str, command: &str, part: &str) -> PartLook {
+    let mut look = PartLook::default();
+    let Some((_, keys)) = style_line(text, command, part) else {
+        return look;
+    };
+    for pair in text[keys].split(',') {
+        let Some((k, v)) = pair.split_once('=') else {
+            continue;
+        };
+        let v = v.trim().to_string();
+        match k.trim() {
+            "align" => look.align = v,
+            "size" => look.size = v,
+            "style" => look.style = v,
+            "before" => look.before = v,
+            "after" => look.after = v,
+            _ => {}
+        }
+    }
+    look
+}
+
+/// Sets a part's look; an empty look gives it back to the class.
+pub fn set_part_look(text: &str, command: &str, part: &str, look: &PartLook) -> Option<Edit> {
+    let line = look.line();
+    match style_line(text, command, part) {
+        Some((all, _)) if line.is_empty() => Some(remove_line(text, all)),
+        Some((_, keys)) => (text[keys.clone()] != line).then(|| Edit::new(keys, line)),
+        None if line.is_empty() => None,
+        None => add_line(text, &format!("\\{command}{{{part}}}{{{line}}}")),
+    }
 }
 
 /// Whether the class is in final mode.
@@ -244,6 +408,47 @@ mod tests {
         assert_eq!(scene_align(&two), Side::Right);
         let t = apply(&two, &[set_scene_align(&two, Side::Center).unwrap()]);
         assert_eq!(scene_align(&t), Side::Center);
+    }
+
+    #[test]
+    fn the_cast_page_and_the_looks_of_parts() {
+        assert!(!latin_cast(PLAY) && cast_own_page(PLAY));
+        let t = apply(PLAY, &[set_latin_cast(PLAY, true).unwrap()]);
+        assert!(latin_cast(&t));
+        assert_eq!(apply(&t, &[set_latin_cast(&t, false).unwrap()]), PLAY);
+        let t = apply(PLAY, &[set_cast_own_page(PLAY, false).unwrap()]);
+        assert!(t.contains("\\kisiler*\n") && !cast_own_page(&t));
+        assert_eq!(apply(&t, &[set_cast_own_page(&t, true).unwrap()]), PLAY);
+
+        let look = PartLook {
+            align: "left".into(),
+            after: "1cm".into(),
+            ..PartLook::default()
+        };
+        let t = apply(
+            PLAY,
+            &[set_part_look(PLAY, "coverstyle", "title", &look).unwrap()],
+        );
+        assert!(t.contains("\\coverstyle{title}{align=left, after=1cm}\n"));
+        assert_eq!(part_look(&t, "coverstyle", "title"), look);
+        assert_eq!(part_look(&t, "caststyle", "title"), PartLook::default());
+        assert_eq!(set_part_look(&t, "coverstyle", "title", &look), None);
+        let none = PartLook::default();
+        let back = apply(
+            &t,
+            &[set_part_look(&t, "coverstyle", "title", &none).unwrap()],
+        );
+        assert_eq!(back, PLAY);
+    }
+
+    #[test]
+    fn filling_keeps_an_empty_line() {
+        let t = "\\documentclass{tiyatro}\n\\title{Kar}\n\\address{}\n\\begin{document}\n";
+        let full = apply(t, &[fill(t, "address", "İzmir").unwrap()]);
+        assert!(full.contains("\\address{İzmir}\n"));
+        let empty = apply(&full, &[fill(&full, "address", "").unwrap()]);
+        assert_eq!(empty, t);
+        assert_eq!(fill(t, "email", ""), None);
     }
 
     #[test]

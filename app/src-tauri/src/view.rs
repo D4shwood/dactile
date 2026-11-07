@@ -327,7 +327,7 @@ impl Out<'_> {
                 if cmd == "\\maketitle" {
                     self.chip(lead..span.end, "faint", lang::l("· kapak ·", "· cover ·"));
                     "page"
-                } else if cmd == "\\kisiler" {
+                } else if cmd == "\\kisiler" || cmd == "\\kisiler*" {
                     self.chip(lead..span.end, "faint", lang::l("· kişiler ·", "· cast ·"));
                     "page"
                 } else if matches!(cmd, "\\newpage" | "\\clearpage" | "\\pagebreak") {
@@ -499,7 +499,7 @@ mod tests {
             .unwrap();
         assert_eq!(group.0, "Köylüler");
         assert_eq!(group.1, &["Birinci Kadın", "ÇOBAN"]);
-        // Members show only in their group; `\gizlikarakter` not at all.
+        // Members show only in their group; `\sirkarakter` not at all.
         let lines: Vec<String> = cast.iter().map(CastRow::line).collect();
         assert!(!lines.iter().any(|l| l == "ÇOBAN" || l.contains("HERKES")));
     }

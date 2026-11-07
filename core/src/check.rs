@@ -275,6 +275,10 @@ fn defined(src: &str, out: &mut HashSet<String>) {
 const LATEX: &[&str] = &[
     // The page and its parts.
     "maketitle",
+    "editedby",
+    "dramatispersonae",
+    "coverstyle",
+    "caststyle",
     "title",
     "author",
     "date",

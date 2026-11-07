@@ -276,11 +276,12 @@ fn skeleton(s: &Skeleton, title: &str, author: &str, lang: Lang) -> String {
     // Through `\begin{document}`.
     let pre = &base[..parts.body.start];
     // The cast goes before `\begin{document}`, after the cover.
-    let pre = pre.replacen("\\draft{0.1}\n", &format!("\\draft{{0.1}}\n\n{cast}"), 1);
+    let pre = pre.replacen("\\telephone{}\n", &format!("\\telephone{{}}\n\n{cast}"), 1);
     let body_text = &base[parts.body.clone()];
     let start = body_text
         .find("\\kisiler")
-        .map_or(0, |i| i + "\\kisiler\n\n".len());
+        .and_then(|i| body_text[i..].find("\n\n").map(|n| i + n + 2))
+        .unwrap_or(0);
     format!(
         "{pre}{}{body}{}",
         &body_text[..start],

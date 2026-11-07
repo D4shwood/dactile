@@ -64,6 +64,8 @@ pub struct Aside {
 pub struct Draft {
     pub title: String,
     pub author: String,
+    /// The cover details asked at the import, by command.
+    pub details: std::collections::BTreeMap<String, String>,
     pub people: Vec<Person>,
     pub items: Vec<Item>,
     pub asides: Vec<Aside>,
@@ -1094,6 +1096,7 @@ fn shape_as(src: &Source, lang: Lang, labels: Vec<Page>) -> Draft {
         groups: Vec::new(),
         title,
         author,
+        details: Default::default(),
         people: sh.people,
         items: items_all,
         asides,
@@ -1671,6 +1674,7 @@ impl Draft {
         if self.author != self.found.1 {
             d.author = std::mem::take(&mut self.author);
         }
+        d.details = std::mem::take(&mut self.details);
         d.cast_list = self.cast_list.take();
         d.left = std::mem::take(&mut self.left);
         d.play = self.play;
@@ -1729,7 +1733,13 @@ impl Draft {
 
     /// The play, ready to be saved.
     pub fn tex(&self) -> String {
-        let t = crate::library::template(&self.title, &self.author, self.lang);
+        let mut t = crate::library::template(&self.title, &self.author, self.lang);
+        for (name, value) in &self.details {
+            let value = crate::tex::escape_text(value.trim());
+            if let Some(e) = crate::info::fill(&t, name, &value) {
+                t = crate::tex::apply(&t, &[e]);
+            }
+        }
         let mut decls = String::new();
         let cast = self.cast();
         let mut grouped = vec![false; self.groups.len()];

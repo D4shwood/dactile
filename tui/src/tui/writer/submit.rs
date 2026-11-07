@@ -170,7 +170,7 @@ impl Writer {
                 let mut t = self.buf.text.clone();
                 for (cmd, label) in info::FIELDS {
                     let value = dactile::tex::escape_text(form.get(label));
-                    if let Some(e) = info::set(&t, cmd, &value) {
+                    if let Some(e) = info::fill(&t, cmd, &value) {
                         t = dactile::tex::apply(&t, &[e]);
                     }
                 }

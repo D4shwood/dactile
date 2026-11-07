@@ -52,6 +52,12 @@ pub struct Config {
     pub pages: bool,
     /// The writer's ribbon folded to its tabs.
     pub ribbon_folded: bool,
+    /// The ribbon's height in pixels, dragged by hand; 0 is its own.
+    pub ribbon_height: u16,
+    /// The PDF panel's width in pixels, dragged by hand; 0 is its own.
+    pub pdf_width: u16,
+    /// The cover details last filled in, offered for the next play.
+    pub cover_last: std::collections::BTreeMap<String, String>,
     /// The desktop app's page, in percent: the text grows, the window doesn't.
     pub page_zoom: u16,
     /// The keyboard drawn on the help screen: "q" (Turkish Q), "f" (Turkish
@@ -156,6 +162,9 @@ impl Default for Config {
             animations: true,
             pages: false,
             ribbon_folded: false,
+            ribbon_height: 0,
+            pdf_width: 0,
+            cover_last: Default::default(),
             page_zoom: 100,
             keyboard: "q".into(),
             recent: Vec::new(),

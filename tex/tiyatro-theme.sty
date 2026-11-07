@@ -22,13 +22,9 @@
 \cs_new_protected:Npn \__tiy_main_font:n #1
   { \clist_map_inline:nn {#1} { \IfFontExistsTF {##1} { \setmainfont {##1} \clist_map_break: } { } } }
 
-\iftiyatrodraft
-  \__tiy_main_font:n { Aptos, Calibri, Carlito, TeX~Gyre~Heros, Liberation~Sans, DejaVu~Sans }
-  \onehalfspacing
-\else
-  \__tiy_main_font:n { Times~New~Roman, TeX~Gyre~Termes, Liberation~Serif, DejaVu~Serif }
-  \singlespacing
-\fi
+% A draft reads as the final copy does, with room between its lines.
+\__tiy_main_font:n { Times~New~Roman, TeX~Gyre~Termes, Liberation~Serif, DejaVu~Serif }
+\iftiyatrodraft \setstretch { 1.15 } \else \singlespacing \fi
 
 % Line numbers use the mono font.
 \cs_new_protected:Npn \__tiy_mono_font:n #1
@@ -83,6 +79,8 @@
 \newcommand \curtainlocalizedtext { Perde~Sonu }
 \newcommand \scriptendlocalizedtext { Son }
 \newcommand \draftlocalizedtext { TASLAK }
+\newcommand \editedbylocalizedtext { Düzenleyen }
+\newcommand \latincasttitlename { Dramatis~Personae }
 \newcommand \beattext { Sus. }
 % \girer{se,oz}: (SELİN ile OZAN girerler.)
 \newcommand \entertext { girer }
@@ -127,26 +125,142 @@
 % ------------------------------------------------------------------ cover
 
 \NewDocumentCommand \draft { m } { \tl_gset:Nn \g__tiy_draft_tl {#1} }
+\NewDocumentCommand \editedby { m } { \tl_gset:Nn \g__tiy_editedby_tl {#1} }
 \NewDocumentCommand \copyrightnotice { m } { \tl_gset:Nn \g__tiy_copyright_tl {#1} }
 \NewDocumentCommand \address { m } { \tl_gset:Nn \g__tiy_address_tl {#1} }
 \NewDocumentCommand \telephone { m } { \tl_gset:Nn \g__tiy_telephone_tl {#1} }
 \NewDocumentCommand \email { m } { \tl_gset:Nn \g__tiy_email_tl {#1} }
 \tl_new:N \g__tiy_draft_tl
+\tl_new:N \g__tiy_editedby_tl
 \tl_new:N \g__tiy_copyright_tl
 \tl_new:N \g__tiy_address_tl
 \tl_new:N \g__tiy_telephone_tl
 \tl_new:N \g__tiy_email_tl
 
-\cs_new_protected:Npn \__tiy_cover_line:Nn #1#2
-  { \tl_if_empty:NF #1 { #2 #1 \par } }
+% How each part of the cover and the cast page looks:
+%   \coverstyle{title}{align=left, size=Huge, style=smallcaps, before=2cm, after=1cm}
+%   \caststyle{title}{align=center, size=Large}
+% Cover: title, author, editedby, draft, starred, copyright, address, telephone,
+% email. Cast page: title, names, stars, descriptions, others.
+\tl_new:N \l__tiy_style_tl
+\cs_new_protected:Npn \__tiy_style_new:nnnnnn #1#2#3#4#5#6
+  {
+    \tl_new:c { g__tiy_style_#1_align_tl }
+    \tl_new:c { g__tiy_style_#1_size_tl }
+    \tl_new:c { g__tiy_style_#1_font_tl }
+    \tl_new:c { g__tiy_style_#1_before_tl }
+    \tl_new:c { g__tiy_style_#1_after_tl }
+    \tl_gset:cn { g__tiy_style_#1_align_tl } {#2}
+    \tl_gset:cn { g__tiy_style_#1_size_tl } {#3}
+    \tl_gset:cn { g__tiy_style_#1_font_tl } {#4}
+    \tl_gset:cn { g__tiy_style_#1_before_tl } {#5}
+    \tl_gset:cn { g__tiy_style_#1_after_tl } {#6}
+  }
+\__tiy_style_new:nnnnnn { cover_title } { \centering } { \Huge } { \tiyturkish \scshape } { } { 0.5cm }
+\__tiy_style_new:nnnnnn { cover_author } { \centering } { \Large } { } { } { }
+\__tiy_style_new:nnnnnn { cover_editedby } { \centering } { \normalsize } { } { 0.3cm } { }
+\__tiy_style_new:nnnnnn { cover_draft } { \centering } { \small } { } { 0.5cm } { }
+\__tiy_style_new:nnnnnn { cover_starred } { \centering } { \Large } { \bfseries } { } { }
+\__tiy_style_new:nnnnnn { cover_copyright } { \raggedleft } { \small } { } { } { }
+\__tiy_style_new:nnnnnn { cover_address } { \raggedleft } { \small } { } { } { }
+\__tiy_style_new:nnnnnn { cover_telephone } { \raggedleft } { \small } { } { } { }
+\__tiy_style_new:nnnnnn { cover_email } { \raggedleft } { \small } { } { } { }
+\__tiy_style_new:nnnnnn { cast_title } { \centering } { } { \casttitlefont }
+  { \beforecasttitleskip } { \aftercasttitleskip }
+\__tiy_style_new:nnnnnn { cast_names } { } { } { \castfont } { } { }
+\__tiy_style_new:nnnnnn { cast_stars } { } { } { \caststarfont } { } { }
+\__tiy_style_new:nnnnnn { cast_descriptions } { } { } { } { } { }
+\__tiy_style_new:nnnnnn { cast_others } { } { } { } { \aftercasttitleskip } { }
+
+\cs_new_protected:Npn \__tiy_style_put:nn #1#2
+  { \tl_gset:cn { g__tiy_style_ \l__tiy_style_tl _#1_tl } {#2} }
+\cs_new_protected:Npn \__tiy_style_bad:nn #1#2
+  { \msg_error:nnnn { tiyatro } { style } {#1} {#2} }
+\keys_define:nn { tiyatro / style }
+  {
+    align .code:n =
+      \str_case:nnF {#1}
+        {
+          { left } { \__tiy_style_put:nn { align } { \raggedright } }
+          { sol } { \__tiy_style_put:nn { align } { \raggedright } }
+          { center } { \__tiy_style_put:nn { align } { \centering } }
+          { orta } { \__tiy_style_put:nn { align } { \centering } }
+          { right } { \__tiy_style_put:nn { align } { \raggedleft } }
+          { sağ } { \__tiy_style_put:nn { align } { \raggedleft } }
+          { sag } { \__tiy_style_put:nn { align } { \raggedleft } }
+        }
+        { \__tiy_style_bad:nn { align } {#1} } ,
+    size .code:n =
+      \str_case:nnF {#1}
+        {
+          { tiny } { \__tiy_style_put:nn { size } { \tiny } }
+          { small } { \__tiy_style_put:nn { size } { \small } }
+          { normal } { \__tiy_style_put:nn { size } { \normalsize } }
+          { large } { \__tiy_style_put:nn { size } { \large } }
+          { Large } { \__tiy_style_put:nn { size } { \Large } }
+          { LARGE } { \__tiy_style_put:nn { size } { \LARGE } }
+          { huge } { \__tiy_style_put:nn { size } { \huge } }
+          { Huge } { \__tiy_style_put:nn { size } { \Huge } }
+        }
+        { \__tiy_style_bad:nn { size } {#1} } ,
+    style .code:n =
+      \str_case:nnF {#1}
+        {
+          { normal } { \__tiy_style_put:nn { font } { \normalfont } }
+          { bold } { \__tiy_style_put:nn { font } { \normalfont \bfseries } }
+          { italic } { \__tiy_style_put:nn { font } { \normalfont \itshape } }
+          { bolditalic } { \__tiy_style_put:nn { font } { \normalfont \bfseries \itshape } }
+          { smallcaps } { \__tiy_style_put:nn { font } { \normalfont \tiyturkish \scshape } }
+          { boldsmallcaps } { \__tiy_style_put:nn { font } { \normalfont \tiyturkish \bfseries \scshape } }
+        }
+        { \__tiy_style_bad:nn { style } {#1} } ,
+    before .code:n = \__tiy_style_put:nn { before } {#1} ,
+    after .code:n = \__tiy_style_put:nn { after } {#1} ,
+    unknown .code:n = \__tiy_style_bad:nn { \l_keys_key_str } {#1} ,
+  }
+\cs_new_protected:Npn \__tiy_style_set:nnn #1#2#3
+  {
+    \tl_set:Nn \l__tiy_style_tl { #1_#2 }
+    \tl_if_exist:cTF { g__tiy_style_#1_#2_align_tl }
+      { \keys_set:nn { tiyatro / style } {#3} }
+      { \msg_error:nnn { tiyatro } { stylepart } {#2} }
+  }
+\NewDocumentCommand \coverstyle { m m } { \__tiy_style_set:nnn { cover } {#1} {#2} }
+\NewDocumentCommand \caststyle { m m } { \__tiy_style_set:nnn { cast } {#1} {#2} }
+
+\cs_new_protected:Npn \__tiy_style_font:n #1
+  { \tl_use:c { g__tiy_style_#1_font_tl } \tl_use:c { g__tiy_style_#1_size_tl } }
+\cs_new_protected:Npn \__tiy_style_align:n #1
+  { \tl_use:c { g__tiy_style_#1_align_tl } }
+\cs_generate_variant:Nn \tl_if_blank:nF { v }
+\cs_new_protected:Npn \__tiy_style_skip:nn #1#2
+  {
+    \tl_if_blank:vF { g__tiy_style_#1_#2_tl }
+      { \vspace* { \tl_use:c { g__tiy_style_#1_#2_tl } } }
+  }
+
+% One part of a page, in its own look.
+\cs_new_protected:Npn \__tiy_part:nn #1#2
+  {
+    \__tiy_style_skip:nn {#1} { before }
+    \group_begin:
+    \__tiy_style_align:n {#1}
+    \__tiy_style_font:n {#1}
+    #2 \par
+    \group_end:
+    \__tiy_style_skip:nn {#1} { after }
+  }
+% A line of the cover, only when the play fills it in.
+\cs_new_protected:Npn \__tiy_cover_line:nNn #1#2#3
+  { \tl_if_blank:VF #2 { \__tiy_part:nn { cover_#1 } { #3 #2 } } }
 
 \RenewDocumentCommand \maketitle { }
   {
     \begin { titlepage }
     \vspace* { \fill }
-    { \centering \Huge \tiyturkish \scshape \@title \par }
-    \vspace { 0.5cm }
-    { \centering \Large \@author \par }
+    \__tiy_part:nn { cover_title } { \@title }
+    \__tiy_part:nn { cover_author } { \@author }
+    \__tiy_cover_line:nNn { editedby } \g__tiy_editedby_tl { \editedbylocalizedtext : ~ }
     \bool_if:NT \g__tiy_copy_bool
       {
         \vspace { 1.5cm }
@@ -166,18 +280,15 @@
         { \centering \g__tiy_copy_cover_tl \par }
       }
     \iftiyatrodraft
-      \vspace { 0.5cm }
-      { \centering \small \draftlocalizedtext \tl_if_empty:NF \g__tiy_draft_tl { \space \g__tiy_draft_tl } \par }
+      \__tiy_part:nn { cover_draft }
+        { \draftlocalizedtext \tl_if_empty:NF \g__tiy_draft_tl { \space \g__tiy_draft_tl } }
     \else
-      \tiy@ifstarred { \vfill { \centering \Large \bfseries \tiy@starred \par } }
+      \tiy@ifstarred { \vfill \__tiy_part:nn { cover_starred } { \tiy@starred } }
     \fi
     \vfill
-    \begin { flushright }
-    \small
-    \__tiy_cover_line:Nn \g__tiy_copyright_tl { \copyright \space }
-    \__tiy_cover_line:Nn \g__tiy_address_tl { }
-    \__tiy_cover_line:Nn \g__tiy_telephone_tl { }
-    \__tiy_cover_line:Nn \g__tiy_email_tl { }
-    \end { flushright }
+    \__tiy_cover_line:nNn { copyright } \g__tiy_copyright_tl { \copyright \space }
+    \__tiy_cover_line:nNn { address } \g__tiy_address_tl { }
+    \__tiy_cover_line:nNn { telephone } \g__tiy_telephone_tl { }
+    \__tiy_cover_line:nNn { email } \g__tiy_email_tl { }
     \end { titlepage }
   }

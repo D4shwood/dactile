@@ -138,3 +138,50 @@ awk -v l="$(at left)" -v c="$(at center)" -v r="$(at right)" -v s="$(at sol)" -v
 flush wrong '[ust]'
 ! xelatex -interaction=nonstopmode -halt-on-error flush-wrong.tex > /dev/null 2>&1 || { echo "FAIL: flush took a wrong word"; exit 1; }
 echo "ok: scene heading side"
+
+# The cover: its own page; only what the play fills in; an editor under the author.
+printf '\\documentclass{tiyatro}\n\\title{Kar}\n\\author{Örnek Yazar}\n\\editedby{Örnek Kolektif}\n\\copyrightnotice{}\n\\address{}\n\\email{}\n\\telephone{}\n\\karakter[Bir kız]{SELİN}{se}\n\\begin{document}\n\\maketitle\n\\kisiler\n\n#sahne Kıyı\n\n\\se Evet.\n\n\\end{document}\n' > cover.tex
+xelatex -interaction=nonstopmode -halt-on-error cover.tex > /dev/null 2>&1 || { grep -A6 '^! ' cover.log; echo "FAIL: cover"; exit 1; }
+pdftotext -f 1 -l 1 cover.pdf cover1.txt
+grep -q 'Düzenleyen: Örnek Kolektif' cover1.txt || { cat cover1.txt; echo "FAIL: editor"; exit 1; }
+if grep -q '©' cover1.txt; then echo "FAIL: an empty line on the cover"; exit 1; fi
+if grep -qE 'KİŞİLER|SELİN|Kıyı' cover1.txt; then cat cover1.txt; echo "FAIL: something else on the cover"; exit 1; fi
+echo "ok: cover"
+
+# The cast page is its own; \kisiler* lets the play go on under it.
+[ "$(pdfinfo cover.pdf | sed -n 's/^Pages: *//p')" = 3 ] || { echo "FAIL: cast page not its own"; exit 1; }
+sed 's/\\kisiler/\\kisiler*/' cover.tex > flow.tex
+xelatex -interaction=nonstopmode -halt-on-error flow.tex > /dev/null 2>&1 || { grep -A6 '^! ' flow.log; echo "FAIL: flow"; exit 1; }
+[ "$(pdfinfo flow.pdf | sed -n 's/^Pages: *//p')" = 2 ] || { echo "FAIL: kisiler* broke the page"; exit 1; }
+echo "ok: cast page"
+
+# \dramatispersonae, in a Turkish play too.
+sed 's/\\begin{document}/\\dramatispersonae\n&/' cover.tex > latin.tex
+xelatex -interaction=nonstopmode -halt-on-error latin.tex > /dev/null 2>&1 || { grep -A6 '^! ' latin.log; echo "FAIL: latin"; exit 1; }
+pdftotext latin.pdf - | grep -qi 'Dramatis' || { echo "FAIL: no latin title"; exit 1; }
+if pdftotext latin.pdf - | grep -qi 'KİŞİLER'; then echo "FAIL: both titles"; exit 1; fi
+echo "ok: dramatis personae"
+
+# \coverstyle and \caststyle; a wrong word stops the build.
+sed 's/\\begin{document}/\\coverstyle{title}{align=left, size=large, style=bold, before=1cm, after=2cm}\n\\caststyle{title}{align=right, style=italic}\n\\caststyle{names}{align=right}\n&/' cover.tex > styled.tex
+xelatex -interaction=nonstopmode -halt-on-error styled.tex > /dev/null 2>&1 || { grep -A6 '^! ' styled.log; echo "FAIL: styled"; exit 1; }
+xmin() { pdftotext -f "$2" -l "$2" -bbox "$1" - | sed -n "s/.*xMin=\"\([0-9.]*\)\".*>$3<.*/\1/p" | head -1; }
+awk -v a="$(xmin styled.pdf 1 Kar)" -v b="$(xmin cover.pdf 1 Kar)" 'BEGIN { exit !(a < b) }' || { echo "FAIL: coverstyle align"; exit 1; }
+for bad in 'align=up' 'size=big' 'style=wavy' 'colour=red'; do
+    sed "s/\\\\begin{document}/\\\\coverstyle{title}{$bad}\n&/" cover.tex > wrong.tex
+    ! xelatex -interaction=nonstopmode -halt-on-error wrong.tex > /dev/null 2>&1 || { echo "FAIL: took $bad"; exit 1; }
+done
+sed 's/\\begin{document}/\\caststyle{nothing}{size=large}\n&/' cover.tex > wrong.tex
+! xelatex -interaction=nonstopmode -halt-on-error wrong.tex > /dev/null 2>&1 || { echo "FAIL: took a part that isn't there"; exit 1; }
+echo "ok: styles"
+
+# A secret character, under all its names.
+printf '\\documentclass{tiyatro}\n\\sirkarakter{HERKES}{hep}\n\\secretcharacter{SEYİRCİ}{sey}\n\\gizlikarakter{KORO}{kor}\n\\begin{document}\n\\hep Evet.\n\n\\sey Hayır.\n\n\\kor Belki.\n\n\\end{document}\n' > secret.tex
+xelatex -interaction=nonstopmode -halt-on-error secret.tex > /dev/null 2>&1 || { grep -A6 '^! ' secret.log; echo "FAIL: secret"; exit 1; }
+echo "ok: secret characters"
+
+# A draft is set in the final copy's font.
+pdffonts ornek-oyun.pdf > fonts.txt
+pdffonts final.pdf > fonts-final.txt
+[ "$(sed -n 's/^[A-Z]*+\([^ -]*\).*/\1/p' fonts.txt | sort -u | grep -v Mono)" = "$(sed -n 's/^[A-Z]*+\([^ -]*\).*/\1/p' fonts-final.txt | sort -u | grep -v Mono)" ] || { cat fonts.txt fonts-final.txt; echo "FAIL: draft font"; exit 1; }
+echo "ok: draft font"

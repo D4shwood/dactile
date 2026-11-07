@@ -29,7 +29,11 @@ export const mouse = EditorView.mouseSelectionStyle.of((view, start) => {
   const from = start.shiftKey ? view.state.selection.main.anchor : null;
   return {
     get(cur) {
-      const head = caretAt(view, cur.clientX, cur.clientY) ?? anchor!;
+      // A click stays where it landed. The press can close a source block
+      // above it, which moves the text, and the release would then find
+      // another letter under the same spot.
+      const still = Math.hypot(cur.clientX - start.clientX, cur.clientY - start.clientY) < 4;
+      const head = still ? anchor! : (caretAt(view, cur.clientX, cur.clientY) ?? anchor!);
       return EditorSelection.single(from ?? anchor!, head);
     },
     update(u) {

@@ -7,7 +7,8 @@
 %   \karakter*[Full name][Description]{SCRIPT NAME}{alias}   in the cast table
 %   \karakter[Description]{SCRIPT NAME}{alias}               full name = script name
 %   \karakter{SCRIPT NAME}{alias}                            not in the cast table
-%   \gizlikarakter{SCRIPT NAME}{alias}                       not in the cast table
+%   \sirkarakter{SCRIPT NAME}{alias}                         speaks, never in the cast table
+%                 (\secretcharacter; \gizlikarakter is its old name)
 %   \karaktergrubu[Description]{ \gkarakter*[Full name]{SCRIPT NAME}{alias} ... }
 %   \setinlinename{alias}{Name}                              the name used inside a line
 %
@@ -61,6 +62,10 @@
 \ProvidesExplPackage{tiyatro-core}{2026-10-30}{1.4.0}{Dactile: characters, lines, scenes, acts}
 \RequirePackage{xspace}
 
+\msg_new:nnn { tiyatro } { style }
+  { '#2'~is~no~value~for~'#1'~in~\iow_char:N\\coverstyle~or~\iow_char:N\\caststyle. }
+\msg_new:nnn { tiyatro } { stylepart }
+  { There~is~no~part~called~'#1'~on~this~page. }
 \msg_new:nnn { tiyatro } { flush }
   { Scene~headings~can~stand~left,~center~or~right,~not~'#1'. }
 \msg_new:nnn { tiyatro } { hash }
@@ -111,7 +116,7 @@
   }
 
 % A hidden name has no line in the cast: a note left from \karakter is dropped.
-\NewDocumentCommand \gizlikarakter { o m m }
+\NewDocumentCommand \sirkarakter { o m m }
   { \__tiy_declare:nnnnnn { plain } { \BooleanFalse } { } { } {#2} {#3} }
 
 \NewDocumentCommand \karaktergrubu { O{} +m }
@@ -134,6 +139,8 @@
 \tl_new:N \g__tiy_others_tl
 \NewDocumentCommand \digerkisiler { +m } { \tl_gset:Nn \g__tiy_others_tl {#1} }
 
+\NewCommandCopy \secretcharacter \sirkarakter
+\NewCommandCopy \gizlikarakter \sirkarakter
 \NewCommandCopy \chargroup \karaktergrubu
 \NewCommandCopy \othercast \digerkisiler
 \NewCommandCopy \dipnot \footnote
@@ -892,15 +899,17 @@
 
 % ------------------------------------------------------------------ cast table
 
-\NewDocumentCommand \kisiler { }
+% \kisiler: the cast on pages of its own; \kisiler* lets the play go on under it.
+% \dramatispersonae in the preamble: that title, whatever the play's language.
+\bool_new:N \g__tiy_latin_cast_bool
+\NewDocumentCommand \dramatispersonae { } { \bool_gset_true:N \g__tiy_latin_cast_bool }
+\NewDocumentCommand \kisiler { s }
   {
     \__tiy_unhide:
     \clearpage
     \thispagestyle { empty }
-    \vspace* { \beforecasttitleskip }
-    { \centering \casttitlefont \casttitlename \par }
-    \par \nobreak
-    \skip_vertical:n { \aftercasttitleskip }
+    \__tiy_part:nn { cast_title }
+      { \bool_if:NTF \g__tiy_latin_cast_bool { \latincasttitlename } { \casttitlename } }
     % A new play has nobody yet: an empty list would be an error.
     \seq_if_empty:NF \g__tiy_cast_seq
       {
@@ -915,15 +924,19 @@
       }
     \tl_if_empty:NF \g__tiy_others_tl
       {
-        \skip_vertical:n { \aftercasttitleskip }
+        \__tiy_style_skip:nn { cast_others } { before }
         \begin { list } { }
           {
             \setlength \leftmargin { \castpageleftmargin }
             \setlength \rightmargin { \castpagerightmargin }
           }
-        \item \tl_use:N \g__tiy_others_tl
+        \item
+        \__tiy_style_align:n { cast_others }
+        \__tiy_style_font:n { cast_others }
+        \tl_use:N \g__tiy_others_tl
         \end { list }
       }
+    \IfBooleanF {#1} { \clearpage }
   }
 
 \cs_new_protected:Npn \__tiy_cast_row:nn #1#2
@@ -932,16 +945,29 @@
     \begin { tabular }
       { p { \castnamewidth } p { \dim_eval:n { \linewidth - \castnamewidth - 4 \tabcolsep } } }
     \str_if_eq:nnTF {#1} { c }
-      { \__tiy_cast_full:n {#2} \strut & \tl_use:c { g__tiy_desc_#2_tl } \strut }
-      { \__tiy_group_names:n {#2} & \tl_use:c { g__tiy_group_#2_desc_tl } \strut }
+      {
+        \__tiy_style_align:n { cast_names } \__tiy_cast_full:n {#2} \strut &
+        \__tiy_cast_desc:n { \tl_use:c { g__tiy_desc_#2_tl } }
+      }
+      {
+        \__tiy_style_align:n { cast_names } \__tiy_group_names:n {#2} &
+        \__tiy_cast_desc:n { \tl_use:c { g__tiy_group_#2_desc_tl } }
+      }
     \end { tabular }
   }
 
 \cs_new_protected:Npn \__tiy_cast_full:n #1
   {
     \str_if_eq:eeTF { \tl_use:c { g__tiy_star_#1_tl } } { 1 }
-      { { \caststarfont \tl_use:c { g__tiy_full_#1_tl } } }
-      { { \castfont \tl_use:c { g__tiy_full_#1_tl } } }
+      { { \__tiy_style_font:n { cast_stars } \tl_use:c { g__tiy_full_#1_tl } } }
+      { { \__tiy_style_font:n { cast_names } \tl_use:c { g__tiy_full_#1_tl } } }
+  }
+
+\cs_new_protected:Npn \__tiy_cast_desc:n #1
+  {
+    \__tiy_style_align:n { cast_descriptions }
+    \__tiy_style_font:n { cast_descriptions }
+    #1 \strut
   }
 
 % A group's names stacked, with a brace pointing at its description.

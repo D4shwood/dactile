@@ -7,7 +7,7 @@
 % Foundation, either version 3 of the License, or (at your option) any later
 % version. See LICENSE.
 %
-%   \documentclass[draft]{tiyatro}   line numbers, 1.5 spacing, "TASLAK" on the cover
+%   \documentclass[draft]{tiyatro}   line numbers, 1.15 spacing, "TASLAK" on the cover
 %   \documentclass[final]{tiyatro}   clean copy for print
 %   nohash     # at a line's start is not a heading (#sahne, #perde, #önsöz, #notlar)
 %   nonotes    leaves the director's notes (\notlar) out of this copy
@@ -20,7 +20,7 @@
 % look only needs a different theme.
 
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesClass{tiyatro}[2026/11/07 v1.7.4 Dactile stage play class]
+\ProvidesClass{tiyatro}[2026/11/07 v1.8.0 Dactile stage play class]
 
 \newif\iftiyatrodraft
 \tiyatrodrafttrue

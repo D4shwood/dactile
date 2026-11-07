@@ -474,7 +474,7 @@ pub fn template(title: &str, author: &str, lang: Lang) -> String {
         ),
     };
     format!(
-        "{help}\n\\documentclass[draft]{{tiyatro}}\n\n\\title{{{title}}}\n\\author{{{author}}}\n\\draft{{0.1}}\n\n{words}\
+        "{help}\n\\documentclass[draft]{{tiyatro}}\n\n\\title{{{title}}}\n\\author{{{author}}}\n\\editedby{{}}\n\\draft{{0.1}}\n\\copyrightnotice{{}}\n\\address{{}}\n\\email{{}}\n\\telephone{{}}\n\n{words}\
          \\begin{{document}}\n\n\\maketitle\n\\kisiler\n\n#{} {act}\n\n#{} {place}\n\n{first}\n\n\\end{{document}}\n",
         kw.0, kw.1
     )

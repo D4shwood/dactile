@@ -5,7 +5,7 @@
 //! \karakter*[Full name][Description]{SCRIPT}{alias}   in the cast table
 //! \karakter[Description]{SCRIPT}{alias}
 //! \karakter{SCRIPT}{alias}                            not in the cast table
-//! \gizlikarakter{SCRIPT}{alias}                       not in the cast table
+//! \sirkarakter{SCRIPT}{alias}                         not in the cast table
 //! \karaktergrubu[Description]{ \gkarakter*[Full name]{SCRIPT}{alias} … }
 //! \setinlinename{alias}{Name}
 //! ```
@@ -21,7 +21,7 @@ pub enum Kind {
     Cast,
     /// `\karakter{SCRIPT}{alias}`: speaks, but isn't in the cast table.
     Plain,
-    /// `\gizlikarakter`: HERKES, SEYİRCİ… speaks, isn't in the cast table.
+    /// `\sirkarakter`: HERKES, SEYİRCİ… speaks, isn't in the cast table.
     Hidden,
     /// `\gkarakter` inside a `\karaktergrubu`.
     Member,
@@ -113,7 +113,7 @@ impl Cast {
                         cast.characters.push(ch);
                     }
                 }
-                "gizlikarakter" => {
+                "sirkarakter" | "secretcharacter" | "gizlikarakter" => {
                     // A note left from `\\karakter` says nothing here.
                     let at = tex::optional(text, c.span.end).map_or(c.span.end, |o| o.span.end);
                     if let Some((script, alias, end)) = two_groups(text, at) {
@@ -371,7 +371,7 @@ pub fn declaration(s: &Spec) -> String {
         Kind::Cast if s.full.trim().is_empty() => format!("\\karakter{star}[{}]{tail}", s.desc),
         Kind::Cast => format!("\\karakter{star}[{}][{}]{tail}", s.full, s.desc),
         Kind::Plain => format!("\\karakter{tail}"),
-        Kind::Hidden => format!("\\gizlikarakter{tail}"),
+        Kind::Hidden => format!("\\sirkarakter{tail}"),
         Kind::Member if s.full.trim().is_empty() => format!("\\gkarakter{star}{tail}"),
         Kind::Member => format!("\\gkarakter{star}[{}]{tail}", s.full),
     }
@@ -790,9 +790,9 @@ fn is_reserved(alias: &str) -> bool {
 #[rustfmt::skip]
 const RESERVED: &[&str] = &[
     // The class
-    "karakter", "gizlikarakter", "karaktergrubu", "gkarakter", "gcharacter", "chargroup",
+    "karakter", "sirkarakter", "secretcharacter", "gizlikarakter", "karaktergrubu", "gkarakter", "gcharacter", "chargroup",
     "setinlinename", "setmaxnamewidth", "action", "stagedir", "middir", "ic", "beat", "sahne",
-    "scene", "perde", "act", "kisiler", "draft", "copyrightnotice", "address", "telephone",
+    "scene", "perde", "act", "kisiler", "draft", "editedby", "dramatispersonae", "coverstyle", "caststyle", "scenetitleflush", "copyrightnotice", "address", "telephone",
     "email", "ru", "en", "de", "fr", "el", "yenidil", "fontyukle", "theact", "thescene",
     "namefont", "starfont", "actionfont", "castfont",
     // TeX and LaTeX
@@ -959,7 +959,7 @@ mod tests {
             ..Spec::default()
         };
         let out = apply(PLAY, &[add(PLAY, &cast, &spec, None)]);
-        assert!(out.contains("\\gizlikarakter{HERKES}{hep}\n\\karakter[Bir başkası]{YOLCU}{yo}\n"));
+        assert!(out.contains("\\sirkarakter{HERKES}{hep}\n\\karakter[Bir başkası]{YOLCU}{yo}\n"));
         assert_eq!(Cast::of_play(&out).characters.len(), 7);
 
         let member = Spec {

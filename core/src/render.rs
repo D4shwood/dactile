@@ -418,8 +418,9 @@ fn build(text: &str, doc: &Doc, opts: Options<'_>, mut cache: Option<&mut Cache>
                 }
                 seen_act = true;
             }
-            let before =
-                matches!(kind, Kind::Act { .. } | Kind::Section { .. }) || cmd == "\\kisiler";
+            let before = matches!(kind, Kind::Act { .. } | Kind::Section { .. })
+                || cmd == "\\kisiler"
+                || cmd == "\\kisiler*";
             if pages && (before || break_next) && !matches!(kind, Kind::Blank) {
                 b.gap();
                 break_next = false;
@@ -1227,7 +1228,7 @@ impl Builder<'_> {
             }
             Kind::Other => match self.text[span.clone()].trim() {
                 "\\maketitle" => self.cover(b, lead, span.end),
-                "\\kisiler" => self.cast_table(b, lead, span.end),
+                "\\kisiler" | "\\kisiler*" => self.cast_table(b, lead, span.end),
                 cmd if is_page_break(cmd) => {
                     let s = lang::l("· yeni sayfa ·", "· new page ·");
                     let glyphs = chip(s, Style::Faint, lead);
@@ -1334,6 +1335,10 @@ impl Builder<'_> {
             rows.push(blank());
             rows.push((text(&a, Style::Text), Align::Center, 0));
         }
+        if let Some(e) = get("editedby") {
+            let line = format!("{}: {e}", lang::l("Düzenleyen", "Edited by"));
+            rows.push((text(&line, Style::Text), Align::Center, 0));
+        }
         rows.push(blank());
         if info::is_final(self.text) {
             let starred: Vec<String> = self
@@ -1423,7 +1428,14 @@ impl Builder<'_> {
         let mut rows = vec![
             (Vec::new(), Align::Center, 0),
             (
-                text(lang::l("KİŞİLER", "CAST"), Style::Heading),
+                text(
+                    if info::latin_cast(self.text) {
+                        "DRAMATIS PERSONAE"
+                    } else {
+                        lang::l("KİŞİLER", "CAST")
+                    },
+                    Style::Heading,
+                ),
                 Align::Center,
                 0,
             ),

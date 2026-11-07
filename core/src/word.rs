@@ -189,7 +189,12 @@ fn inline(text: &str, range: Range<usize>, doc: &Doc, dialogue: bool, look: Look
 
 fn cast_rows(text: &str, cast: &Cast) -> String {
     let full = |c: &cast::Character| c.full.clone().unwrap_or_else(|| c.script.clone());
-    let mut out = line("Heading1", lang::l("KİŞİLER", "CHARACTERS"));
+    let title = if info::latin_cast(text) {
+        "DRAMATIS PERSONAE"
+    } else {
+        lang::l("KİŞİLER", "CHARACTERS")
+    };
+    let mut out = line("Heading1", title);
     let person = |c: &cast::Character| {
         let mut r = run(&full(c), if c.star { BOLD } else { PLAIN });
         if let Some(d) = c.desc.as_deref().filter(|d| !d.trim().is_empty()) {
@@ -344,6 +349,11 @@ fn document_xml(text: &str, doc: &Doc, title: &str, author: &str) -> String {
     }
     if !author.is_empty() {
         out.push_str(&line("Author", author));
+    }
+    let editor = tex::unescape_text(&info::get(text, "editedby").unwrap_or_default());
+    if !editor.trim().is_empty() {
+        let said = format!("{}: {}", lang::l("Düzenleyen", "Edited by"), editor.trim());
+        out.push_str(&line("Author", &said));
     }
     if !doc.cast.characters.is_empty() {
         out.push_str(&cast_rows(text, &doc.cast));
