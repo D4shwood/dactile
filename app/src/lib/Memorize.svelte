@@ -121,7 +121,7 @@
   }
   .head strong {
     font: 600 15px var(--serif);
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   .muted {
     color: var(--chrome-muted);
@@ -164,7 +164,7 @@
   .heading {
     margin-top: 1em;
     font-weight: 700;
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   .direction {
     font-style: italic;
@@ -175,7 +175,7 @@
   }
   .asked {
     padding: 0.4em 0.6em;
-    border-left: 3px solid var(--claret);
+    border-left: 3px solid var(--accent-ink);
     color: var(--chrome-fg);
     font-weight: 600;
   }

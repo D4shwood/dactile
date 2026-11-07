@@ -125,7 +125,7 @@
   }
   .failed {
     margin: 6px 0 0;
-    color: var(--claret);
+    color: var(--accent-ink);
     font-size: 12px;
     overflow-wrap: anywhere;
   }

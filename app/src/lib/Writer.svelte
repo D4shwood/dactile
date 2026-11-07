@@ -5,7 +5,7 @@
   import { EditorView } from "@codemirror/view";
   import { redo, selectAll, undo } from "@codemirror/commands";
   import { openSearchPanel } from "@codemirror/search";
-  import { api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Files, type Made, type Memo, type Summary, type NoteCard, type Opened, type PlaySettings, type Preview, type Settings } from "./api";
+  import { api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Files, type Look, type Made, type Memo, type Summary, type NoteCard, type Opened, type PlaySettings, type Preview, type Settings } from "./api";
   import { focus, setCards, setDim, setFocus } from "./focus";
   import { blockAt, currentView, extensions, insertSnippet, typeBackslash, openCover, pickNote, setNotes, setSource, setView } from "./editor";
   import { BACKSTAGE, type Act } from "./ribbon";
@@ -25,6 +25,8 @@
   import Board from "./Board.svelte";
   import Notes from "./Notes.svelte";
   import FileList from "./FileList.svelte";
+  import LookForm from "./LookForm.svelte";
+  import { applyLook, pickLook } from "./look";
   import Temporary from "./Temporary.svelte";
 
   let {
@@ -46,10 +48,12 @@
   let folded = $state(first.ribbon_folded);
   let zoom = $state(first.page_zoom || 100);
   let theme = $state(first.theme || "paper");
+  /// The rest of the look; the page's zoom and theme have keys of their own.
+  let look = $state(pickLook(first));
   let source = $state(false);
   let typewriter = $state(false);
   /// What stands beside the page.
-  let side = $state<"" | "pdf" | "notes" | "cast" | "files">("");
+  let side = $state<"" | "pdf" | "notes" | "cast" | "files" | "look">("");
   let pdf: Pdf | undefined = $state();
   let files = $state<Files | null>(null);
   /// The temporary folder's warning, put away for this play.
@@ -530,6 +534,17 @@
     api.set("theme", t);
   }
 
+  function setLook<K extends keyof Look>(key: K, value: Look[K]) {
+    if (key === "theme") setTheme(value as string);
+    else if (key === "page_zoom") setZoom(value as number);
+    else {
+      look[key] = value;
+      applyLook({ ...look, theme, page_zoom: zoom });
+      api.set(key, value).catch((e) => say(String(e), true));
+      requestAnimationFrame(() => view.requestMeasure());
+    }
+  }
+
   // ------------------------------------------------------------ actions
 
   async function clip(what: "copy" | "cut" | "paste") {
@@ -605,7 +620,8 @@
         openNotes();
         break;
       case "files":
-        side = side === "files" ? "" : "files";
+      case "look":
+        side = side === id ? "" : id;
         showNotes();
         keepCursor();
         break;
@@ -1002,6 +1018,15 @@
           <div class="list"><FileList {tr} {files} open={leave} reload={loadFiles} /></div>
         {/if}
       </aside>
+    {:else if side === "look"}
+      <aside class="files">
+        <div class="head">
+          <strong>{l("Görünüş ayarları", "Appearance")}</strong>
+          <span class="grow"></span>
+          <button title={l("Kapat", "Close")} onclick={() => key("look")}>✕</button>
+        </div>
+        <div class="list"><LookForm {tr} look={{ ...look, theme, page_zoom: zoom }} set={setLook} /></div>
+      </aside>
     {:else if side === "cast"}
       <Cast
         {tr}
@@ -1285,7 +1310,7 @@
   .desk.plain .page {
     box-shadow: none;
     width: auto;
-    max-width: calc(52em * var(--z));
+    max-width: calc((var(--page-width) + 8) * 1em * var(--z));
     min-height: 0;
   }
   .left > :global(.board),
@@ -1296,7 +1321,7 @@
   }
   .page {
     --z: 1;
-    width: calc(44em * var(--z));
+    width: calc(var(--page-width) * 1em * var(--z));
     max-width: calc(100% - 32px);
     margin: 0 auto;
     background: var(--page);
@@ -1305,7 +1330,7 @@
       0 1px 2px rgba(0, 0, 0, 0.12),
       0 6px 24px rgba(0, 0, 0, 0.14);
     padding: calc(3.2em * var(--z)) calc(3.6em * var(--z));
-    font-size: calc(17px * var(--z));
+    font-size: calc(var(--page-size) * var(--z));
     min-height: calc(62em * var(--z));
     user-select: text;
   }
@@ -1326,7 +1351,7 @@
     color: var(--chrome-muted);
   }
   .status .warn {
-    color: var(--claret);
+    color: var(--accent-ink);
     font-weight: 600;
   }
   .zoom {
@@ -1339,23 +1364,23 @@
   /* ---- the page's text ---- */
   .page :global(.cm-editor) {
     background: transparent;
-    font-family: var(--serif);
+    font-family: var(--page-font);
     font-size: 1em;
-    line-height: 1.55;
+    line-height: var(--line-spacing);
   }
   .page :global(.cm-scroller) {
-    font-family: var(--serif);
-    line-height: 1.55;
+    font-family: var(--page-font);
+    line-height: var(--line-spacing);
   }
   .page :global(.cm-editor.cm-focused) {
     outline: none;
   }
   .page :global(.cm-content) {
-    caret-color: var(--claret);
+    caret-color: var(--accent-ink);
     padding: 0;
   }
   .page :global(.cm-cursor) {
-    border-left: 2px solid var(--claret);
+    border-left: 2px solid var(--accent-ink);
     animation: blink 1.1s steps(1) infinite;
   }
   @keyframes blink {
@@ -1499,13 +1524,13 @@
   .page :global(.cm-folded) {
     margin: 0.4em 0;
     padding: 0.2em 0.6em;
-    border-left: 2px solid var(--claret);
+    border-left: 2px solid var(--accent-ink);
     color: var(--faint);
     font-style: italic;
     cursor: pointer;
   }
   .page :global(.cm-folded:hover) {
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   .page :global(.cm-dimmed .cm-line:not(.cm-here)),
   .page :global(.cm-dimmed .cm-cover) {
@@ -1602,7 +1627,7 @@
     font-weight: 600;
   }
   :global(.spell-menu .spell-learn) {
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   :global(.spell-menu hr) {
     border: 0;
@@ -1748,7 +1773,7 @@
   }
   .backstage h3 {
     margin: 18px 0 4px;
-    color: var(--claret);
+    color: var(--accent-ink);
     font-size: 14px;
   }
   .backstage ul {
@@ -1794,7 +1819,7 @@
   }
   .sheet h2 {
     margin-top: 0;
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   .sheet td:first-child {
     font-family: var(--mono);

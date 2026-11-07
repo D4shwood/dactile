@@ -134,13 +134,13 @@
     background: var(--chrome-2);
   }
   .bar :global(button:focus-visible) {
-    outline: 2px solid var(--claret);
+    outline: 2px solid var(--accent-ink);
     outline-offset: -1px;
   }
   .bar :global(button.on) {
     background: var(--chrome-2);
     border-color: var(--chrome-line);
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   .bar :global(button:disabled) {
     opacity: 0.35;
@@ -165,6 +165,6 @@
     background: var(--chrome-2);
     border: 1px solid var(--chrome-line);
     border-radius: 3px;
-    caret-color: var(--claret);
+    caret-color: var(--accent-ink);
   }
 </style>

@@ -24,12 +24,22 @@ export interface TemplateCard {
   kind: "blank" | "built-in" | "own";
 }
 
-export interface Settings {
+/// How the app and its page look.
+export interface Look {
+  theme: string;
+  accent: string;
+  page_font: string;
+  page_size: number;
+  line_spacing: number;
+  page_width: number;
+  page_zoom: number;
+  animations: boolean;
+}
+
+export interface Settings extends Look {
   plays_dir: string;
   author: string;
   lang: "tr" | "en";
-  theme: string;
-  page_zoom: number;
   ribbon_folded: boolean;
   viewer: Viewer;
 }

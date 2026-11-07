@@ -932,7 +932,7 @@
     background: var(--chrome-2);
     border: 1px solid var(--chrome-line);
     border-radius: 3px;
-    caret-color: var(--claret);
+    caret-color: var(--accent-ink);
   }
   .print .word {
     padding: 2px 10px;
@@ -944,7 +944,7 @@
     cursor: pointer;
   }
   .print .word:focus-visible {
-    outline: 2px solid var(--claret);
+    outline: 2px solid var(--accent-ink);
   }
   .unhide {
     position: absolute;
@@ -1007,7 +1007,7 @@
     background: var(--chrome-2);
     border: 1px solid var(--chrome-line);
     border-radius: 3px;
-    caret-color: var(--claret);
+    caret-color: var(--accent-ink);
   }
   .muted {
     color: var(--chrome-muted);
@@ -1057,10 +1057,10 @@
     cursor: pointer;
   }
   .tabs button.on {
-    border-bottom-color: var(--claret);
+    border-bottom-color: var(--accent-ink);
   }
   .tabs button:focus-visible {
-    outline: 2px solid var(--claret);
+    outline: 2px solid var(--accent-ink);
     outline-offset: -2px;
   }
   .lens {
@@ -1077,7 +1077,7 @@
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
   }
   .lens.border {
-    outline: 2px solid var(--claret);
+    outline: 2px solid var(--accent-ink);
   }
   .lens canvas {
     display: block;
@@ -1099,7 +1099,7 @@
     cursor: pointer;
   }
   .pages :global(.sheet a.link:focus-visible) {
-    outline: 2px solid var(--claret);
+    outline: 2px solid var(--accent-ink);
   }
   .pages :global(.marks) {
     position: absolute;
@@ -1238,6 +1238,7 @@
   .pages :global(.textLayer[data-main-rotation="270"]) {
     transform: rotate(270deg) translateX(-100%);
   }
+  /* On the page, white in every theme. */
   .band {
     position: fixed;
     z-index: 5;
@@ -1248,7 +1249,7 @@
   .error {
     margin: 12px;
     padding: 10px 12px;
-    border-left: 3px solid var(--claret);
+    border-left: 3px solid var(--accent-ink);
     background: var(--chrome);
     border-radius: 4px;
   }
@@ -1258,8 +1259,8 @@
     margin: 6px 0;
   }
   .error button {
-    border: 1px solid var(--claret);
-    color: var(--claret);
+    border: 1px solid var(--accent-ink);
+    color: var(--accent-ink);
     background: none;
     border-radius: 4px;
     padding: 3px 10px;

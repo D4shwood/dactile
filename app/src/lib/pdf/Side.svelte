@@ -250,10 +250,10 @@
     cursor: pointer;
   }
   .tabs button.on {
-    border-bottom-color: var(--claret);
+    border-bottom-color: var(--accent-ink);
   }
   button:focus-visible {
-    outline: 2px solid var(--claret);
+    outline: 2px solid var(--accent-ink);
     outline-offset: -2px;
   }
   .body {

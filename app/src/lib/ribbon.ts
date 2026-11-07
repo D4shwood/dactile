@@ -118,6 +118,8 @@ export const TABS: Tab[] = [
       g("Görünüş", "Look", [
         b("Tema", "Theme", "◈", "F6", k("theme")),
         b("Şeridi katla", "Fold ribbon", "⌃", "Ctrl+F1", k("fold")),
+        // Last in its tab: the letters before it stay the terminal app's.
+        b("Görünüş ayarları", "Appearance", "⚙", "", k("look")),
       ]),
       // Last in its tab: the letters before it stay the terminal app's.
       g("PDF", "PDF", [b("PDF'te göster", "Show in PDF", "⌖", "Ctrl+'", k("pdf-show"))]),
@@ -188,6 +190,7 @@ export const BACKSTAGE: Entry[] = [
   { tr: "Kaydet", en: "Save", key: "Ctrl+S", act: k("save") },
   { tr: "PDF derle", en: "Build the PDF", key: "F5", act: k("build") },
   { tr: "Dosyalarım", en: "My files", key: "", act: k("files") },
+  { tr: "Görünüş ayarları", en: "Appearance", key: "", act: k("look") },
   { tr: "Oyun ayarları", en: "Play settings", key: "", act: k("play-settings") },
   { tr: "Şablon olarak kaydet", en: "Save as a template", key: "", act: k("save-template") },
   { tr: "Dağıtım ve oyuncu kopyaları", en: "Casting and actors' copies", key: "F9", act: k("casting") },

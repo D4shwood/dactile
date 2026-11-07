@@ -293,7 +293,7 @@
   }
   .head strong {
     font: 600 15px var(--serif);
-    color: var(--claret);
+    color: var(--accent-ink);
     margin-right: 6px;
   }
   button {
@@ -343,7 +343,7 @@
     color: var(--chrome-fg);
   }
   .warn {
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   .muted {
     color: var(--chrome-muted);
@@ -406,7 +406,7 @@
   }
   .link {
     border-color: var(--claret);
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   .scroll {
     overflow: auto;
@@ -441,13 +441,13 @@
     opacity: 1;
   }
   .mark.speaks {
-    color: var(--claret);
+    color: var(--accent-ink);
     opacity: 1;
   }
   .numbers h4 {
     margin: 14px 0 6px;
     font: 600 15px var(--serif);
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   .numbers h4:first-child {
     margin-top: 0;

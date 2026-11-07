@@ -77,7 +77,7 @@
   h3 {
     margin: 0;
     font: 600 16px var(--serif);
-    color: var(--claret);
+    color: var(--accent-ink);
   }
   .hint {
     margin: 0;

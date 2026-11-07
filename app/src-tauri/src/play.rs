@@ -49,6 +49,12 @@ pub struct Settings {
     pub author: String,
     pub lang: &'static str,
     pub theme: String,
+    pub accent: String,
+    pub page_font: String,
+    pub page_size: u16,
+    pub line_spacing: u16,
+    pub page_width: u16,
+    pub animations: bool,
     pub page_zoom: u16,
     pub ribbon_folded: bool,
     pub viewer: config::Viewer,
@@ -76,6 +82,12 @@ pub fn settings(cfg: &Config) -> Settings {
         author: cfg.author.clone(),
         lang: if lang::is_tr() { "tr" } else { "en" },
         theme: cfg.theme().to_string(),
+        accent: cfg.accent.clone(),
+        page_font: cfg.page_font.clone(),
+        page_size: cfg.page_size,
+        line_spacing: cfg.line_spacing,
+        page_width: cfg.page_width,
+        animations: cfg.animations,
         page_zoom: cfg.page_zoom,
         ribbon_folded: cfg.ribbon_folded,
         viewer: cfg.viewer.clone(),
@@ -376,6 +388,16 @@ pub fn relocate(text: &str, i: usize, to: usize) -> Option<Change> {
 
 /// The settings the app changes.
 pub fn set(cfg: &mut Config, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
+    change(cfg, key, value)?;
+    cfg.save()
+}
+
+fn change(cfg: &mut Config, key: &str, value: &serde_json::Value) -> anyhow::Result<()> {
+    let number = |default: u16, least: u16, most: u16| {
+        value.as_u64().map_or(default, |n| {
+            n.clamp(u64::from(least), u64::from(most)) as u16
+        })
+    };
     match key {
         "theme" => cfg.theme = value.as_str().unwrap_or("paper").to_string(),
         "page_zoom" => cfg.page_zoom = value.as_u64().unwrap_or(100).clamp(50, 300) as u16,
@@ -384,9 +406,25 @@ pub fn set(cfg: &mut Config, key: &str, value: &serde_json::Value) -> anyhow::Re
         "plays_dir" => cfg.plays_dir = value.as_str().unwrap_or("~/Oyunlar").to_string(),
         "lang" => cfg.lang = value.as_str().unwrap_or("auto").to_string(),
         "viewer" => cfg.viewer = serde_json::from_value(value.clone())?,
+        "accent" => {
+            let a = value.as_str().filter(|a| config::ACCENTS.contains(a));
+            cfg.accent = a.unwrap_or(config::ACCENTS[0]).to_string();
+        }
+        // It goes into a style between quotes.
+        "page_font" => {
+            let font = value.as_str().unwrap_or("");
+            if font.contains(['"', '\\', ';', '\n']) {
+                anyhow::bail!("no such font");
+            }
+            cfg.page_font = font.to_string();
+        }
+        "page_size" => cfg.page_size = number(17, 12, 28),
+        "line_spacing" => cfg.line_spacing = number(155, 120, 220),
+        "page_width" => cfg.page_width = number(44, 32, 64),
+        "animations" => cfg.animations = value.as_bool().unwrap_or(true),
         _ => anyhow::bail!("no setting {key}"),
     }
-    cfg.save()
+    Ok(())
 }
 
 pub fn load_config() -> Config {
@@ -407,6 +445,25 @@ mod tests {
         let mut u: Vec<u16> = text.encode_utf16().collect();
         u.splice(c.from..c.to, c.insert.encode_utf16());
         String::from_utf16(&u).unwrap()
+    }
+
+    #[test]
+    fn the_look_stays_in_range() {
+        use serde_json::json;
+        let mut c = Config::default();
+        change(&mut c, "accent", &json!("blue")).unwrap();
+        assert_eq!(c.accent, "blue");
+        change(&mut c, "accent", &json!("pembe")).unwrap();
+        assert_eq!(c.accent, "claret");
+        change(&mut c, "page_size", &json!(99)).unwrap();
+        change(&mut c, "line_spacing", &json!(10)).unwrap();
+        change(&mut c, "page_width", &json!(52)).unwrap();
+        assert_eq!((c.page_size, c.line_spacing, c.page_width), (28, 120, 52));
+        change(&mut c, "page_font", &json!("Noto Serif")).unwrap();
+        assert!(change(&mut c, "page_font", &json!("x\"; color: red")).is_err());
+        assert_eq!(c.page_font, "Noto Serif");
+        change(&mut c, "animations", &json!(false)).unwrap();
+        assert!(!settings(&c).animations);
     }
 
     #[test]
