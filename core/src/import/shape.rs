@@ -1344,7 +1344,7 @@ impl Draft {
         self.set_cast(&linked);
     }
 
-    /// A list's DUKE OF CORNWALL who never speaks, where CORNWALL speaks and
+    /// A list's KUZEY DÜK who never speaks, where DÜK speaks and
     /// isn't on it: one person, if nobody else could be.
     fn link_names(&self, list: &str) -> String {
         let (silent, missing) = self.cast_check();
