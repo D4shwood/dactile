@@ -176,6 +176,14 @@ impl Cast {
         Cast::parse(text, source::split(text).preamble)
     }
 
+    /// Each alias as the script prints it; one not in the cast stays itself.
+    pub fn script_names(&self, aliases: &[String]) -> Vec<String> {
+        aliases
+            .iter()
+            .map(|a| self.get(a).map_or(a.clone(), |c| c.script.clone()))
+            .collect()
+    }
+
     pub fn get(&self, alias: &str) -> Option<&Character> {
         self.characters.iter().find(|c| c.alias == alias)
     }

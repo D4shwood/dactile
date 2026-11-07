@@ -43,13 +43,6 @@ pub(crate) fn plain(text: &str, range: Range<usize>, cast: &Cast) -> String {
     out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-fn names(cast: &Cast, aliases: &[String]) -> Vec<String> {
-    aliases
-        .iter()
-        .map(|a| cast.get(a).map_or(a.clone(), |c| c.script.clone()))
-        .collect()
-}
-
 /// The play's body as cues, `role` (an alias) marked as ours.
 pub fn cues(text: &str, doc: &Doc, role: &str) -> Vec<Cue> {
     let tr = crate::lang::is_tr();
@@ -98,13 +91,13 @@ pub fn cues(text: &str, doc: &Doc, role: &str) -> Vec<Cue> {
             Kind::Do { aliases, text: t } => {
                 let line = format!(
                     "({}, {})",
-                    names(&doc.cast, aliases).join(", "),
+                    doc.cast.script_names(aliases).join(", "),
                     plain(text, t.clone(), &doc.cast)
                 );
                 out.push(cue(b, None, line, false, false));
             }
             Kind::Move { enter, aliases } => {
-                let who = names(&doc.cast, aliases);
+                let who = doc.cast.script_names(aliases);
                 let verb = match (enter, who.len() > 1, tr) {
                     (true, false, true) => "girer",
                     (true, true, true) => "girerler",

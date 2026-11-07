@@ -24,6 +24,11 @@ pub fn read(path: &Path) -> Result<String> {
 /// rename, so a power cut doesn't leave an empty one. Keeps the file's
 /// permissions; a link is written through, not replaced.
 pub fn write_atomic(path: &Path, text: &str) -> Result<()> {
+    write_atomic_bytes(path, text.as_bytes())
+}
+
+/// `write_atomic`, for what isn't text.
+pub fn write_atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
     let real = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     let path = real.as_path();
     let dir = path
@@ -42,7 +47,7 @@ pub fn write_atomic(path: &Path, text: &str) -> Result<()> {
             .write(true)
             .create_new(true)
             .open(&tmp)?;
-        f.write_all(text.as_bytes())?;
+        f.write_all(bytes)?;
         f.sync_all()
     })();
     if let Err(e) = written {

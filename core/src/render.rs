@@ -26,6 +26,8 @@ pub struct Doc {
     pub body: Range<usize>,
     /// Built on the body blocks: its block indexes are relative to `body.start`.
     pub outline: Outline,
+    /// Where the scene headings stand.
+    pub scene_align: info::Side,
 }
 
 impl Doc {
@@ -46,12 +48,14 @@ impl Doc {
         if !parts.tail.is_empty() {
             blocks.extend(lex::blocks(text, parts.tail.clone(), &none));
         }
+        let scene_align = info::scene_align_in(text, parts.preamble.clone());
         Doc {
             parts,
             cast,
             blocks,
             body: body_start..body_end,
             outline,
+            scene_align,
         }
     }
 
@@ -304,6 +308,23 @@ pub fn layout_cached(text: &str, doc: &Doc, opts: Options<'_>, cache: &mut Cache
     build(text, doc, opts, Some(cache))
 }
 
+/// An entrance or exit as the class prints it: (SELİN ile OZAN girerler.)
+pub(crate) fn move_line(cast: &Cast, enter: bool, aliases: &[String]) -> String {
+    let names = cast.script_names(aliases);
+    let and = format!(" {} ", lang::l("ile", "and"));
+    let who = match names.split_last() {
+        Some((last, rest)) if !rest.is_empty() => format!("{}{and}{last}", rest.join(", ")),
+        _ => names.join(""),
+    };
+    let verb = match (enter, names.len() > 1) {
+        (true, false) => lang::l("girer", "enters"),
+        (true, true) => lang::l("girerler", "enter"),
+        (false, false) => lang::l("çıkar", "exits"),
+        (false, true) => lang::l("çıkarlar", "exit"),
+    };
+    format!("({who} {verb}.)")
+}
+
 fn build(text: &str, doc: &Doc, opts: Options<'_>, mut cache: Option<&mut Cache>) -> Layout {
     let mut b = Builder {
         text,
@@ -311,10 +332,10 @@ fn build(text: &str, doc: &Doc, opts: Options<'_>, mut cache: Option<&mut Cache>
         out: Layout::default(),
         width: opts.width.max(20),
         summaries: opts.summaries,
-        scene_align: match crate::info::scene_align(text) {
-            "left" => Align::Left,
-            "right" => Align::Right,
-            _ => Align::Center,
+        scene_align: match doc.scene_align {
+            info::Side::Left => Align::Left,
+            info::Side::Right => Align::Right,
+            info::Side::Center => Align::Center,
         },
     };
     b.out.name_width = name_column(doc, b.width);
@@ -1116,11 +1137,7 @@ impl Builder<'_> {
             }
             Kind::Section { which, title, .. } => {
                 let name = if title.trim().is_empty() {
-                    match which {
-                        lex::Section::Preface => lang::l("ÖNSÖZ", "PREFACE"),
-                        lex::Section::Notes => lang::l("REJİSÖRE NOTLAR", "NOTES FOR THE DIRECTOR"),
-                    }
-                    .to_string()
+                    which.default_title().to_string()
                 } else {
                     cast::upper_tr(title.trim())
                 };
@@ -1155,12 +1172,10 @@ impl Builder<'_> {
                 );
                 // Who is in the scene, as the class lists it under the heading.
                 if let Some(scene) = scene.filter(|s| !s.cast.is_empty()) {
-                    let names: Vec<String> = scene
+                    let glyphs: Vec<Glyph> = self
+                        .doc
                         .cast
-                        .iter()
-                        .map(|a| self.doc.cast.get(a).map_or(a.clone(), |c| c.script.clone()))
-                        .collect();
-                    let glyphs: Vec<Glyph> = names
+                        .script_names(&scene.cast)
                         .join(", ")
                         .chars()
                         .map(|c| Glyph::deco(c, Style::SceneCast, None))
@@ -1199,25 +1214,8 @@ impl Builder<'_> {
                 }
             }
             Kind::Move { enter, aliases } => {
-                // As the class prints it: (SELİN ile OZAN girerler.)
-                let names: Vec<String> = aliases
-                    .iter()
-                    .map(|a| self.doc.cast.get(a).map_or(a.clone(), |c| c.script.clone()))
-                    .collect();
-                let and = format!(" {} ", lang::l("ile", "and"));
-                let who = match names.split_last() {
-                    Some((last, rest)) if !rest.is_empty() => {
-                        format!("{}{and}{last}", rest.join(", "))
-                    }
-                    _ => names.join(""),
-                };
-                let verb = match (enter, names.len() > 1) {
-                    (true, false) => lang::l("girer", "enters"),
-                    (true, true) => lang::l("girerler", "enter"),
-                    (false, false) => lang::l("çıkar", "exits"),
-                    (false, true) => lang::l("çıkarlar", "exit"),
-                };
-                let glyphs = chip(&format!("({who} {verb}.)"), Style::Direction, lead);
+                let line = move_line(&self.doc.cast, *enter, aliases);
+                let glyphs = chip(&line, Style::Direction, lead);
                 self.flow(b, &glyphs, 0, self.width, Align::Left, Some(span.end), row);
             }
             Kind::Beat => {

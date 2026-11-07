@@ -182,11 +182,9 @@ impl Writer {
                 if let Some(e) = info::set_final(&t, fin) {
                     t = dactile::tex::apply(&t, &[e]);
                 }
-                let side = match form.get(lang::l("Sahne başlıkları", "Scene headings")) {
-                    "sol" | "left" => "left",
-                    "sağ" | "sag" | "right" => "right",
-                    _ => "center",
-                };
+                let side = form.get(lang::l("Sahne başlıkları", "Scene headings"));
+                let side = info::Side::parse(&side.replace('ğ', "g"));
+                let side = side.unwrap_or(info::Side::Center);
                 if let Some(e) = info::set_scene_align(&t, side) {
                     t = dactile::tex::apply(&t, &[e]);
                 }

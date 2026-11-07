@@ -79,6 +79,16 @@ pub enum Section {
     Notes,
 }
 
+impl Section {
+    /// Its heading when the play gives it no title.
+    pub fn default_title(self) -> &'static str {
+        match self {
+            Section::Preface => crate::lang::l("ÖNSÖZ", "PREFACE"),
+            Section::Notes => crate::lang::l("REJİSÖRE NOTLAR", "NOTES FOR THE DIRECTOR"),
+        }
+    }
+}
+
 /// What a `#word` at a line's start stands for, as the class reads it.
 pub enum Heading {
     Act,

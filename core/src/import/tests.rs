@@ -479,14 +479,8 @@ fn notes_go_where_they_are_marked() {
     assert!(paras[1].runs.last().unwrap().note);
 }
 
-/// Two plays in a book, each with a page of its title; a book's PDF comes
-/// so, with pages.
 fn numbered(lines: &[&str]) -> Draft {
-    let mut text = String::new();
-    for l in lines {
-        text.push_str(l);
-        text.push_str("\n\n");
-    }
+    let text = lines.join("\n\n") + "\n\n";
     shape(&plain::read(&text, false), Lang::Tr)
 }
 
@@ -552,6 +546,8 @@ fn scene_headings_are_marked_by_hand_both_ways() {
     assert_eq!(scenes_of(&d), ["KIYI KAHVESİ", "Fener Yolu"]);
 }
 
+/// Two plays in a book, each with a page of its title; a book's PDF comes
+/// so, with pages.
 fn volume() -> Source {
     let mut paras = Vec::new();
     let mut add = |page: usize, t: String| {

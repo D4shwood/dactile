@@ -253,12 +253,12 @@ fn numbered_scenes(paras: &[Para]) -> HashSet<usize> {
     let mut next = 1;
     for (i, p) in paras.iter().enumerate() {
         let t = p.text();
-        if heading(&t).is_some() {
-            continue;
-        }
         let Some((n, name, caps)) = numbered_title(&t) else {
             continue;
         };
+        if heading(&t).is_some() {
+            continue;
+        }
         // A number or two can be missing; a new act can start counting again.
         if (next..next + 3).contains(&n) || n == 1 {
             run.push((i, name, caps));
@@ -266,14 +266,14 @@ fn numbered_scenes(paras: &[Para]) -> HashSet<usize> {
         }
     }
     // A scene's name can come back; a speaker's comes back again and again.
-    let mut names: HashSet<String> = HashSet::new();
-    let total = run.len();
-    run.retain(|r| names.insert(r.1.clone()));
-    let enough = if run.iter().all(|r| r.2) { 2 } else { 3 };
-    if run.len() < enough || total - run.len() >= run.len() {
+    let mut names = HashSet::new();
+    let unique: Vec<_> = run.iter().filter(|r| names.insert(&r.1)).collect();
+    let repeats = run.len() - unique.len();
+    let enough = if unique.iter().all(|r| r.2) { 2 } else { 3 };
+    if unique.len() < enough || repeats >= unique.len() {
         return HashSet::new();
     }
-    run.into_iter().map(|r| r.0).collect()
+    unique.into_iter().map(|r| r.0).collect()
 }
 
 /// What a paragraph marked as a scene's heading says: its place or name.
@@ -896,10 +896,9 @@ fn shape_as(src: &Source, lang: Lang, labels: Vec<Page>) -> Draft {
         let p = &paras[i];
         let t = p.text();
         let t = t.trim();
-        let found = match p.scene {
+        let found = match p.scene.or(numbered.contains(&i).then_some(true)) {
             Some(true) => Some((Level::Scene, scene_name(t))),
             Some(false) => None,
-            None if numbered.contains(&i) => Some((Level::Scene, scene_name(t))),
             None => heading(t),
         };
         i += 1;

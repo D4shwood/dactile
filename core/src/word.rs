@@ -2,12 +2,13 @@
 //! parts in the same order as the PDF, in styles a word processor can change.
 
 use crate::cast::{self, Cast, Row};
+use crate::info::{self, Side};
 use crate::lang;
-use crate::lex::{self, Inline, Kind, Section};
+use crate::lex::{self, Inline, Kind};
 use crate::outline::roman;
-use crate::render::Doc;
-use crate::{info, tex};
-use anyhow::{Context, Result};
+use crate::render::{Doc, move_line};
+use crate::tex;
+use anyhow::Result;
 use std::io::{Cursor, Write};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -35,12 +36,26 @@ fn escape(s: &str) -> String {
         .replace('"', "&quot;")
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 struct Look {
     bold: bool,
     italic: bool,
     under: bool,
 }
+
+const PLAIN: Look = Look {
+    bold: false,
+    italic: false,
+    under: false,
+};
+const BOLD: Look = Look {
+    bold: true,
+    ..PLAIN
+};
+const ITALIC: Look = Look {
+    italic: true,
+    ..PLAIN
+};
 
 /// One run of text; a line break inside it stays a line break.
 fn run(text: &str, look: Look) -> String {
@@ -81,11 +96,16 @@ fn para(style: &str, extra: &str, runs: &str) -> String {
     format!(r#"<w:p><w:pPr><w:pStyle w:val="{style}"/>{extra}</w:pPr>{runs}</w:p>"#)
 }
 
-fn align(side: &str) -> &'static str {
+/// A paragraph of one plain run.
+fn line(style: &str, text: &str) -> String {
+    para(style, "", &run(text, PLAIN))
+}
+
+fn align(side: Side) -> &'static str {
     match side {
-        "left" => r#"<w:jc w:val="left"/>"#,
-        "right" => r#"<w:jc w:val="right"/>"#,
-        _ => r#"<w:jc w:val="center"/>"#,
+        Side::Left => r#"<w:jc w:val="left"/>"#,
+        Side::Right => r#"<w:jc w:val="right"/>"#,
+        Side::Center => r#"<w:jc w:val="center"/>"#,
     }
 }
 
@@ -168,25 +188,12 @@ fn inline(text: &str, range: Range<usize>, doc: &Doc, dialogue: bool, look: Look
 }
 
 fn cast_rows(text: &str, cast: &Cast) -> String {
-    let mut out = para(
-        "Heading1",
-        "",
-        &run(lang::l("KİŞİLER", "CHARACTERS"), Look::default()),
-    );
+    let full = |c: &cast::Character| c.full.clone().unwrap_or_else(|| c.script.clone());
+    let mut out = line("Heading1", lang::l("KİŞİLER", "CHARACTERS"));
     let person = |c: &cast::Character| {
-        let name = c.full.clone().unwrap_or_else(|| c.script.clone());
-        let mut r = run(
-            &name,
-            Look {
-                bold: c.star,
-                ..Look::default()
-            },
-        );
+        let mut r = run(&full(c), if c.star { BOLD } else { PLAIN });
         if let Some(d) = c.desc.as_deref().filter(|d| !d.trim().is_empty()) {
-            r.push_str(&run(
-                &format!(" — {}", tex::unescape_text(d)),
-                Look::default(),
-            ));
+            r.push_str(&run(&format!(" — {}", tex::unescape_text(d)), PLAIN));
         }
         r
     };
@@ -201,36 +208,22 @@ fn cast_rows(text: &str, cast: &Cast) -> String {
                 let names: Vec<String> = g
                     .members
                     .iter()
-                    .map(|&m| {
-                        let c = &cast.characters[m];
-                        c.full.clone().unwrap_or_else(|| c.script.clone())
-                    })
+                    .map(|&m| full(&cast.characters[m]))
                     .collect();
                 let line = format!("{} ({})", tex::unescape_text(&g.desc), names.join(", "));
-                out.push_str(&para("Normal", "", &run(&line, Look::default())));
+                out.push_str(&self::line("Normal", &line));
             }
         }
     }
     let others = cast::others(text);
     if !others.trim().is_empty() {
-        out.push_str(&para("Normal", "", &run(others.trim(), Look::default())));
+        out.push_str(&line("Normal", others.trim()));
     }
     out
 }
 
-fn names(doc: &Doc, aliases: &[String]) -> Vec<String> {
-    aliases
-        .iter()
-        .map(|a| doc.cast.get(a).map_or(a.clone(), |c| c.script.clone()))
-        .collect()
-}
-
 fn body(text: &str, doc: &Doc) -> String {
-    let side = info::scene_align(text);
-    let italic = Look {
-        italic: true,
-        ..Look::default()
-    };
+    let side = align(doc.scene_align);
     let mut out = String::new();
     let mut acts = doc.outline.acts.iter();
     // Prose: its source lines are one paragraph, up to a blank line.
@@ -248,15 +241,9 @@ fn body(text: &str, doc: &Doc) -> String {
                     .cast
                     .get(alias)
                     .map_or(alias.as_str(), |c| c.script.as_str());
-                let mut runs = run(
-                    who,
-                    Look {
-                        bold: true,
-                        ..Look::default()
-                    },
-                );
-                runs.push_str(&run("\t", Look::default()));
-                runs.push_str(&inline(text, t.clone(), doc, dialogue, Look::default()));
+                let mut runs = run(who, BOLD);
+                runs.push_str(&run("\t", PLAIN));
+                runs.push_str(&inline(text, t.clone(), doc, dialogue, PLAIN));
                 out.push_str(&para("Speech", "", &runs));
             }
             Kind::Do { aliases, text: t } => {
@@ -264,21 +251,21 @@ fn body(text: &str, doc: &Doc) -> String {
                     .iter()
                     .map(|a| doc.cast.inline_name(a).unwrap_or_else(|| a.clone()))
                     .collect();
-                let mut runs = run(&format!("({} ", who.join(", ")), italic);
-                runs.push_str(&inline(text, t.clone(), doc, dialogue, italic));
-                runs.push_str(&run(")", italic));
+                let mut runs = run(&format!("({} ", who.join(", ")), ITALIC);
+                runs.push_str(&inline(text, t.clone(), doc, dialogue, ITALIC));
+                runs.push_str(&run(")", ITALIC));
                 out.push_str(&para("Direction", "", &runs));
             }
             Kind::Action { text: t } => {
                 out.push_str(&para(
                     "Direction",
                     "",
-                    &inline(text, t.clone(), doc, false, italic),
+                    &inline(text, t.clone(), doc, false, ITALIC),
                 ));
             }
             Kind::Stage { text: t, right } => {
-                let at = align(if *right { "right" } else { "center" });
-                let look = if *right { italic } else { Look::default() };
+                let at = align(if *right { Side::Right } else { Side::Center });
+                let look = if *right { ITALIC } else { PLAIN };
                 out.push_str(&para(
                     "Normal",
                     at,
@@ -286,31 +273,14 @@ fn body(text: &str, doc: &Doc) -> String {
                 ));
             }
             Kind::Move { enter, aliases } => {
-                let list = names(doc, aliases);
-                let and = format!(" {} ", lang::l("ile", "and"));
-                let who = match list.split_last() {
-                    Some((last, rest)) if !rest.is_empty() => {
-                        format!("{}{and}{last}", rest.join(", "))
-                    }
-                    _ => list.join(""),
-                };
-                let verb = match (*enter, list.len() > 1) {
-                    (true, false) => lang::l("girer", "enters"),
-                    (true, true) => lang::l("girerler", "enter"),
-                    (false, false) => lang::l("çıkar", "exits"),
-                    (false, true) => lang::l("çıkarlar", "exit"),
-                };
-                out.push_str(&para(
-                    "Direction",
-                    "",
-                    &run(&format!("({who} {verb}.)"), italic),
-                ));
+                let said = move_line(&doc.cast, *enter, aliases);
+                out.push_str(&para("Direction", "", &run(&said, ITALIC)));
             }
             Kind::Beat => {
                 out.push_str(&para(
                     "Direction",
                     "",
-                    &run(lang::l("(Sus.)", "(Pause.)"), italic),
+                    &run(lang::l("(Sus.)", "(Pause.)"), ITALIC),
                 ));
             }
             Kind::Act { title, .. } => {
@@ -319,11 +289,7 @@ fn body(text: &str, doc: &Doc) -> String {
                 if !title.trim().is_empty() {
                     s.push_str(&format!(": {}", title.trim()));
                 }
-                out.push_str(&para(
-                    "Heading1",
-                    "<w:pageBreakBefore/>",
-                    &run(&s, Look::default()),
-                ));
+                out.push_str(&para("Heading1", "<w:pageBreakBefore/>", &run(&s, PLAIN)));
             }
             Kind::Scene { place, .. } => {
                 let scene = doc.scene_of(b).map(|s| &doc.outline.scenes[s]);
@@ -331,26 +297,22 @@ fn body(text: &str, doc: &Doc) -> String {
                 if !place.trim().is_empty() {
                     s.push_str(&format!(" — {}", place.trim()));
                 }
-                out.push_str(&para("Heading2", align(side), &run(&s, Look::default())));
+                out.push_str(&para("Heading2", side, &run(&s, PLAIN)));
                 if let Some(scene) = scene.filter(|s| !s.cast.is_empty()) {
-                    let who = names(doc, &scene.cast).join(", ");
-                    out.push_str(&para("SceneCast", align(side), &run(&who, Look::default())));
+                    let who = doc.cast.script_names(&scene.cast).join(", ");
+                    out.push_str(&para("SceneCast", side, &run(&who, PLAIN)));
                 }
             }
             Kind::Section { which, title, .. } => {
                 let name = if title.trim().is_empty() {
-                    match which {
-                        Section::Preface => lang::l("ÖNSÖZ", "PREFACE"),
-                        Section::Notes => lang::l("REJİSÖRE NOTLAR", "NOTES FOR THE DIRECTOR"),
-                    }
-                    .to_string()
+                    which.default_title().to_string()
                 } else {
                     title.trim().to_string()
                 };
                 out.push_str(&para(
                     "Heading1",
                     "<w:pageBreakBefore/>",
-                    &run(&name, Look::default()),
+                    &run(&name, PLAIN),
                 ));
             }
             Kind::Other | Kind::Unknown { .. } => {
@@ -361,15 +323,9 @@ fn body(text: &str, doc: &Doc) -> String {
                     && !t[1..].contains('\\');
                 if !t.is_empty() && !only_a_command {
                     if !prose.is_empty() {
-                        prose.push_str(&run(" ", Look::default()));
+                        prose.push_str(&run(" ", PLAIN));
                     }
-                    prose.push_str(&inline(
-                        text,
-                        block.span.clone(),
-                        doc,
-                        false,
-                        Look::default(),
-                    ));
+                    prose.push_str(&inline(text, block.span.clone(), doc, false, PLAIN));
                 }
             }
             Kind::Comment | Kind::Blank => {}
@@ -381,15 +337,13 @@ fn body(text: &str, doc: &Doc) -> String {
     out
 }
 
-fn document_xml(text: &str, doc: &Doc) -> String {
-    let title = tex::unescape_text(&info::get(text, "title").unwrap_or_default());
-    let author = tex::unescape_text(&info::get(text, "author").unwrap_or_default());
+fn document_xml(text: &str, doc: &Doc, title: &str, author: &str) -> String {
     let mut out = String::new();
     if !title.is_empty() {
-        out.push_str(&para("Title", "", &run(&title, Look::default())));
+        out.push_str(&line("Title", title));
     }
     if !author.is_empty() {
-        out.push_str(&para("Author", "", &run(&author, Look::default())));
+        out.push_str(&line("Author", author));
     }
     if !doc.cast.characters.is_empty() {
         out.push_str(&cast_rows(text, &doc.cast));
@@ -418,7 +372,7 @@ pub fn document(text: &str) -> Result<Vec<u8>> {
     );
     let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
     let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
-    let body = document_xml(text, &doc);
+    let body = document_xml(text, &doc, &title, &author);
     for (name, data) in [
         ("[Content_Types].xml", CONTENT_TYPES),
         ("_rels/.rels", RELS),
@@ -464,10 +418,7 @@ pub fn target(play: &Path) -> PathBuf {
 /// Writes the play beside itself as a `.docx`, and says where.
 pub fn export(play: &Path, text: &str) -> Result<PathBuf> {
     let out = target(play);
-    let bytes = document(text)?;
-    let tmp = out.with_extension("docx.tmp");
-    std::fs::write(&tmp, bytes).with_context(|| format!("{}", tmp.display()))?;
-    std::fs::rename(&tmp, &out).with_context(|| format!("{}", out.display()))?;
+    crate::file::write_atomic_bytes(&out, &document(text)?)?;
     Ok(out)
 }
 

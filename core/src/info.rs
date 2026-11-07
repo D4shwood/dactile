@@ -85,56 +85,105 @@ pub fn has_option(text: &str, option: &str) -> bool {
 }
 
 fn documentclass_option(text: &str) -> Option<(std::ops::Range<usize>, &str)> {
-    let pre = source::split(text).preamble;
-    let c = tex::commands(text, pre)
-        .into_iter()
-        .find(|c| c.name == "documentclass")?;
-    let o = tex::optional(text, c.span.end)?;
+    class_option_in(text, source::split(text).preamble)
+}
+
+fn class_option_in(
+    text: &str,
+    preamble: std::ops::Range<usize>,
+) -> Option<(std::ops::Range<usize>, &str)> {
+    let o = tex::optional(text, class_end(text, preamble)?)?;
     Some((o.inner_span.clone(), o.inner))
 }
 
-/// Where the scene headings stand, by the class's option: `left`, `right`
-/// or `center`.
-pub fn scene_align(text: &str) -> &'static str {
-    let Some((_, opts)) = documentclass_option(text) else {
-        return "center";
-    };
-    // The last one counts, as in the class.
-    let side = opts.split(',').rev().find_map(|o| match o.trim() {
-        "left" | "sol" => Some("left"),
-        "right" | "sag" => Some("right"),
-        "center" | "orta" => Some("center"),
-        _ => None,
-    });
-    side.unwrap_or("center")
+/// Where `\documentclass` itself ends: its options, if any, start there.
+fn class_end(text: &str, preamble: std::ops::Range<usize>) -> Option<usize> {
+    let c = tex::commands(text, preamble)
+        .into_iter()
+        .find(|c| c.name == "documentclass")?;
+    Some(c.span.end)
 }
 
-/// Sets where the scene headings stand; `center`, the class's own, leaves no
-/// option behind.
-pub fn set_scene_align(text: &str, side: &str) -> Option<Edit> {
-    if scene_align(text) == side {
-        return None;
-    }
-    const SIDES: [&str; 6] = ["left", "sol", "right", "sag", "center", "orta"];
-    let want = (side != "center").then_some(side);
+/// Rewrites the class's options: those `drop` names go, `add` comes last.
+fn set_class_options(text: &str, drop: impl Fn(&str) -> bool, add: Option<&str>) -> Option<Edit> {
     match documentclass_option(text) {
         Some((range, opts)) => {
             let mut parts: Vec<&str> = opts
                 .split(',')
                 .map(str::trim)
-                .filter(|o| !o.is_empty() && !SIDES.contains(o))
+                .filter(|o| !o.is_empty() && !drop(o))
                 .collect();
-            parts.extend(want);
+            parts.extend(add);
             Some(Edit::new(range, parts.join(",")))
         }
         None => {
-            let pre = source::split(text).preamble;
-            let c = tex::commands(text, pre)
-                .into_iter()
-                .find(|c| c.name == "documentclass")?;
-            Some(Edit::new(c.span.end..c.span.end, format!("[{}]", want?)))
+            let at = class_end(text, source::split(text).preamble)?;
+            Some(Edit::new(at..at, format!("[{}]", add?)))
         }
     }
+}
+
+/// Where the scene headings stand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Side {
+    Left,
+    Center,
+    Right,
+}
+
+impl Side {
+    /// A class option's side, in either language.
+    pub fn parse(option: &str) -> Option<Side> {
+        match option {
+            "left" | "sol" => Some(Side::Left),
+            "right" | "sag" => Some(Side::Right),
+            "center" | "orta" => Some(Side::Center),
+            _ => None,
+        }
+    }
+
+    /// The class option that asks for it.
+    pub fn option(self) -> &'static str {
+        match self {
+            Side::Left => "left",
+            Side::Center => "center",
+            Side::Right => "right",
+        }
+    }
+
+    /// The next way round: center, left, right.
+    pub fn next(self) -> Side {
+        match self {
+            Side::Center => Side::Left,
+            Side::Left => Side::Right,
+            Side::Right => Side::Center,
+        }
+    }
+}
+
+/// Where the scene headings stand, by the class's option.
+pub fn scene_align(text: &str) -> Side {
+    scene_align_in(text, source::split(text).preamble)
+}
+
+/// The same, for a preamble already found.
+pub(crate) fn scene_align_in(text: &str, preamble: std::ops::Range<usize>) -> Side {
+    let Some((_, opts)) = class_option_in(text, preamble) else {
+        return Side::Center;
+    };
+    // The last one counts, as in the class.
+    let side = opts.split(',').rev().find_map(|o| Side::parse(o.trim()));
+    side.unwrap_or(Side::Center)
+}
+
+/// Sets where the scene headings stand; the center, the class's own, leaves
+/// no option behind.
+pub fn set_scene_align(text: &str, side: Side) -> Option<Edit> {
+    if scene_align(text) == side {
+        return None;
+    }
+    let want = (side != Side::Center).then_some(side.option());
+    set_class_options(text, |o| Side::parse(o).is_some(), want)
 }
 
 /// Switches `\documentclass[draft]` and `[final]`.
@@ -144,27 +193,10 @@ pub fn set_final(text: &str, fin: bool) -> Option<Edit> {
     } else {
         ("draft", "final")
     };
-    match documentclass_option(text) {
-        Some((range, opts)) => {
-            let mut parts: Vec<&str> = opts
-                .split(',')
-                .map(str::trim)
-                .filter(|o| !o.is_empty() && *o != other)
-                .collect();
-            if parts.contains(&want) {
-                return None;
-            }
-            parts.push(want);
-            Some(Edit::new(range, parts.join(",")))
-        }
-        None => {
-            let pre = source::split(text).preamble;
-            let c = tex::commands(text, pre)
-                .into_iter()
-                .find(|c| c.name == "documentclass")?;
-            Some(Edit::new(c.span.end..c.span.end, format!("[{want}]")))
-        }
+    if has_option(text, want) {
+        return None;
     }
+    set_class_options(text, |o| o == other, Some(want))
 }
 
 #[cfg(test)]
@@ -176,21 +208,21 @@ mod tests {
 
     #[test]
     fn scene_headings_stand_where_the_class_says() {
-        assert_eq!(scene_align(PLAY), "center");
-        let left = apply(PLAY, &[set_scene_align(PLAY, "left").unwrap()]);
+        assert_eq!(scene_align(PLAY), Side::Center);
+        let left = apply(PLAY, &[set_scene_align(PLAY, Side::Left).unwrap()]);
         assert!(left.contains("\\documentclass[draft,left]{tiyatro}"));
-        assert_eq!(scene_align(&left), "left");
-        let right = apply(&left, &[set_scene_align(&left, "right").unwrap()]);
+        assert_eq!(scene_align(&left), Side::Left);
+        let right = apply(&left, &[set_scene_align(&left, Side::Right).unwrap()]);
         assert!(right.contains("\\documentclass[draft,right]{tiyatro}"));
-        let back = apply(&right, &[set_scene_align(&right, "center").unwrap()]);
+        let back = apply(&right, &[set_scene_align(&right, Side::Center).unwrap()]);
         assert_eq!(back, PLAY);
-        assert!(set_scene_align(PLAY, "center").is_none());
+        assert!(set_scene_align(PLAY, Side::Center).is_none());
         assert_eq!(
             scene_align("\\documentclass[sag]{tiyatro}\n\\begin{document}"),
-            "right"
+            Side::Right
         );
         let bare = "\\documentclass{tiyatro}\n\\begin{document}";
-        let t = apply(bare, &[set_scene_align(bare, "left").unwrap()]);
+        let t = apply(bare, &[set_scene_align(bare, Side::Left).unwrap()]);
         assert!(t.starts_with("\\documentclass[left]{tiyatro}"));
     }
 

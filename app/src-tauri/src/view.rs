@@ -429,7 +429,7 @@ pub fn view(text: &str) -> View {
         cast,
         blocks,
         tail,
-        scene_align: dactile::info::scene_align(text),
+        scene_align: doc.scene_align.option(),
     }
 }
 

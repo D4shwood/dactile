@@ -760,9 +760,9 @@ impl Writer {
             lang::l("sağ", "right"),
         ];
         let side = match info::scene_align(&self.buf.text) {
-            "left" => sides[1],
-            "right" => sides[2],
-            _ => sides[0],
+            info::Side::Left => sides[1],
+            info::Side::Right => sides[2],
+            info::Side::Center => sides[0],
         };
         fields.push(Field::text(
             lang::l("Sahne başlıkları", "Scene headings"),
