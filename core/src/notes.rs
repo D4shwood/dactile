@@ -998,10 +998,40 @@ pub fn copy_path(play: &Path) -> PathBuf {
     play.with_file_name(format!("{stem} - {word}.pdf"))
 }
 
+/// A few of a note's words for the margin: up to `max` characters, cut
+/// at a word.
+fn excerpt(s: &str, max: usize) -> String {
+    let s = s.split_whitespace().collect::<Vec<_>>().join(" ");
+    if s.chars().count() <= max {
+        return s;
+    }
+    let cut: String = s.chars().take(max).collect();
+    let cut = match cut.rfind(' ') {
+        Some(i) if i > max / 2 => &cut[..i],
+        _ => cut.as_str(),
+    };
+    format!("{}…", cut.trim_end_matches([',', ';', ':', '.', ' ']))
+}
+
+/// Heights in points, as the class sets the notes copy at 12pt, single
+/// spaced (a draft has more room): a line of text; a line of a margin note
+/// and the gap between two notes (`\marginparpush`).
+const TEXT_LINE: f32 = 14.5;
+const NOTE_LINE: f32 = 9.5;
+const NOTE_GAP: f32 = 2.0;
+/// Characters on a line of the margin, and of a line of dialogue.
+const MARGIN_CHARS: usize = 40;
+const TEXT_CHARS: usize = 60;
+/// At most this much of a note in the margin; the list has the rest.
+const MARGIN_MAX: usize = 220;
+
 /// The play with its open notes (and the done ones, with `done`) in the
 /// margin, each beside its line and numbered by where it is; at the end
-/// all of them with their replies. Notes on the cover or a heading only
-/// go in that list.
+/// all of them with their replies, each with its line's number, scene and
+/// page as the PDF has them. A note on a heading or on text that is no
+/// line goes beside the next line; one on the cover only in the list.
+/// Where notes crowd, the margin keeps only their numbers and names, so it
+/// never runs off the page; the list has every word.
 pub fn copy_tex(text: &str, doc: &crate::render::Doc, notes: &Notes, done: bool) -> String {
     use crate::casting::tex_text;
     use crate::lex::Kind;
@@ -1019,53 +1049,141 @@ pub fn copy_tex(text: &str, doc: &crate::render::Doc, notes: &Notes, done: bool)
         }
     };
     let body = &doc.parts.body;
-    // (where in the text, if beside a line; the note)
-    let mut taken: Vec<(Option<usize>, Option<Anchor>, &Note)> = notes
+    // A line's words: where a note can stand.
+    let words_of = |b: usize| match &doc.blocks[b].kind {
+        Kind::Line { text, .. }
+        | Kind::Do { text, .. }
+        | Kind::Action { text }
+        | Kind::Stage { text, .. } => Some(text.clone()),
+        _ => None,
+    };
+    struct Placed<'a> {
+        /// Where in the text its mark goes, beside a line.
+        at: Option<usize>,
+        /// The block of that line.
+        block: Option<usize>,
+        /// It was on this scene's heading.
+        heading: Option<usize>,
+        anchor: Option<Anchor>,
+        note: &'a Note,
+    }
+    let mut taken: Vec<Placed> = notes
         .list
         .iter()
         .filter(|n| !n.archived && (n.state == State::Open || done && n.state == State::Done))
         .map(|n| {
-            let a = ix.anchor(n);
-            let at = a.as_ref().and_then(|a| {
-                if !(body.start..body.end).contains(&a.range.start) {
-                    return None;
-                }
-                let b = doc.block_at(a.range.start)?;
-                let words = match &doc.blocks[b].kind {
-                    Kind::Line { text, .. }
-                    | Kind::Do { text, .. }
-                    | Kind::Action { text }
-                    | Kind::Stage { text, .. } => text.clone(),
-                    _ => return None,
-                };
-                if words.contains(&a.range.start) {
-                    Some(a.range.start)
-                } else if !a.quoted {
-                    Some(words.start)
+            let anchor = ix.anchor(n);
+            let mut p = Placed {
+                at: None,
+                block: None,
+                heading: None,
+                anchor: anchor.clone(),
+                note: n,
+            };
+            let Some(a) = anchor.filter(|a| (body.start..body.end).contains(&a.range.start)) else {
+                return p;
+            };
+            let Some(b) = doc.block_at(a.range.start) else {
+                return p;
+            };
+            if let Some(w) = words_of(b) {
+                p.at = Some(if w.contains(&a.range.start) {
+                    a.range.start
                 } else {
-                    None
+                    w.start
+                });
+                p.block = Some(b);
+                return p;
+            }
+            // A heading, prose, a mark like ????: beside the next line.
+            if let Some((k, w)) = (b + 1..doc.body.end).find_map(|k| words_of(k).map(|w| (k, w))) {
+                p.at = Some(w.start);
+                p.block = Some(k);
+                if matches!(doc.blocks[b].kind, Kind::Scene { .. }) {
+                    p.heading = doc.scene_of(b);
                 }
-            });
-            (at, a, n)
+            }
+            p
         })
         .collect();
-    // Numbered as they come in the play; those not beside a line last.
-    taken.sort_by_key(|(at, a, _)| (at.is_none(), at.or(a.as_ref().map(|a| a.range.start))));
+    // Numbered as they come in the play, those on a heading before the
+    // line's own; those not beside a line last.
+    taken.sort_by_key(|p| {
+        (
+            p.at.is_none(),
+            p.at,
+            p.heading.is_none(),
+            p.anchor.as_ref().map(|a| a.range.start),
+        )
+    });
+    let scene_name = |s: usize| {
+        let s = &doc.outline.scenes[s];
+        let name = if s.place.trim().is_empty() {
+            s.title()
+        } else {
+            s.place.trim().to_string()
+        };
+        tex_text(&name)
+    };
+    // How tall the text is from one line with notes to the next, in lines:
+    // the margin has that much room for the notes beside the first.
+    let tall = |b: usize| -> f32 {
+        let chars = |r: &Range<usize>| text[r.clone()].chars().count();
+        match &doc.blocks[b].kind {
+            Kind::Scene { .. } => 3.0,
+            Kind::Act { .. } | Kind::Section { .. } => 4.0,
+            Kind::Blank | Kind::Comment => 0.0,
+            _ => {
+                let r = words_of(b).unwrap_or_else(|| doc.blocks[b].span.clone());
+                chars(&r).div_ceil(TEXT_CHARS).max(1) as f32 + 0.3
+            }
+        }
+    };
+    let blocks: Vec<Option<usize>> = taken.iter().map(|p| p.at.and(p.block)).collect();
+    // For each note beside a line: how many characters of it the margin
+    // shows. Every note gets its number and name; the first on a line gets
+    // the room left, if a line of it fits.
+    let shown: Vec<usize> = (0..taken.len())
+        .map(|i| {
+            let Some(b) = blocks[i] else { return 0 };
+            if i > 0 && blocks[i - 1] == Some(b) {
+                return 0;
+            }
+            let here = blocks.iter().filter(|x| **x == Some(b)).count();
+            let next = blocks[i + 1..].iter().flatten().find(|x| **x != b).copied();
+            let to = next.unwrap_or(doc.body.end).min(doc.body.end);
+            let room = (b..to).map(&tall).sum::<f32>() * TEXT_LINE;
+            // Each note's number and name, and the gap after it.
+            let left = room - here as f32 * (NOTE_LINE + NOTE_GAP);
+            let lines = (left / NOTE_LINE).max(0.0).floor() as usize;
+            (lines * MARGIN_CHARS).min(MARGIN_MAX)
+        })
+        .collect();
     let mut edits: Vec<Edit> = Vec::new();
     let mut lit: Vec<Range<usize>> = Vec::new();
     let mut list = String::new();
-    for (k, (at, a, n)) in taken.iter().enumerate() {
+    for (k, p) in taken.iter().enumerate() {
         let num = k + 1;
+        let n = p.note;
         let c = color(&n.author);
         let said = tex_text(&n.text);
-        if let Some(at) = *at {
+        if let Some(at) = p.at {
+            let margin = if shown[k] >= MARGIN_CHARS {
+                tex_text(&excerpt(&n.text, shown[k]))
+            } else {
+                String::new()
+            };
             let mut mark = format!(
-                "\\tiyatronote{{{c}}}{{{}}}{{{num}}}{{{said}}}",
+                "\\tiyatronote{{{c}}}{{{}}}{{{num}}}{{{margin}}}",
                 who(&n.author)
             );
             // The words themselves in its colour, when that is safe: on one
             // line, nothing TeX would read inside, not inside another's.
-            if let Some(a) = a.as_ref().filter(|a| a.quoted && a.range.start == at) {
+            if let Some(a) = p
+                .anchor
+                .as_ref()
+                .filter(|a| a.quoted && a.range.start == at)
+            {
                 let words = &text[a.range.clone()];
                 let plain =
                     !words.contains(['\n', '{', '}', '%', '\\', '#', '$', '&', '^', '_', '~']);
@@ -1080,15 +1198,38 @@ pub fn copy_tex(text: &str, doc: &crate::render::Doc, notes: &Notes, done: bool)
             }
             edits.push(Edit::new(at..at, mark));
         }
-        let place = match (n.line, a.as_ref()) {
-            (_, Some(a)) => a.line,
-            (Some(l), None) => l,
-            (None, None) => 0,
-        };
-        let place = if place > 0 {
-            crate::lang::f("{}. satır", "line {}", &[&place])
-        } else {
-            String::new()
+        let place = match (p.at, p.block) {
+            (Some(_), Some(b)) => {
+                let line = format!(
+                    "{}~\\ref{{tiyatronote:{num}}}",
+                    crate::lang::l("Replik", "Line")
+                );
+                let page = format!(
+                    "{}~\\pageref{{tiyatronote:{num}}}",
+                    crate::lang::l("s.", "p.")
+                );
+                match (p.heading, doc.scene_of(b)) {
+                    (Some(s), _) => format!(
+                        "{}: {} · {line} · {page}",
+                        crate::lang::l("Sahne başı", "Scene heading"),
+                        scene_name(s)
+                    ),
+                    (None, Some(s)) => format!("{line} · {} · {page}", scene_name(s)),
+                    (None, None) => format!("{line} · {page}"),
+                }
+            }
+            _ => match (p.anchor.as_ref(), n.line) {
+                (Some(a), _) if a.range.start < body.start => {
+                    crate::lang::l("Kapak", "Cover").to_string()
+                }
+                (Some(a), _) => crate::lang::f("kaynakta {}. satır", "source line {}", &[&a.line]),
+                (None, Some(l)) => crate::lang::f(
+                    "yeri bulunamadı (kaynakta {}. satırdı)",
+                    "its place is gone (it was source line {})",
+                    &[&l],
+                ),
+                (None, None) => String::new(),
+            },
         };
         list.push_str(&format!(
             "\\tiyatronoteitem{{{c}}}{{{num}}}{{{}}}{{{place}}}{{{said}}}\n",

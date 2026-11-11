@@ -42,7 +42,8 @@
 % text, each note beside its line, numbered, in its author's colour.
 %
 %   \tiyatronotes                      in the preamble: the wide margin
-%   \tiyatronote{RRGGBB}{Who}{n}{text}  note n beside this line
+%   \tiyatronote{RRGGBB}{Who}{n}{text}  note n beside this line; \ref{tiyatronote:n}
+%                                       is that line's number, \pageref its page
 %   \tiyatronoted{RRGGBB}{words}        the words a note is about
 %   \tiyatronoteslist{Title}{...}       all of them at the end, with replies:
 %   \tiyatronoteitem{RRGGBB}{n}{Who}{where}{text}  \tiyatronotereply{RRGGBB}{Who}{text}
@@ -59,7 +60,7 @@
 % the margin, so a rehearsal can say "line 112". Dactile shows the same numbers.
 
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesExplPackage{tiyatro-core}{2026-10-30}{1.4.0}{Dactile: characters, lines, scenes, acts}
+\ProvidesExplPackage{tiyatro-core}{2026-11-11}{1.5.0}{Dactile: characters, lines, scenes, acts}
 \RequirePackage{xspace}
 
 \msg_new:nnn { tiyatro } { style }
@@ -98,6 +99,9 @@
 \bool_new:N \g__tiy_rerun_bool       % a heading showed another cast than the scene had
 \int_new:N \g__tiy_group_int
 \int_new:N \g__tiy_number_int
+\bool_new:N \g__tiy_numbers_bool    % the notes copy: numbers shown, draft or not
+\bool_new:N \g__tiy_inbox_bool      % inside a direction's box: no float there
+\tl_new:N \g__tiy_held_tl           % margin notes held until the box is set
 \dim_new:N \g__tiy_widest_dim
 \dim_new:N \g__tiy_cap_dim
 
@@ -417,7 +421,12 @@
     \noindent
     \__tiy_copy_dir_style:
     \__tiy_number:
+    \bool_gset_true:N \g__tiy_inbox_bool
     \parbox [ t ] { \linewidth } {#1}
+    \bool_gset_false:N \g__tiy_inbox_bool
+    % A note's margin text, beside the box's first line.
+    \tl_use:N \g__tiy_held_tl
+    \tl_gclear:N \g__tiy_held_tl
     \par
     \group_end:
     \__tiy_copy_end:
@@ -446,14 +455,17 @@
       }
   }
 
-% One number per line of dialogue or direction, in the margin, draft only.
+% One number per line of dialogue or direction, in the margin: counted always
+% (the notes refer to them), shown in draft mode and in the notes copy.
 \cs_new_protected:Npn \__tiy_number:
   {
-    \iftiyatrodraft
-      \int_gincr:N \g__tiy_number_int
-      \llap { \linenumberfont \int_use:N \g__tiy_number_int \hspace { \linenumbersep } }
-    \fi
+    \int_gincr:N \g__tiy_number_int
+    \bool_if:NTF \g__tiy_numbers_bool
+      { \__tiy_number_show: }
+      { \legacy_if:nT { tiyatrodraft } { \__tiy_number_show: } }
   }
+\cs_new_protected:Npn \__tiy_number_show:
+  { \llap { \linenumberfont \int_use:N \g__tiy_number_int \hspace { \linenumbersep } } }
 
 % ------------------------------------------------------------------ actor copies
 
@@ -534,22 +546,37 @@
 
 \NewDocumentCommand \tiyatronotes { }
   {
+    \bool_gset_true:N \g__tiy_numbers_bool
     \RequirePackage { xcolor }
     \geometry
       {
         left = 2.2cm , right = 6.6cm ,
         marginparwidth = 5.2cm , marginparsep = 0.7cm
       }
+    % Dactile sizes each note's words in the margin by this.
+    \setlength \marginparpush { 2pt }
   }
 
+% Note n: its number here, the line's number and page for the list at the
+% end (\ref, \pageref), and in the margin its number, who wrote it and, when
+% there is room, a few of its words. In a direction's box a float would be
+% lost: the margin text waits for the box to be set.
 \NewDocumentCommand \tiyatronote { m m m +m }
   {
+    \cs_set:cpx { @currentlabel } { \int_use:N \g__tiy_number_int }
+    \label { tiyatronote:#3 }
     \textsuperscript { \textcolor [ HTML ] {#1} { \bfseries #3 } }
+    \bool_if:NTF \g__tiy_inbox_bool
+      { \tl_gput_right:Nn \g__tiy_held_tl { \__tiy_note_margin:nnnn {#1} {#2} {#3} {#4} } }
+      { \__tiy_note_margin:nnnn {#1} {#2} {#3} {#4} }
+  }
+\cs_new_protected:Npn \__tiy_note_margin:nnnn #1#2#3#4
+  {
     \marginpar
       {
-        \raggedright \setstretch { 1 } \footnotesize
-        \textcolor [ HTML ] {#1} { \bfseries #3 \nobreakspace #2 } \par
-        #4
+        \raggedright \setstretch { 1 } \scriptsize
+        \textcolor [ HTML ] {#1} { \bfseries #3 \nobreakspace #2 }
+        \tl_if_blank:nF {#4} { \par #4 }
       }
   }
 

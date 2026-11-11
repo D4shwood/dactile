@@ -204,25 +204,32 @@ fn a_copy_with_notes() {
     assert!(tex.contains("\\tiyatronotes\n\\begin{document}"), "{tex}");
     // Beside its line, its words in its colour; numbered by place.
     assert!(tex.contains(
-        "\\se Amca, yine mi \\tiyatronote{B0444A}{Claude}{1}{“taş durdu” → taşı durdu}\\tiyatronoted{B0444A}{taş durdu}?"
+        "\\se Amca, yine mi \\tiyatronote{B0444A}{Claude}{2}{“taş durdu” → taşı durdu}\\tiyatronoted{B0444A}{taş durdu}?"
     ), "{tex}");
     // A line without a quote: at the start of its words; escaped.
     assert!(
         tex.contains(
-            "\\se \\tiyatronote{B0703A}{Atölye}{2}{100\\% sahne\\_dışı \\& \\{belirsiz\\}}Ama"
+            "\\se \\tiyatronote{B0703A}{Atölye}{3}{100\\% sahne\\_dışı \\& \\{belirsiz\\}}Ama"
         ),
         "{tex}"
     );
-    // The done note left out; the cover's and the heading's only listed.
-    assert!(!tex.contains("çözüldü"));
-    assert_eq!(tex.matches("\\tiyatronote{").count(), 2);
-    assert_eq!(tex.matches("\\tiyatronoteitem{").count(), 4);
-    assert!(tex.contains("\\tiyatronotereply{"));
+    // The heading's note beside the scene's first line, numbered first.
     assert!(
-        tex.contains("{3}{Atölye}{1. satır}{kapakta bir not}")
-            || tex.contains("{4}{Atölye}{1. satır}{kapakta bir not}"),
+        tex.contains("\\action{\\tiyatronote{4F6AA8}{Okur}{1}{"),
         "{tex}"
     );
+    // The done note left out; the cover's only listed.
+    assert!(!tex.contains("çözüldü"));
+    assert_eq!(tex.matches("\\tiyatronote{").count(), 3);
+    assert_eq!(tex.matches("\\tiyatronoteitem{").count(), 4);
+    assert!(tex.contains("\\tiyatronotereply{"));
+    // The list says where each is as the PDF has it: the line's number and
+    // page from LaTeX, the scene by its place.
+    assert!(tex.contains(
+        "{1}{Okur}{Sahne başı: İç, Değirmen — Akşam · Replik~\\ref{tiyatronote:1} · s.~\\pageref{tiyatronote:1}}"
+    ), "{tex}");
+    assert!(tex.contains("{2}{Claude}{Replik~\\ref{tiyatronote:2} · İç, Değirmen — Akşam · s.~\\pageref{tiyatronote:2}}"), "{tex}");
+    assert!(tex.contains("{4}{Atölye}{Kapak}{kapakta bir not}"), "{tex}");
     assert!(tex.trim_end().ends_with("\\end{document}"));
 }
 
@@ -389,4 +396,107 @@ fn notes_file_reads() {
     let path = std::env::var("DACTILE_NOTES_FILE").unwrap();
     let n = Notes::parse(&std::fs::read_to_string(path).unwrap());
     println!("notes {} unread {}", n.list.len(), n.unread.len());
+}
+
+/// A made-up play crowded with long notes, as a PDF copy:
+/// `DACTILE_NOTES_OUT=dir cargo test -- --ignored crowded_copy_to`.
+#[test]
+#[ignore]
+fn crowded_copy_to() {
+    let out = std::path::PathBuf::from(std::env::var("DACTILE_NOTES_OUT").unwrap());
+    std::fs::create_dir_all(&out).unwrap();
+    let mut play = String::from(
+        "\\documentclass{tiyatro}\n\\title{Kalabalık}\n\\author{Örnek Yazar}\n\\karakter{SELİN}{se}\n\\karakter{OZAN}{oz}\n\\begin{document}\n\\maketitle\n#perde\n#sahne İç, Değirmen — Akşam\n\nBir giriş paragrafı, düz metin.\n\n",
+    );
+    for i in 0..60 {
+        let who = if i % 2 == 0 { "\\se" } else { "\\oz" };
+        play.push_str(&format!("{who} Bu {i}. replik, biraz uzunca bir söz ki satır dolsun ve kenar not yanında dursun.\n"));
+        if i == 10 {
+            play.push_str("\\stagedir{Rüzgâr kapıyı çarpar.}\n\\middir{Uzaktan bir çan.}\n#sahne Dış, Meydan — Gece\n");
+        }
+    }
+    play.push_str("\\end{document}\n");
+    let long = "Bu not epey uzun: sahnenin ritmi burada düşüyor, söz bir önceki replikle çakışıyor, oyuncu nefes alacak yer bulamıyor; belki iki cümleye bölünür, belki biri hiç söylenmez. Bir de şu var: ";
+    let mut md = String::from("# Notlar: kalabalik.tex\n\n");
+    let lines: Vec<&str> = play.lines().collect();
+    for (k, l) in lines.iter().enumerate() {
+        let n = k + 1;
+        if l.starts_with("\\se") || l.starts_with("\\oz") {
+            if n % 3 != 0 {
+                md.push_str(&format!("- [ ] {n} · **Deniz Ak** · {long}{n}.\n"));
+            }
+        } else if l.starts_with("#sahne")
+            || l.starts_with("\\stagedir")
+            || l.starts_with("\\middir")
+            || l.starts_with("Bir giriş")
+        {
+            md.push_str(&format!(
+                "- [ ] {n} · **Ece** · Başlıkta, yönergede ya da düz metinde bir not ({n}).\n"
+            ));
+        }
+    }
+    md.push_str("- [ ] 2 · **Ece** · Kapakta bir not.\n");
+    let notes = Notes::parse(&md);
+    let path = out.join("kalabalik.tex");
+    std::fs::write(&path, &play).unwrap();
+    let doc = crate::render::Doc::new(&play);
+    let tex = copy_tex(&play, &doc, &notes, false);
+    std::fs::write(out.join("kalabalik-notlu.tex"), &tex).unwrap();
+    let aux = crate::build::casts(&doc.outline);
+    let built = crate::build::build_aside(&path, &tex, &aux, &copy_path(&path)).unwrap();
+    println!("{}", built.pdf.display());
+}
+
+#[test]
+fn a_crowded_margin_keeps_to_numbers() {
+    let mut play = String::from(
+        "\\documentclass{tiyatro}\n\\karakter{SELİN}{se}\n\\begin{document}\n#sahne Ahır\n",
+    );
+    for i in 0..6 {
+        play.push_str(&format!("\\se Söz {i}.\n"));
+    }
+    play.push_str("\\end{document}\n");
+    let long = "uzun ".repeat(80);
+    let md: String = (5..=10)
+        .map(|n| format!("- [ ] {n} · **Ece** · {long}\n"))
+        .chain(std::iter::once(format!(
+            "- [ ] 10 · **Ece** · ikinci {long}\n"
+        )))
+        .collect();
+    let notes = Notes::parse(&md);
+    let tex = copy_tex(&play, &crate::render::Doc::new(&play), &notes, false);
+    // Short lines one under another: no room for words, only numbers.
+    for n in 1..=5 {
+        assert!(tex.contains(&format!("{{Ece}}{{{n}}}{{}}")), "{tex}");
+    }
+    // Two notes on one short line: their numbers and names only.
+    let last = tex.lines().find(|l| l.contains("Söz 5")).unwrap();
+    assert!(last.contains("{6}{}") && last.contains("{7}{}"), "{last}");
+    // The list has every word.
+    assert_eq!(tex.matches(long.trim()).count(), 7);
+}
+
+#[test]
+fn a_margin_excerpt_cuts_at_a_word() {
+    assert_eq!(excerpt("kısa not", 40), "kısa not");
+    let e = excerpt("bir iki üç dört beş altı yedi sekiz dokuz on", 20);
+    assert!(e.ends_with('…') && e.chars().count() <= 21, "{e}");
+    assert!(!e.contains("  "));
+}
+
+/// A play's notes copy built elsewhere, the play and its notes untouched:
+/// `DACTILE_NOTES_PLAY=oyun.tex DACTILE_NOTES_OUT=dir cargo test -- --ignored copy_of_to`.
+#[test]
+#[ignore]
+fn copy_of_to() {
+    let play = std::path::PathBuf::from(std::env::var("DACTILE_NOTES_PLAY").unwrap());
+    let out = std::path::PathBuf::from(std::env::var("DACTILE_NOTES_OUT").unwrap());
+    let text = std::fs::read_to_string(&play).unwrap();
+    let notes = Notes::load(&play).unwrap();
+    let doc = crate::render::Doc::new(&text);
+    let tex = copy_tex(&text, &doc, &notes, false);
+    let aux = crate::build::casts(&doc.outline);
+    let pdf = out.join(copy_path(&play).file_name().unwrap());
+    let built = crate::build::build_aside(&play, &tex, &aux, &pdf).unwrap();
+    println!("{}", built.pdf.display());
 }

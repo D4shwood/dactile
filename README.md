@@ -329,7 +329,7 @@ colour, with a dot in the margin. In the panel:
 | r, e | reply to it; edit it, its line and its replies |
 | h, a, x | hide it, archive it, delete it (x twice) |
 | f, s | only one author's notes; the done, hidden and archived ones too |
-| c, o | a PDF copy with the open notes in its margin, numbered, each in its author's colour, and all of them with their replies at the end (`oyun - notlu.pdf`); open it |
+| c, o | a PDF copy with the open notes in its margin, numbered, each in its author's colour, and all of them with their replies at the end, each with the number its line has in the PDF, its scene and page (`oyun - notlu.pdf`); open it. A note on a heading or on text that is no line stands beside the next line; where notes crowd, the margin keeps their numbers and names and the list the rest |
 | w | a Word copy (`oyun - notlu.docx`) with the open notes as Word's own comments, each beside its line, the replies inside it; it opens in the program the computer has for it |
 
 When what a note quotes is gone from the text, the panel says it looks fixed;
