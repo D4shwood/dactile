@@ -184,7 +184,10 @@ export const TABS: Tab[] = [
         b("Panodan", "Clipboard", "⎗", "", k("notes-paste")),
         b("Dosyadan", "From a file", "⇲", "", k("notes-file")),
       ]),
-      g("Çıktı", "Output", [b("Notlu PDF", "PDF with notes", "⎙", "", soon)]),
+      g("Çıktı", "Output", [
+        b("Notlu PDF", "PDF with notes", "⎙", "", k("notes-pdf")),
+        b("Notlu Word", "Word with notes", "⇱", "", k("notes-docx")),
+      ]),
     ],
   },
   {
@@ -218,7 +221,8 @@ export const BACKSTAGE: Entry[] = [
   { tr: "Oyun ayarları", en: "Play settings", key: "", act: k("play-settings") },
   { tr: "Şablon olarak kaydet", en: "Save as a template", key: "", act: k("save-template") },
   { tr: "Dağıtım ve oyuncu kopyaları", en: "Casting and actors' copies", key: "F9", act: k("casting") },
-  { tr: "Notlu PDF kopyası", en: "A PDF copy with notes", key: "", act: soon },
+  { tr: "Notlu PDF kopyası", en: "A PDF copy with notes", key: "", act: k("notes-pdf") },
+  { tr: "Notlu Word kopyası", en: "A Word copy with notes", key: "", act: k("notes-docx") },
   { tr: "Kapat", en: "Close", key: "Ctrl+W", act: k("close") },
 ];
 

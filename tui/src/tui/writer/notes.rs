@@ -472,6 +472,7 @@ impl Writer {
             }
             KeyCode::Char('i') => self.pick_notes_file(),
             KeyCode::Char('c') => self.notes_pdf(),
+            KeyCode::Char('w') => self.notes_docx(),
             KeyCode::Char('o') => {
                 let pdf = dnotes::copy_path(&self.path);
                 if !pdf.is_file() {
@@ -967,6 +968,33 @@ impl Writer {
         self.start_aside(move || build::build_aside(&play, &tex, &aux, &out).map(|b| (b.pdf, 1)));
     }
 
+    /// The play with its open notes as Word's comments, beside it, opened.
+    pub(super) fn notes_docx(&mut self) {
+        let open = self
+            .notes
+            .list
+            .iter()
+            .any(|n| n.state == State::Open && !n.archived);
+        if !open {
+            self.say(lang::l("Açık not yok.", "No open notes."), true);
+            return;
+        }
+        match dactile::word::export_with_notes(&self.path, &self.buf.text, &self.notes) {
+            Ok(p) => {
+                let said = lang::f(
+                    "Notlu Word belgesi yazıldı: {}",
+                    "Word document with notes written: {}",
+                    &[&p.display()],
+                );
+                self.say(&said, false);
+                if let Err(e) = build::launch(&p) {
+                    self.say(&format!("{e:#}"), true);
+                }
+            }
+            Err(e) => self.say(&format!("{e:#}"), true),
+        }
+    }
+
     /// The name last written as "from" for one's own notes.
     fn me_used(&mut self, name: &str) {
         if self.me.is_empty() {
@@ -1156,8 +1184,8 @@ impl Writer {
                     "n new  h hide  a archive  x delete  f filter  s view",
                 ),
                 lang::l(
-                    "p yapıştır  i dosya  c notlu PDF  o aç",
-                    "p paste  i file  c PDF with notes  o open",
+                    "p yapıştır  i dosya  c notlu PDF  o aç  w notlu Word",
+                    "p paste  i file  c PDF with notes  o open  w Word with notes",
                 ),
                 lang::l("Esc metne  ^N kapat", "Esc to text  ^N close"),
             ]

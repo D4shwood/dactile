@@ -15,6 +15,7 @@ pub enum PAct {
     Board,
     Memorize,
     NotesPdf,
+    NotesDocx,
     Docx,
     /// Which part of the cover or cast page to restyle.
     CoverLook,

@@ -774,6 +774,25 @@
       case "notes-file":
         notesFromFile();
         break;
+      case "notes-pdf":
+        say(l("Notlu PDF hazırlanıyor…", "Making the PDF with notes…"));
+        api
+          .notesPdf(view.state.doc.toString())
+          .then(async (p) => {
+            say(l(`Notlu PDF yazıldı: ${p}`, `PDF with notes written: ${p}`));
+            await api.launch(p);
+          })
+          .catch((e) => say(String(e), true));
+        break;
+      case "notes-docx":
+        api
+          .notesDocx(view.state.doc.toString())
+          .then(async (p) => {
+            say(l(`Notlu Word belgesi yazıldı: ${p}`, `Word document with notes written: ${p}`));
+            await api.launch(p);
+          })
+          .catch((e) => say(String(e), true));
+        break;
       case "zoom-in":
         setZoom(zoom + 10);
         break;

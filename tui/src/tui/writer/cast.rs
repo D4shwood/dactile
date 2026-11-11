@@ -331,6 +331,7 @@ impl Writer {
             }
             PAct::Board => self.open_board(),
             PAct::NotesPdf => self.notes_pdf(),
+            PAct::NotesDocx => self.notes_docx(),
             PAct::CoverLook => self.popup = Popup::Form(self.part_form()),
             PAct::Docx => match dactile::word::export(&self.path, &self.buf.text) {
                 Ok(p) => {

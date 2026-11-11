@@ -5,11 +5,13 @@ use crate::cast::{self, Cast, Row};
 use crate::info::{self, Side};
 use crate::lang;
 use crate::lex::{self, Inline, Kind};
+use crate::notes::{self, Notes, State};
 use crate::outline::roman;
 use crate::render::{Doc, move_line};
 use crate::shelf;
 use crate::tex;
 use anyhow::Result;
+use std::collections::BTreeMap;
 use std::io::{Cursor, Write};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -26,6 +28,10 @@ const RELS: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 
 const DOC_RELS: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>"#;
+
+/// The notes as Word's own comments, beside the lines they are about.
+const COMMENTS_TYPE: &str = r#"<Override PartName="/word/comments.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml"/>"#;
+const COMMENTS_REL: &str = r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/>"#;
 
 const STYLES: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Liberation Serif" w:hAnsi="Liberation Serif" w:cs="Liberation Serif"/><w:sz w:val="24"/><w:lang w:val="tr-TR"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="120"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style><w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="2400" w:after="240"/><w:jc w:val="center"/></w:pPr><w:rPr><w:b/><w:sz w:val="48"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Author"><w:name w:val="Author"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="720"/><w:jc w:val="center"/></w:pPr></w:style><w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="480" w:after="240"/><w:jc w:val="center"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="30"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Heading2"><w:name w:val="heading 2"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="360" w:after="60"/><w:outlineLvl w:val="1"/></w:pPr><w:rPr><w:b/><w:sz w:val="26"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="SceneCast"><w:name w:val="Scene Cast"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:after="240"/></w:pPr><w:rPr><w:smallCaps/><w:sz w:val="21"/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="Speech"><w:name w:val="Speech"/><w:basedOn w:val="Normal"/><w:pPr><w:tabs><w:tab w:val="left" w:pos="1701"/></w:tabs><w:ind w:left="1701" w:hanging="1701"/></w:pPr></w:style><w:style w:type="paragraph" w:styleId="Direction"><w:name w:val="Direction"/><w:basedOn w:val="Normal"/><w:rPr><w:i/></w:rPr></w:style></w:styles>"#;
@@ -246,13 +252,57 @@ fn cast_rows(text: &str, cast: &Cast) -> String {
     out
 }
 
-fn body(text: &str, doc: &Doc) -> String {
+/// The paragraphs from `at` on as the range of these comments, the marks
+/// after the first one's properties and at the end of the last.
+fn comment_on(out: &mut String, at: usize, ids: &[usize]) {
+    if ids.is_empty() {
+        return;
+    }
+    let first = out[at..]
+        .find("</w:pPr>")
+        .map(|k| at + k + "</w:pPr>".len());
+    let last = out.rfind("</w:p>");
+    let (Some(first), Some(last)) = (first, last) else {
+        return;
+    };
+    if first > last {
+        return;
+    }
+    let starts: String = ids
+        .iter()
+        .map(|i| format!(r#"<w:commentRangeStart w:id="{i}"/>"#))
+        .collect();
+    let ends: String = ids
+        .iter()
+        .map(|i| {
+            format!(r#"<w:commentRangeEnd w:id="{i}"/><w:r><w:commentReference w:id="{i}"/></w:r>"#)
+        })
+        .collect();
+    out.insert_str(last, &ends);
+    out.insert_str(first, &starts);
+}
+
+/// `on`: the comments on each block, by its index.
+fn body(text: &str, doc: &Doc, on: &BTreeMap<usize, Vec<usize>>) -> String {
     let side = align(doc.scene_align);
     let mut out = String::new();
+    // Comments on blocks that print nothing of their own yet (prose waits
+    // for its blank line): they go on the next paragraph that comes.
+    let mut waiting: Vec<usize> = Vec::new();
     let mut acts = doc.outline.acts.iter();
     // Prose: its source lines are one paragraph, up to a blank line.
     let mut prose = String::new();
     for b in doc.body.clone() {
+        if !prose.is_empty() && !matches!(doc.blocks[b].kind, Kind::Other | Kind::Unknown { .. }) {
+            // The prose ends before this block, with its own comments.
+            let at = out.len();
+            out.push_str(&para("Normal", "", &prose));
+            prose.clear();
+            comment_on(&mut out, at, &waiting);
+            waiting.clear();
+        }
+        waiting.extend(on.get(&b).into_iter().flatten());
+        let at = out.len();
         let block = &doc.blocks[b];
         let dialogue = doc.is_dialogue(b);
         if !matches!(block.kind, Kind::Other | Kind::Unknown { .. }) && !prose.is_empty() {
@@ -354,14 +404,94 @@ fn body(text: &str, doc: &Doc) -> String {
             }
             Kind::Comment | Kind::Blank => {}
         }
+        if out.len() > at && !waiting.is_empty() {
+            comment_on(&mut out, at, &waiting);
+            waiting.clear();
+        }
     }
     if !prose.is_empty() {
+        let at = out.len();
         out.push_str(&para("Normal", "", &prose));
+        comment_on(&mut out, at, &waiting);
+        waiting.clear();
+    }
+    // Past the last paragraph: on the last one.
+    if !waiting.is_empty()
+        && let Some(at) = out.rfind("<w:p>")
+    {
+        comment_on(&mut out, at, &waiting);
     }
     out
 }
 
-fn document_xml(text: &str, doc: &Doc, title: &str, author: &str) -> String {
+/// The open notes as comments: which block each is on (none: the cover),
+/// and the comments' own part.
+fn comments(
+    text: &str,
+    doc: &Doc,
+    notes: &Notes,
+) -> (BTreeMap<usize, Vec<usize>>, Vec<usize>, String) {
+    let ix = notes::Index::new(text);
+    let mut on: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    let mut loose = Vec::new();
+    let mut xml = String::new();
+    let open = notes
+        .list
+        .iter()
+        .filter(|n| !n.archived && n.state == State::Open);
+    for (id, n) in open.enumerate() {
+        let block = ix
+            .anchor(n)
+            .and_then(|a| doc.block_at(a.range.start))
+            .filter(|b| doc.body.contains(b));
+        match block {
+            Some(b) => on.entry(b).or_default().push(id),
+            None => loose.push(id),
+        }
+        let who = |a: &str| {
+            if a.trim().is_empty() {
+                "?".to_string()
+            } else {
+                a.trim().to_string()
+            }
+        };
+        let author = who(&n.author);
+        let initials: String = author
+            .split_whitespace()
+            .filter_map(|w| w.chars().next())
+            .collect();
+        let mut paras = String::new();
+        let mut said = n.text.trim().to_string();
+        if !n.group.trim().is_empty() {
+            said = format!("[{}] {said}", n.group.trim());
+        }
+        paras.push_str(&format!("<w:p>{}</w:p>", run(&said, PLAIN)));
+        for r in &n.replies {
+            let mut runs = run(&format!("{}: ", who(&r.author)), BOLD);
+            runs.push_str(&run(r.text.trim(), PLAIN));
+            paras.push_str(&format!("<w:p>{runs}</w:p>"));
+        }
+        xml.push_str(&format!(
+            r#"<w:comment w:id="{id}" w:author="{}" w:initials="{}">{paras}</w:comment>"#,
+            escape(&author),
+            escape(&initials)
+        ));
+    }
+    let xml = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:comments xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">{xml}</w:comments>"#
+    );
+    (on, loose, xml)
+}
+
+fn document_xml(
+    text: &str,
+    doc: &Doc,
+    title: &str,
+    author: &str,
+    on: &BTreeMap<usize, Vec<usize>>,
+    loose: &[usize],
+) -> String {
     let mut out = String::new();
     if !title.is_empty() {
         out.push_str(&line("Title", title));
@@ -374,13 +504,23 @@ fn document_xml(text: &str, doc: &Doc, title: &str, author: &str) -> String {
         let said = format!("{}: {}", lang::l("Düzenleyen", "Edited by"), editor.trim());
         out.push_str(&line("Author", &said));
     }
+    // Notes on the cover, or that no longer find their line, go on the title.
+    if !loose.is_empty() {
+        if out.is_empty() {
+            out.push_str(&para("Normal", "", ""));
+        }
+        let first = out.find("</w:p>").map_or(out.len(), |k| k + "</w:p>".len());
+        let mut head = out[..first].to_string();
+        comment_on(&mut head, 0, loose);
+        out.replace_range(..first, &head);
+    }
     if info::contents_page(text) {
         out.push_str(&contents(text, doc));
     }
     if !doc.cast.characters.is_empty() {
         out.push_str(&cast_rows(text, &doc.cast));
     }
-    out.push_str(&body(text, doc));
+    out.push_str(&body(text, doc, on));
     format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>{out}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1418" w:right="1418" w:bottom="1418" w:left="1418" w:header="709" w:footer="709" w:gutter="0"/></w:sectPr></w:body></w:document>"#
@@ -408,6 +548,15 @@ fn styles_for(text: &str) -> String {
 }
 
 pub fn document(text: &str) -> Result<Vec<u8>> {
+    package(text, None)
+}
+
+/// The play with its open notes as Word comments, as the bytes of a `.docx`.
+pub fn with_notes(text: &str, notes: &Notes) -> Result<Vec<u8>> {
+    package(text, Some(notes))
+}
+
+fn package(text: &str, notes: Option<&Notes>) -> Result<Vec<u8>> {
     let doc = Doc::new(text);
     let title = tex::unescape_text(&info::get(text, "title").unwrap_or_default());
     let author = tex::unescape_text(&info::get(text, "author").unwrap_or_default());
@@ -423,17 +572,37 @@ pub fn document(text: &str) -> Result<Vec<u8>> {
     );
     let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
     let opts = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
-    let body = document_xml(text, &doc, &title, &author);
+    let (on, loose, notes_xml) = match notes {
+        Some(n) => comments(text, &doc, n),
+        None => Default::default(),
+    };
+    let commented = !on.is_empty() || !loose.is_empty();
+    let body = document_xml(text, &doc, &title, &author, &on, &loose);
     let styles = styles_for(text);
-    for (name, data) in [
-        ("[Content_Types].xml", CONTENT_TYPES),
+    let (types, rels) = if commented {
+        (
+            CONTENT_TYPES.replace("</Types>", &format!("{COMMENTS_TYPE}</Types>")),
+            DOC_RELS.replace(
+                "</Relationships>",
+                &format!("{COMMENTS_REL}</Relationships>"),
+            ),
+        )
+    } else {
+        (CONTENT_TYPES.to_string(), DOC_RELS.to_string())
+    };
+    let mut parts = vec![
+        ("[Content_Types].xml", types.as_str()),
         ("_rels/.rels", RELS),
-        ("word/_rels/document.xml.rels", DOC_RELS),
+        ("word/_rels/document.xml.rels", rels.as_str()),
         ("word/styles.xml", styles.as_str()),
         ("word/document.xml", body.as_str()),
         ("docProps/core.xml", core.as_str()),
         ("docProps/app.xml", app.as_str()),
-    ] {
+    ];
+    if commented {
+        parts.push(("word/comments.xml", notes_xml.as_str()));
+    }
+    for (name, data) in parts {
         zip.start_file(name, opts)?;
         zip.write_all(data.as_bytes())?;
     }
@@ -456,15 +625,31 @@ fn ours(path: &Path) -> bool {
 /// Where a play's document goes: beside it, over an earlier export, never
 /// over a document that came from elsewhere.
 pub fn target(play: &Path) -> PathBuf {
-    let plain = play.with_extension("docx");
+    let stem = play.file_stem().unwrap_or_default().to_string_lossy();
+    free(play, &stem)
+}
+
+/// `name.docx` beside the play, or `name-dactile-2.docx`… when someone
+/// else's document has that name.
+fn free(play: &Path, name: &str) -> PathBuf {
+    let plain = play.with_file_name(format!("{name}.docx"));
     if !plain.exists() || ours(&plain) {
         return plain;
     }
-    let stem = play.file_stem().unwrap_or_default().to_string_lossy();
     (1..)
-        .map(|n| play.with_file_name(format!("{stem}-dactile-{n}.docx")))
+        .map(|n| play.with_file_name(format!("{name}-dactile-{n}.docx")))
         .find(|p| !p.exists() || ours(p))
         .unwrap_or(plain)
+}
+
+/// Writes the play with its open notes as comments beside itself as
+/// `oyun - notlu.docx`, and says where.
+pub fn export_with_notes(play: &Path, text: &str, notes: &Notes) -> Result<PathBuf> {
+    let pdf = notes::copy_path(play);
+    let name = pdf.file_stem().unwrap_or_default().to_string_lossy();
+    let out = free(play, &name);
+    crate::file::write_atomic_bytes(&out, &with_notes(text, notes)?)?;
+    Ok(out)
 }
 
 /// Writes the play beside itself as a `.docx`, and says where.
@@ -545,6 +730,83 @@ mod tests {
         assert_eq!(std::fs::read(&theirs).unwrap(), b"someone's own");
         // The export itself is replaced, not stacked up.
         assert_eq!(export(&play, PLAY).unwrap(), out);
+    }
+
+    fn note(line: usize, author: &str, text: &str) -> crate::notes::Note {
+        crate::notes::Note {
+            state: State::Open,
+            archived: false,
+            line: Some(line),
+            author: author.into(),
+            text: text.into(),
+            replies: vec![crate::notes::Reply {
+                author: "Ece".into(),
+                text: "Olur <bakarım> & düzeltirim.".into(),
+            }],
+            group: String::new(),
+        }
+    }
+
+    fn part(path: &Path, name: &str) -> String {
+        let mut z = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
+        let mut s = String::new();
+        std::io::Read::read_to_string(&mut z.by_name(name).unwrap(), &mut s).unwrap();
+        s
+    }
+
+    #[test]
+    fn the_notes_become_comments_beside_their_lines() {
+        let d = dir("notes");
+        let play = d.join("oyun.tex");
+        let at = PLAY
+            .lines()
+            .position(|l| l.contains("Amca, yine mi taş durdu?"))
+            .unwrap()
+            + 1;
+        let mut done = note(at, "Deniz Ak", "Bu satır kısalsın.");
+        done.state = State::Done;
+        let notes = Notes {
+            list: vec![
+                note(at, "Deniz Ak", "Daha sert söylesin."),
+                note(1, "", "Kapak sade."),
+                done,
+            ],
+        };
+        let out = export_with_notes(&play, PLAY, &notes).unwrap();
+        assert_eq!(
+            out.file_name().unwrap().to_string_lossy(),
+            if crate::lang::is_tr() {
+                "oyun - notlu.docx"
+            } else {
+                "oyun - notes.docx"
+            }
+        );
+        let c = part(&out, "word/comments.xml");
+        assert!(c.contains("Daha sert söylesin."));
+        assert!(c.contains(r#"w:author="Deniz Ak" w:initials="DA""#));
+        assert!(c.contains("Olur &lt;bakarım&gt; &amp; düzeltirim."));
+        // Only the open notes.
+        assert!(!c.contains("Bu satır kısalsın."));
+        let doc = part(&out, "word/document.xml");
+        // The first comment marks SELİN's line, the second the title.
+        let line = doc.find("Amca, yine mi taş durdu?").unwrap();
+        let start = doc.find(r#"<w:commentRangeStart w:id="0"/>"#).unwrap();
+        let end = doc.find(r#"<w:commentRangeEnd w:id="0"/>"#).unwrap();
+        assert!(start < line && line < end);
+        assert!(doc[start..line].matches("<w:p>").count() == 0);
+        let title = doc.find("Kar Masalı").unwrap();
+        assert!(doc.find(r#"<w:commentRangeStart w:id="1"/>"#).unwrap() < title);
+        assert!(part(&out, "word/_rels/document.xml.rels").contains("comments.xml"));
+        assert!(part(&out, "[Content_Types].xml").contains("/word/comments.xml"));
+        // The text reads as the plain export does.
+        assert!(
+            texts(&out)
+                .iter()
+                .any(|p| p.contains("Amca, yine mi taş durdu?"))
+        );
+        // Without notes, no comments part.
+        let plain = export(&play, PLAY).unwrap();
+        assert!(!part(&plain, "[Content_Types].xml").contains("comments"));
     }
 
     #[test]

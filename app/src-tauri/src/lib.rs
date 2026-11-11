@@ -417,6 +417,49 @@ fn docx_export(path: String, text: String) -> Res<String> {
     Ok(out.display().to_string())
 }
 
+/// The play and its open notes: the play as it stands, and its notes, or
+/// what says there are none.
+fn with_notes(app: &Shared<'_>) -> Res<(PathBuf, Notes)> {
+    let a = app.lock().unwrap();
+    let path = a.open.as_ref().ok_or("no play open")?.path.clone();
+    let open = a
+        .notes
+        .list
+        .iter()
+        .any(|n| n.state == dactile::notes::State::Open && !n.archived);
+    if !open {
+        return Err(dactile::lang::l("Açık not yok.", "No open notes.").into());
+    }
+    Ok((path, a.notes.clone()))
+}
+
+/// The play with its open notes in the margin and listed at the end, a PDF
+/// of its own beside it: where it is.
+#[tauri::command]
+async fn notes_pdf(app: Shared<'_>, text: String) -> Res<String> {
+    let (path, notes) = with_notes(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let doc = dactile::render::Doc::new(&text);
+        let tex = dactile::notes::copy_tex(&text, &doc, &notes, false);
+        let aux = dactile::build::casts(&doc.outline);
+        let out = dactile::notes::copy_path(&path);
+        dactile::build::build_aside(&path, &tex, &aux, &out)
+            .map(|b| b.pdf.display().to_string())
+            .map_err(|e| e.message)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The play with its open notes as Word's comments, beside it: where it is.
+#[tauri::command]
+fn notes_docx(app: Shared, text: String) -> Res<String> {
+    let (path, notes) = with_notes(&app)?;
+    dactile::word::export_with_notes(&path, &text, &notes)
+        .map(|p| p.display().to_string())
+        .map_err(err)
+}
+
 #[tauri::command]
 fn cover_read(text: String) -> cover::CoverForm {
     cover::read(&text)
@@ -1072,6 +1115,8 @@ pub fn run() {
             cover_read,
             cover_write,
             docx_export,
+            notes_pdf,
+            notes_docx,
         ])
         .run(tauri::generate_context!())
         .expect("the window could not open");

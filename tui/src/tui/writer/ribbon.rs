@@ -395,7 +395,10 @@ pub fn tabs() -> Vec<Tab> {
                 g(
                     "Çıktı",
                     "Output",
-                    vec![b("Notlu PDF", "PDF with notes", "⎙", "", PAct::NotesPdf)],
+                    vec![
+                        b("Notlu PDF", "PDF with notes", "⎙", "", PAct::NotesPdf),
+                        b("Notlu Word", "Word with notes", "⇱", "", PAct::NotesDocx),
+                    ],
                 ),
             ],
         },
@@ -438,6 +441,12 @@ pub fn backstage() -> Vec<(&'static str, &'static str, &'static str, PAct)> {
             "A PDF copy with notes",
             "",
             PAct::NotesPdf,
+        ),
+        (
+            "Notlu Word kopyası",
+            "A Word copy with notes",
+            "",
+            PAct::NotesDocx,
         ),
         (
             "Word'e aktar ve aç",
@@ -1243,6 +1252,10 @@ impl Writer {
                     PAct::NotesPdf => lang::l(
                         "Açık notlar kenarda, hepsinin listesi sonda, ayrı bir PDF.",
                         "The open notes in the margin, a list of all at the end, a PDF of its own.",
+                    ),
+                    PAct::NotesDocx => lang::l(
+                        "Açık notlar Word'ün kendi yorumları olarak replik replik, ayrı bir .docx; açar.",
+                        "The open notes as Word's own comments, line by line, a .docx of its own; opens it.",
                     ),
                     PAct::SaveTemplate => lang::l(
                         "Kapak, kişiler, perde ve sahneler kalır, replikler kalmaz; ana ekranda Yeni'de çıkar.",

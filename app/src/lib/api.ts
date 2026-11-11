@@ -334,6 +334,8 @@ export const api = {
   summarySet: (text: string, at: number, summary: string) =>
     invoke<Change | null>("summary_set", { text, at, summary }),
   docxExport: (path: string, text: string) => invoke<string>("docx_export", { path, text }),
+  notesPdf: (text: string) => invoke<string>("notes_pdf", { text }),
+  notesDocx: (text: string) => invoke<string>("notes_docx", { text }),
   playFontSizeWrite: (text: string, size: string) => invoke<Made>("play_font_size_write", { text, size }),
   playFontWrite: (text: string, font: string) => invoke<Made>("play_font_write", { text, font }),
   sceneAlignNext: (text: string) => invoke<Made>("scene_align_next", { text }),

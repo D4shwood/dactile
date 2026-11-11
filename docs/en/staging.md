@@ -74,5 +74,6 @@ lines added above it don't lose it.
 | `r`, `e` | Reply, edit |
 | `h`, `a`, `x` | Hide, archive, delete (twice) |
 | `c`, `o` | A PDF copy with the notes (`oyun - notlu.pdf`), open it |
+| `w` | A Word copy with the open notes as Word comments, beside their lines (`oyun - notlu.docx`), opened |
 
 Nothing changes the play by itself.

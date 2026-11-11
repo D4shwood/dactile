@@ -75,5 +75,6 @@ yerini bulur; üstüne satır eklemek notu kaybettirmez.
 | `r`, `e` | Yanıtla, düzenle |
 | `h`, `a`, `x` | Gizle, arşivle, sil (iki kez) |
 | `c`, `o` | Notlu PDF kopyası (`oyun - notlu.pdf`), aç |
+| `w` | Notlu Word kopyası: açık notlar Word yorumu olarak repliklerin yanında (`oyun - notlu.docx`), açılır |
 
 Notlar oyunu kendiliğinden değiştirmez.
