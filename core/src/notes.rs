@@ -52,6 +52,9 @@ pub struct Note {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Notes {
     pub list: Vec<Note>,
+    /// Lines of the file that read as no note, heading or reply: while there
+    /// are any, the file is not written over, so nothing in it is lost.
+    pub unread: Vec<String>,
 }
 
 /// `oyun.tex` → `oyun.notlar.md`.
@@ -74,9 +77,24 @@ impl Notes {
         }
     }
 
-    /// Writes them, or removes the file when there are none.
+    /// Writes them, or removes the file when there are none. A file with
+    /// lines that didn't read stays as it is.
     pub fn save(&self, play: &Path) -> Result<()> {
         let path = path_for(play);
+        if let Some(first) = self.unread.first() {
+            anyhow::bail!(
+                "{}",
+                crate::lang::f(
+                    "{} dosyasında okunamayan {} satır var (ilki: “{}”); dosyaya dokunulmadı. Satırları “- [ ] 120 · **Ad** · not” biçimine getirin.",
+                    "{} has {} lines that don't read (the first: “{}”); the file is left as it is. Write them as “- [ ] 120 · **Name** · note”.",
+                    &[
+                        &path.file_name().unwrap_or_default().to_string_lossy(),
+                        &self.unread.len(),
+                        &first.chars().take(60).collect::<String>(),
+                    ],
+                )
+            );
+        }
         if self.list.is_empty() {
             if path.exists() {
                 std::fs::remove_file(&path)?;
@@ -98,6 +116,7 @@ impl Notes {
         // that go on from it.
         let mut in_reply = false;
         let mut started = false;
+        let mut unread = Vec::new();
         for raw in text.lines() {
             let line = raw.trim_end();
             if let Some(h) = line.strip_prefix("## ") {
@@ -136,6 +155,7 @@ impl Notes {
                 continue;
             }
             let Some(note) = list.last_mut().filter(|_| started && indent > 0) else {
+                unread.push(line.to_string());
                 continue;
             };
             if let Some(rest) = body.strip_prefix("- ").or_else(|| body.strip_prefix("* ")) {
@@ -159,7 +179,7 @@ impl Notes {
                 }
             }
         }
-        Notes { list }
+        Notes { list, unread }
     }
 
     pub fn to_markdown(&self, play_name: &str) -> String {
@@ -324,6 +344,11 @@ fn author(s: &str) -> (String, &str) {
 /// `author`; a short line before a run of them names their group. What is
 /// neither is left out.
 pub fn from_reply(text: &str, author: &str) -> Vec<Note> {
+    // A notes file of Dactile's own (`- [ ] 120 · **Ece** · …`): its notes
+    // as they are, each by its own author.
+    if ours(text) {
+        return Notes::parse(text).list;
+    }
     let lines: Vec<&str> = text.lines().map(str::trim).collect();
     let mut out: Vec<Note> = Vec::new();
     let mut group = String::new();
@@ -364,6 +389,18 @@ pub fn from_reply(text: &str, author: &str) -> Vec<Note> {
     out
 }
 
+/// Whether the text is a notes file as Dactile writes them.
+fn ours(text: &str) -> bool {
+    text.lines().any(|l| {
+        let Some(rest) = l.strip_prefix("- ").or_else(|| l.strip_prefix("* ")) else {
+            return false;
+        };
+        let b = rest.as_bytes();
+        let boxed = b.len() >= 3 && b[0] == b'[' && b[2] == b']';
+        boxed && author(number(rest[3..].trim_start()).1).0.chars().count() > 0
+    })
+}
+
 /// A note's line in a reply: its line number, if it has one, and what it
 /// says. Bullets without a number are notes too.
 fn item(l: &str) -> Option<(Option<usize>, String)> {
@@ -376,6 +413,11 @@ fn item(l: &str) -> Option<(Option<usize>, String)> {
             break;
         }
     }
+    // "- [ ] 120 …": a task list's box says nothing here.
+    let s = match s.as_bytes() {
+        [b'[', _, b']', ..] if bullet => s[3..].trim_start(),
+        _ => s,
+    };
     let s = s.strip_prefix("**").unwrap_or(s);
     let digits = s.chars().take_while(char::is_ascii_digit).count();
     if digits > 0 && digits <= 5 {
@@ -402,7 +444,7 @@ fn item(l: &str) -> Option<(Option<usize>, String)> {
         };
         let rest = rest.strip_prefix("**").unwrap_or(rest);
         let rest = rest.trim_start();
-        for sep in [":**", ":", ".", ")", "—", "–", "-"] {
+        for sep in [":**", ":", ".", ")", "—", "–", "-", "·"] {
             if let Some(r) = rest.strip_prefix(sep)
                 && (sep != "." || r.starts_with(' '))
             {

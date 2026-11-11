@@ -516,7 +516,7 @@
   }
 
   async function noteSet(i: number, state: string) {
-    noteCards = await api.noteSet(view.state.doc.toString(), i, state).catch((e) => (say(String(e), true), noteCards));
+    noteCards = await api.noteSet(view.state.doc.toString(), i, state).catch((e) => (say(String(e), true), api.notes(view.state.doc.toString())));
     if (state === "delete") picked = null;
     showNotes();
   }
@@ -534,7 +534,7 @@
   }
 
   async function noteReply(i: number, author: string, text: string) {
-    noteCards = await api.noteReply(view.state.doc.toString(), i, author, text).catch((e) => (say(String(e), true), noteCards));
+    noteCards = await api.noteReply(view.state.doc.toString(), i, author, text).catch((e) => (say(String(e), true), api.notes(view.state.doc.toString())));
   }
 
   async function noteFix(i: number) {
@@ -546,6 +546,7 @@
       await refreshNotes();
     } catch (e) {
       say(String(e), true);
+      await refreshNotes();
     }
   }
 

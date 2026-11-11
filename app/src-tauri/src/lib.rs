@@ -30,6 +30,9 @@ struct App {
     started: bool,
     /// The open play's notes.
     notes: Notes,
+    /// When the notes file was last read or written: another time on disk
+    /// means someone else wrote it.
+    notes_time: Option<std::time::SystemTime>,
     /// The open play's own words, and the spell checker's answers.
     known: spell::Known,
     /// The draft kept before the play's shape first changed.
@@ -42,9 +45,53 @@ struct App {
 
 impl App {
     /// The notes changed: written beside the play.
-    fn keep_notes(&self) -> Res<()> {
+    fn keep_notes(&mut self) -> Res<()> {
         let open = self.open.as_ref().ok_or("no play open")?;
-        self.notes.save(&open.path).map_err(err)
+        self.notes.save(&open.path).map_err(err)?;
+        self.notes_time = dactile::file::modified(&dactile::notes::path_for(&open.path));
+        Ok(())
+    }
+
+    /// The notes as the file has them now.
+    fn read_notes(&mut self) {
+        let Some(path) = self.open.as_ref().map(|o| o.path.clone()) else {
+            return;
+        };
+        self.notes_time = dactile::file::modified(&dactile::notes::path_for(&path));
+        self.notes = match Notes::load(&path) {
+            Ok(n) => n,
+            // What can't be read is not written over: one line stands for it.
+            Err(e) => Notes {
+                list: Vec::new(),
+                unread: vec![format!("{e:#}")],
+            },
+        };
+    }
+
+    /// Reads the notes again if someone else wrote the file; whether they
+    /// had changed.
+    fn fresh_notes(&mut self) -> bool {
+        let Some(path) = self.open.as_ref().map(|o| o.path.clone()) else {
+            return false;
+        };
+        if dactile::file::modified(&dactile::notes::path_for(&path)) == self.notes_time {
+            return false;
+        }
+        self.read_notes();
+        true
+    }
+
+    /// Before a change to the note at an index: the notes as the panel shows
+    /// them, or a word that they changed and the panel is to be read again.
+    fn same_notes(&mut self) -> Res<()> {
+        if self.fresh_notes() {
+            return Err(dactile::lang::l(
+                "Not dosyası dışarıda değişti ve yeniden okundu; listeye bir daha bakıp tekrar deneyin.",
+                "The notes file changed elsewhere and was read again; look at the list and try again.",
+            )
+            .into());
+        }
+        Ok(())
     }
 }
 
@@ -111,13 +158,13 @@ fn open(app: Shared, path: String) -> Res<Opened> {
     // The play open before goes first, and its lock with it.
     a.open = None;
     let (open, opened) = play::open(&mut a.cfg, &PathBuf::from(path)).map_err(err)?;
-    a.notes = notes::load(&open.path);
     a.kept = None;
     let words = dactile::sidecar::Sidecar::load(&open.path)
         .map(|s| s.words)
         .unwrap_or_default();
     a.known.set_words(&words);
     a.open = Some(open);
+    a.read_notes();
     Ok(opened)
 }
 
@@ -189,7 +236,9 @@ fn startup(app: Shared) -> Option<String> {
 
 #[tauri::command]
 fn notes_list(app: Shared, text: String) -> Vec<NoteCard> {
-    notes::cards(&text, &app.lock().unwrap().notes)
+    let mut a = app.lock().unwrap();
+    a.fresh_notes();
+    notes::cards(&text, &a.notes)
 }
 
 #[tauri::command]
@@ -201,6 +250,7 @@ fn note_add(
     body: String,
 ) -> Res<Vec<NoteCard>> {
     let mut a = app.lock().unwrap();
+    a.fresh_notes();
     notes::add(&mut a.notes, &text, at, &author, &body).map_err(err)?;
     a.keep_notes()?;
     Ok(notes::cards(&text, &a.notes))
@@ -210,6 +260,7 @@ fn note_add(
 #[tauri::command]
 fn note_set(app: Shared, text: String, i: usize, state: String) -> Res<Vec<NoteCard>> {
     let mut a = app.lock().unwrap();
+    a.same_notes()?;
     notes::set_state(&mut a.notes, i, &state).map_err(err)?;
     a.keep_notes()?;
     Ok(notes::cards(&text, &a.notes))
@@ -224,6 +275,7 @@ fn note_reply(
     reply: String,
 ) -> Res<Vec<NoteCard>> {
     let mut a = app.lock().unwrap();
+    a.same_notes()?;
     notes::reply(&mut a.notes, i, &author, &reply).map_err(err)?;
     a.keep_notes()?;
     Ok(notes::cards(&text, &a.notes))
@@ -233,6 +285,7 @@ fn note_reply(
 #[tauri::command]
 fn notes_paste(app: Shared, reply: String, author: String) -> Res<usize> {
     let mut a = app.lock().unwrap();
+    a.fresh_notes();
     let n = notes::paste(&mut a.notes, &reply, &author);
     a.keep_notes()?;
     Ok(n)
@@ -251,6 +304,7 @@ async fn pick_text() -> Option<String> {
 #[tauri::command]
 fn note_fix(app: Shared, text: String, i: usize) -> Res<Vec<Change>> {
     let mut a = app.lock().unwrap();
+    a.same_notes()?;
     let changes = notes::fix(&mut a.notes, &text, i)?;
     a.keep_notes()?;
     Ok(changes)
@@ -259,6 +313,7 @@ fn note_fix(app: Shared, text: String, i: usize) -> Res<Vec<Change>> {
 #[tauri::command]
 fn note_fix_many(app: Shared, text: String, which: Vec<usize>) -> Res<people::Made> {
     let mut a = app.lock().unwrap();
+    a.same_notes()?;
     let made = notes::fix_many(&mut a.notes, &text, &which);
     a.keep_notes()?;
     Ok(made)
@@ -266,7 +321,9 @@ fn note_fix_many(app: Shared, text: String, which: Vec<usize>) -> Res<people::Ma
 
 #[tauri::command]
 fn note_authors(app: Shared) -> Vec<String> {
-    app.lock().unwrap().notes.authors()
+    let mut a = app.lock().unwrap();
+    a.fresh_notes();
+    a.notes.authors()
 }
 
 /// The misspelt words between two places in the text.
@@ -420,7 +477,8 @@ fn docx_export(path: String, text: String) -> Res<String> {
 /// The play and its open notes: the play as it stands, and its notes, or
 /// what says there are none.
 fn with_notes(app: &Shared<'_>) -> Res<(PathBuf, Notes)> {
-    let a = app.lock().unwrap();
+    let mut a = app.lock().unwrap();
+    a.fresh_notes();
     let path = a.open.as_ref().ok_or("no play open")?.path.clone();
     let open = a
         .notes

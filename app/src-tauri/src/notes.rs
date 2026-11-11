@@ -6,7 +6,6 @@ use crate::view::unit_at;
 use dactile::lang;
 use dactile::notes::{self, Index, Note, Notes, Refused, Reply, State};
 use serde::Serialize;
-use std::path::Path;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct NoteCard {
@@ -188,10 +187,6 @@ pub fn fix_many(notes: &mut Notes, text: &str, which: &[usize]) -> crate::people
         cursor: None,
         message,
     }
-}
-
-pub fn load(play: &Path) -> Notes {
-    Notes::load(play).unwrap_or_default()
 }
 
 #[cfg(test)]

@@ -141,6 +141,7 @@ fn notes_find_their_place_and_fix_it() {
 #[test]
 fn the_file_round_trips() {
     let mut notes = Notes {
+        unread: Vec::new(),
         list: from_reply(REPLY, "Claude"),
     };
     notes.list[0].state = State::Done;
@@ -322,6 +323,7 @@ fn corrections_go_in_together() {
         group: String::new(),
     };
     let mut n = Notes {
+        unread: Vec::new(),
         list: vec![
             note("“Kar” → Yağmur"),
             note("“taş” → kaya"),
@@ -335,4 +337,56 @@ fn corrections_go_in_together() {
     assert_eq!(n.list[0].state, State::Done);
     assert_eq!(n.list[2].state, State::Open);
     assert_eq!(n.list[3].state, State::Open);
+}
+
+#[test]
+fn a_file_with_lines_that_dont_read_is_left_alone() {
+    let d = std::env::temp_dir().join(format!("dactile-notes-keep-{}", std::process::id()));
+    std::fs::create_dir_all(&d).unwrap();
+    let play = d.join("oyun.tex");
+    let theirs =
+        "# Notlar: oyun.tex\n\n- [ ] 12 · **Ece** · Daha yavaş.\nBu satır bir not değil.\n";
+    std::fs::write(path_for(&play), theirs).unwrap();
+    let mut n = Notes::load(&play).unwrap();
+    assert_eq!(n.list.len(), 1);
+    assert_eq!(n.unread, vec!["Bu satır bir not değil.".to_string()]);
+    n.list[0].state = State::Done;
+    assert!(n.save(&play).is_err());
+    assert_eq!(std::fs::read_to_string(path_for(&play)).unwrap(), theirs);
+    // A file Dactile wrote reads back whole.
+    let ok = Notes::parse(
+        &Notes {
+            list: n.list.clone(),
+            unread: Vec::new(),
+        }
+        .to_markdown("oyun.tex"),
+    );
+    assert!(ok.unread.is_empty());
+    let _ = std::fs::remove_dir_all(&d);
+}
+
+#[test]
+fn a_notes_file_of_ours_comes_in_as_itself() {
+    let file = "# Notlar: oyun.tex\n\n## Okuma\n\n- [ ] 963 · **Deniz** · “taş” bir bak.\n  - **Ece**: tamam.\n- [x] 970 · **Ece** · Kısalsın.\n";
+    let got = from_reply(file, "Notlar");
+    assert_eq!(got.len(), 2);
+    assert_eq!(got[0].author, "Deniz");
+    assert_eq!(got[0].line, Some(963));
+    assert_eq!(got[0].text, "“taş” bir bak.");
+    assert_eq!(got[0].replies.len(), 1);
+    assert_eq!(got[1].state, State::Done);
+    // A task list someone wrote by hand: the box is not the note.
+    let hand = from_reply("- [ ] 963 · “taş” bir bak", "Okur");
+    assert_eq!(hand[0].line, Some(963));
+    assert!(!hand[0].text.contains("[ ]"));
+}
+
+/// `DACTILE_NOTES_FILE=… cargo test -- --ignored notes_file_reads`: how
+/// many notes a file has and how many lines didn't read, nothing of them.
+#[test]
+#[ignore]
+fn notes_file_reads() {
+    let path = std::env::var("DACTILE_NOTES_FILE").unwrap();
+    let n = Notes::parse(&std::fs::read_to_string(path).unwrap());
+    println!("notes {} unread {}", n.list.len(), n.unread.len());
 }

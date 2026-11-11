@@ -766,6 +766,7 @@ mod tests {
         let mut done = note(at, "Deniz Ak", "Bu satır kısalsın.");
         done.state = State::Done;
         let notes = Notes {
+            unread: Vec::new(),
             list: vec![
                 note(at, "Deniz Ak", "Daha sert söylesin."),
                 note(1, "", "Kapak sade."),
