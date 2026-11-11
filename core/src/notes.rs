@@ -1159,6 +1159,21 @@ pub fn copy_tex(text: &str, doc: &crate::render::Doc, notes: &Notes, done: bool)
             (lines * MARGIN_CHARS).min(MARGIN_MAX)
         })
         .collect();
+    // R468 in a note's words: that printed line, with its page in the list.
+    let last = doc
+        .outline
+        .numbers
+        .iter()
+        .flatten()
+        .max()
+        .copied()
+        .unwrap_or(0);
+    let mut wanted = std::collections::BTreeSet::new();
+    let mut refs = |s: &str| {
+        let (out, found) = line_refs(s, last);
+        wanted.extend(found);
+        out
+    };
     let mut edits: Vec<Edit> = Vec::new();
     let mut lit: Vec<Range<usize>> = Vec::new();
     let mut list = String::new();
@@ -1166,7 +1181,7 @@ pub fn copy_tex(text: &str, doc: &crate::render::Doc, notes: &Notes, done: bool)
         let num = k + 1;
         let n = p.note;
         let c = color(&n.author);
-        let said = tex_text(&n.text);
+        let said = refs(&tex_text(&n.text));
         if let Some(at) = p.at {
             let margin = if shown[k] >= MARGIN_CHARS {
                 tex_text(&excerpt(&n.text, shown[k]))
@@ -1240,14 +1255,19 @@ pub fn copy_tex(text: &str, doc: &crate::render::Doc, notes: &Notes, done: bool)
                 "\\tiyatronotereply{{{}}}{{{}}}{{{}}}\n",
                 color(&r.author),
                 who(&r.author),
-                tex_text(&r.text)
+                refs(&tex_text(&r.text))
             ));
         }
     }
     if doc.parts.preamble.end > doc.parts.preamble.start {
         edits.push(Edit::new(
             doc.parts.preamble.end..doc.parts.preamble.end,
-            "\\tiyatronotes\n",
+            if wanted.is_empty() {
+                "\\tiyatronotes\n".to_string()
+            } else {
+                let w: Vec<String> = wanted.iter().map(|n| n.to_string()).collect();
+                format!("\\tiyatronotes\n\\tiyatrolinelabels{{{}}}\n", w.join(","))
+            },
         ));
     }
     if !list.is_empty() {
@@ -1258,6 +1278,49 @@ pub fn copy_tex(text: &str, doc: &crate::render::Doc, notes: &Notes, done: bool)
         ));
     }
     crate::tex::apply(text, &edits)
+}
+
+/// `R468` in a note's (escaped) words, when 468 is a printed line: the same
+/// words with the line's page after it, and the lines it named.
+fn line_refs(s: &str, last: usize) -> (String, Vec<usize>) {
+    let mut out = String::new();
+    let mut found = Vec::new();
+    let b = s.as_bytes();
+    let mut i = 0;
+    let mut from = 0;
+    while i < b.len() {
+        // An ASCII R: always a char boundary.
+        let free = || {
+            !s[..i]
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_alphanumeric() || c == '\\')
+        };
+        if b[i] == b'R' && free() {
+            let end = (i + 1..b.len())
+                .find(|&k| !b[k].is_ascii_digit())
+                .unwrap_or(b.len());
+            let after = s[end..].chars().next();
+            if end > i + 1 && !after.is_some_and(|c| c.is_alphanumeric()) {
+                if let Ok(n) = s[i + 1..end].parse::<usize>()
+                    && (1..=last).contains(&n)
+                {
+                    out.push_str(&s[from..end]);
+                    out.push_str(&format!(
+                        "~({}~\\pageref{{tiyatroline:{n}}})",
+                        crate::lang::l("s.", "p.")
+                    ));
+                    found.push(n);
+                    from = end;
+                }
+                i = end;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    out.push_str(&s[from..]);
+    (out, found)
 }
 
 fn words(s: &str) -> Vec<(usize, &str)> {

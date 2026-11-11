@@ -45,6 +45,7 @@
 %   \tiyatronote{RRGGBB}{Who}{n}{text}  note n beside this line; \ref{tiyatronote:n}
 %                                       is that line's number, \pageref its page
 %   \tiyatronoted{RRGGBB}{words}        the words a note is about
+%   \tiyatrolinelabels{12,468}          lines a note names: \pageref{tiyatroline:n}
 %   \tiyatronoteslist{Title}{...}       all of them at the end, with replies:
 %   \tiyatronoteitem{RRGGBB}{n}{Who}{where}{text}  \tiyatronotereply{RRGGBB}{Who}{text}
 %
@@ -60,7 +61,7 @@
 % the margin, so a rehearsal can say "line 112". Dactile shows the same numbers.
 
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesExplPackage{tiyatro-core}{2026-11-11}{1.5.0}{Dactile: characters, lines, scenes, acts}
+\ProvidesExplPackage{tiyatro-core}{2026-11-11}{1.6.0}{Dactile: characters, lines, scenes, acts}
 \RequirePackage{xspace}
 
 \msg_new:nnn { tiyatro } { style }
@@ -460,6 +461,11 @@
 \cs_new_protected:Npn \__tiy_number:
   {
     \int_gincr:N \g__tiy_number_int
+    \cs_if_exist:cT { __tiy_want_ \int_use:N \g__tiy_number_int : }
+      {
+        \cs_set:cpx { @currentlabel } { \int_use:N \g__tiy_number_int }
+        \exp_args:Ne \label { tiyatroline: \int_use:N \g__tiy_number_int }
+      }
     \bool_if:NTF \g__tiy_numbers_bool
       { \__tiy_number_show: }
       { \legacy_if:nT { tiyatrodraft } { \__tiy_number_show: } }
@@ -579,6 +585,10 @@
         \tl_if_blank:nF {#4} { \par #4 }
       }
   }
+
+% The lines a note names (R468): each gets \label{tiyatroline:n}.
+\NewDocumentCommand \tiyatrolinelabels { m }
+  { \clist_map_inline:nn {#1} { \cs_gset:cpn { __tiy_want_ ##1 : } { } } }
 
 \NewDocumentCommand \tiyatronoted { m m } { \textcolor [ HTML ] {#1} {#2} }
 

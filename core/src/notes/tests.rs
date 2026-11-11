@@ -477,6 +477,20 @@ fn a_crowded_margin_keeps_to_numbers() {
 }
 
 #[test]
+fn a_note_naming_a_line_gets_its_page() {
+    let play = "\\documentclass{tiyatro}\n\\karakter{SELİN}{se}\n\\begin{document}\n#sahne Ahır\n\\se Bir.\n\\se İki.\n\\se Üç.\n\\end{document}\n";
+    let md = "- [ ] 5 · **Ece** · R3'e bak, R9 yok, BR2 değil, R2x de\n  - **Can**: R1 de\n";
+    let notes = Notes::parse(md);
+    let tex = copy_tex(play, &crate::render::Doc::new(play), &notes, false);
+    assert!(tex.contains("\\tiyatrolinelabels{1,3}"), "{tex}");
+    assert!(tex.contains("R3~(s.~\\pageref{tiyatroline:3})'e"), "{tex}");
+    assert!(tex.contains("R1~(s.~\\pageref{tiyatroline:1})"), "{tex}");
+    for plain in ["R9 yok", "BR2 değil", "R2x de"] {
+        assert!(tex.contains(plain), "{plain}");
+    }
+}
+
+#[test]
 fn a_margin_excerpt_cuts_at_a_word() {
     assert_eq!(excerpt("kısa not", 40), "kısa not");
     let e = excerpt("bir iki üç dört beş altı yedi sekiz dokuz on", 20);
