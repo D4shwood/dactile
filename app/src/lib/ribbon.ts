@@ -125,6 +125,7 @@ export const TABS: Tab[] = [
         b("PDF", "PDF", "⎙", "F12", k("pdf-panel")),
         b("Notlar", "Notes", "✎", "Ctrl+N", k("notes")),
         b("Sahne listesi", "Scene list", "☰", "", k("scene-list")),
+        b("Satır numaraları", "Line numbers", "№", "", k("line-numbers")),
       ]),
       g("Yakınlık", "Zoom", [
         b("Büyüt", "Zoom in", "+", "Ctrl++", k("zoom-in")),

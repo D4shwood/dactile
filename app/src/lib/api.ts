@@ -68,6 +68,7 @@ export interface Settings extends Look {
   ribbon_folded: boolean;
   ribbon_height: number;
   scene_list: boolean;
+  line_numbers: boolean;
   pdf_width: number;
   cover_last: Record<string, string>;
   viewer: Viewer;
@@ -169,6 +170,8 @@ export interface Block {
   cls: string;
   marks: Mark[];
   alias: string | null;
+  /// The draft line number the PDF prints beside it.
+  number: number | null;
 }
 
 export interface Person {

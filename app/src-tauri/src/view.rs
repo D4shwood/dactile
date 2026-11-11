@@ -31,6 +31,8 @@ pub struct Block {
     pub marks: Vec<Mark>,
     /// The speaker of a line of dialogue.
     pub alias: Option<String>,
+    /// The draft line number the class prints beside it in the PDF.
+    pub number: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -392,12 +394,16 @@ pub fn view(text: &str) -> View {
             Kind::Line { alias, .. } if cls == "line" => Some(alias.clone()),
             _ => None,
         };
+        let number = b
+            .checked_sub(doc.body.start)
+            .and_then(|k| doc.outline.numbers.get(k).copied().flatten());
         blocks.push(Block {
             from: u.at(span.start),
             to: u.at(span.end),
             cls,
             marks,
             alias,
+            number,
         });
     }
     let body = doc.parts.body.clone();
@@ -479,6 +485,28 @@ mod tests {
         let u = Units::of(t);
         assert_eq!(u.at(t.len()), t.encode_utf16().count());
         assert_eq!(u.at(5), unit_at(t, 5));
+    }
+
+    #[test]
+    fn blocks_carry_the_pdfs_line_numbers() {
+        let v = view(PLAY);
+        let numbers: Vec<usize> = v.blocks.iter().filter_map(|b| b.number).collect();
+        let doc = Doc::new(PLAY);
+        assert_eq!(numbers.len(), doc.outline.numbers.iter().flatten().count());
+        assert!(numbers.iter().enumerate().all(|(i, &n)| n == i + 1));
+        // Dialogue is numbered, headings are not.
+        assert!(
+            v.blocks
+                .iter()
+                .filter(|b| b.cls == "line")
+                .all(|b| b.number.is_some())
+        );
+        assert!(
+            v.blocks
+                .iter()
+                .filter(|b| b.cls == "scene")
+                .all(|b| b.number.is_none())
+        );
     }
 
     #[test]

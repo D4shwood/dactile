@@ -7,7 +7,7 @@
   import { openSearchPanel } from "@codemirror/search";
   import { type Head, api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Files, type Look, type Made, type Memo, type Summary, type NoteCard, type Opened, type PlaySettings, type Preview, type Settings } from "./api";
   import { focus, setCards, setDim, setFocus } from "./focus";
-  import { blockAt, currentView, extensions, insertSnippet, typeBackslash, coverClicked, openCover, pickNote, wrapSelection, unwrapSelection, setNotes, setSource, setView } from "./editor";
+  import { blockAt, currentView, extensions, insertSnippet, typeBackslash, coverClicked, openCover, pickNote, wrapSelection, unwrapSelection, setNotes, setNumbers, setSource, setView } from "./editor";
   import { BACKSTAGE, type Act } from "./ribbon";
   import { closeMenu, nextWord, recheck, showMenu, spelling } from "./spelling";
   import { completion, openMenu } from "./completion";
@@ -111,6 +111,7 @@
   let playSize = $state("");
   // svelte-ignore state_referenced_locally
   let sceneList = $state(first.scene_list);
+  let numbers = $state(first.line_numbers);
   let heads = $state<Head[]>([]);
   let cursorAt = $state(0);
   let source = $state(false);
@@ -815,6 +816,11 @@
       case "cover-source":
         openCover(view);
         break;
+      case "line-numbers":
+        numbers = !numbers;
+        api.set("line_numbers", numbers);
+        view.dispatch({ effects: setNumbers.of(numbers) });
+        break;
       case "scene-list":
         sceneList = !sceneList;
         api.set("scene_list", sceneList);
@@ -1080,6 +1086,7 @@
         ],
       }),
     });
+    if (!numbers) view.dispatch({ effects: setNumbers.of(false) });
     refresh(true);
     void getVersion().then((v) => (version = v));
     // For trying the app out from a script (DACTILE_DEV_EVAL).
@@ -1142,7 +1149,7 @@
         <SceneList {tr} {heads} at={cursorAt} go={goHead} />
       {/if}
       <div class="desk" class:gone={board || casting || memo} class:plain={!sheet} {onwheel}>
-        <div class="page" class:source class:typewriter data-scene-align={sceneAlign} style={`--z: ${zoom / 100}`}>
+        <div class="page" class:source class:nonums={!numbers} class:typewriter data-scene-align={sceneAlign} style={`--z: ${zoom / 100}`}>
           <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
           <div
             bind:this={host}
@@ -1598,6 +1605,46 @@
   }
   .page :global(.cm-line) {
     padding: 0;
+  }
+  /* The PDF's draft line number, in the page's margin as the class sets it. */
+  .page :global(.cm-line[data-n]) {
+    position: relative;
+  }
+  /* The scroller reaches into the page's margin, so the numbers there show;
+     the text stays where it was. */
+  .page:not(.source) :global(.cm-scroller) {
+    margin-left: -3em;
+    padding-left: 3em;
+  }
+  .page :global(.cm-line[data-n])::before {
+    content: attr(data-n);
+    position: absolute;
+    right: calc(100% + 1em);
+    top: 0.5em;
+    font-family: var(--mono);
+    font-size: 0.62em;
+    font-style: normal;
+    font-weight: normal;
+    letter-spacing: 0;
+    line-height: 1;
+    text-indent: 0;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .page :global(.cm-gutters) {
+    background: transparent;
+    border: 0;
+    color: var(--muted);
+  }
+  .page :global(.cm-nums .cm-gutterElement) {
+    font-family: var(--mono);
+    font-size: 0.7em;
+    padding: 0.25em 1em 0 0;
+    text-align: right;
+  }
+  .page:not(.source) :global(.cm-gutters),
+  .page.nonums :global(.cm-gutters) {
+    display: none;
   }
   .page :global(.cm-b-line) {
     padding-left: 8.5em;

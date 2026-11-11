@@ -6,13 +6,15 @@
 // cursor leaves it. Typed characters are escaped as the terminal app does
 // (core/src/buffer.rs), so a % prints as a %.
 
-import { EditorState, StateEffect, StateField, type Extension, type Range } from "@codemirror/state";
+import { EditorState, RangeSet, StateEffect, StateField, type Extension, type Range } from "@codemirror/state";
 import {
   Decoration,
   type DecorationSet,
   EditorView,
+  GutterMarker,
   WidgetType,
   drawSelection,
+  gutter,
   keymap,
 } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
@@ -26,6 +28,8 @@ import type { Block, Cover, View } from "./api";
 export const setView = StateEffect.define<View>();
 /// Every block shown as its source.
 export const setSource = StateEffect.define<boolean>();
+/// The PDF's draft line numbers beside the writing, or not.
+export const setNumbers = StateEffect.define<boolean>();
 /// The block at a position, or a range (the cover), opened as its source.
 const openRaw = StateEffect.define<number | { from: number; to: number }>();
 
@@ -34,12 +38,13 @@ interface Page {
   /// The view is for an older text: positions are mapped until a new one comes.
   stale: boolean;
   source: boolean;
+  numbers: boolean;
   /// The block open as its source: its range, mapped through edits.
   raw: { from: number; to: number } | null;
 }
 
 const page = StateField.define<Page>({
-  create: () => ({ view: null, stale: false, source: false, raw: null }),
+  create: () => ({ view: null, stale: false, source: false, numbers: true, raw: null }),
   update(p, tr) {
     let next = p;
     if (tr.docChanged) {
@@ -55,6 +60,7 @@ const page = StateField.define<Page>({
     for (const e of tr.effects) {
       if (e.is(setView)) next = { ...next, view: e.value, stale: false };
       if (e.is(setSource)) next = { ...next, source: e.value };
+      if (e.is(setNumbers)) next = { ...next, numbers: e.value };
       if (e.is(openRaw)) {
         const v = e.value;
         const b = typeof v === "number" ? blockAt(next.view, v) : v;
@@ -203,7 +209,9 @@ function decorate(state: EditorState): DecorationSet {
     const cls = "cm-b-" + b.cls + (raw ? " cm-raw" : "");
     for (let pos = b.from; pos <= b.to; ) {
       const line = doc.lineAt(pos);
-      out.push(Decoration.line({ class: cls }).range(line.from));
+      // The number the PDF prints, in the margin beside the block's first line.
+      const n = p.numbers && pos === b.from && b.number !== null ? { "data-n": String(b.number) } : undefined;
+      out.push(Decoration.line({ class: cls, attributes: n }).range(line.from));
       pos = line.to + 1;
     }
     if (raw) continue;
@@ -231,6 +239,7 @@ const decorations = StateField.define<DecorationSet>({
     const rebuilt =
       before.view !== after.view ||
       before.source !== after.source ||
+      before.numbers !== after.numbers ||
       before.raw !== after.raw ||
       (tr.selection && !after.stale && coverOrTailMoved(tr.startState, tr.state));
     if (rebuilt && !after.stale) return decorate(tr.state);
@@ -238,6 +247,50 @@ const decorations = StateField.define<DecorationSet>({
     return tr.docChanged ? deco.map(tr.changes) : deco;
   },
   provide: (f) => [EditorView.decorations.from(f), EditorView.atomicRanges.of((v) => v.state.field(f))],
+});
+
+// ------------------------------------------------------------------ numbers
+
+/// The source has no margin of its own: there the numbers go in a gutter.
+class Num extends GutterMarker {
+  constructor(readonly n: string) {
+    super();
+  }
+  eq(o: Num) {
+    return o.n === this.n;
+  }
+  toDOM() {
+    return document.createTextNode(this.n);
+  }
+}
+
+function numbersOf(state: EditorState): RangeSet<GutterMarker> {
+  const p = state.field(page);
+  const v = p.view;
+  if (!v || !p.source || !p.numbers) return RangeSet.empty;
+  const len = state.doc.length;
+  const out: Range<GutterMarker>[] = [];
+  for (const b of v.blocks) {
+    if (b.from > len) break;
+    if (b.number !== null) out.push(new Num(String(b.number)).range(state.doc.lineAt(b.from).from));
+  }
+  return RangeSet.of(out, true);
+}
+
+const numberMarks = StateField.define<RangeSet<GutterMarker>>({
+  create: (s) => numbersOf(s),
+  update(m, tr) {
+    const a = tr.startState.field(page);
+    const b = tr.state.field(page);
+    if (!b.stale && (a.view !== b.view || a.source !== b.source || a.numbers !== b.numbers)) return numbersOf(tr.state);
+    return tr.docChanged ? m.map(tr.changes) : m;
+  },
+});
+
+const numberGutter = gutter({
+  class: "cm-nums",
+  markers: (v) => v.state.field(numberMarks),
+  initialSpacer: () => new Num("000"),
 });
 
 /// The tail hides only while the cursor is above it.
@@ -470,6 +523,8 @@ export function extensions(hooks: Hooks): Extension {
   return [
     page,
     decorations,
+    numberMarks,
+    numberGutter,
     noteMarks,
     // Our own caret: WebKit's blinks only if the desktop says so.
     drawSelection({ cursorBlinkRate: 1100 }),
