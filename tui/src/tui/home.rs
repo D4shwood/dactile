@@ -800,12 +800,20 @@ impl Home {
                         .into(),
                     );
                 }
-                // Next to the play it comes from.
-                let dir = src.parent().map(Path::to_path_buf).unwrap_or_default();
                 let name = if name.ends_with(".tex") {
                     name
                 } else {
                     format!("{name}.tex")
+                };
+                // A draft next to the play it comes from; a copy is a play of
+                // its own, in a folder of its own.
+                let dir = if fork {
+                    src.parent().map(Path::to_path_buf).unwrap_or_default()
+                } else {
+                    match library::new_folder(&cfg.plays_dir(), &name) {
+                        Ok(d) => d,
+                        Err(e) => return fail(self, form, format!("{e:#}")),
+                    }
                 };
                 let path = dir.join(&name);
                 if path.exists() {

@@ -204,7 +204,15 @@ pub fn make(
     if title == Some("") {
         return Err(lang::l("Başlık boş olamaz.", "The title can't be empty.").into());
     }
-    let path = beside(src, name)?;
+    let mut path = beside(src, name)?;
+    // A draft goes next to its play; a copy is a play of its own, in a
+    // folder of its own.
+    if draft.is_none() {
+        let file = path.file_name().unwrap_or_default().to_owned();
+        path = library::new_folder(&cfg.plays_dir(), &file.to_string_lossy())
+            .map_err(|e| format!("{e:#}"))?
+            .join(file);
+    }
     if path.exists() {
         return Err(taken(&path));
     }

@@ -101,7 +101,9 @@ monologue, a short sketch, and your own. In the writer, File › Save as a
 template keeps a play's cover, cast, acts and scenes, without its lines, in
 `~/.config/dactile/templates`; `d` under Yeni sends one of yours to the trash.
 
-On the home screen `d` copies the chosen play under a new title, and `f`
+Each play has a folder of its own in the plays folder, its drafts, PDFs and
+actors' copies with it. On the home screen `d` copies the chosen play under a
+new title into a folder of its own, and `f`
 starts a new draft of it next to it (`kar-masali-0.2.tex`, the draft number
 one up, the character cards along). Drafts stack up above the play they came
 from as a tree, the newest on top, and the home screen opens on the play you
@@ -110,6 +112,11 @@ type the new title, and its file, and the files that go with it, follow (a
 draft keeps its number at the end of its file name). Shift+F2 gives the title
 and the file name separately. `p` opens its PDF. Del, pressed twice, sends
 it to the desktop's trash, and `u` brings it back; `?` lists every key.
+
+Plays that came in through the import sit on a tab of their own,
+İçe aktarılanlar, beside Oyunlarım; `t` switches between them. In Dactile a
+right click moves a play, with its drafts, from one tab to the other.
+
 Beside the list stands the chosen play's first page, as tall as the screen,
 laid out as the writer lays it out, in the writer's theme. Under the list,
 level with the page's foot: the play as a strip of its scenes, each as long
