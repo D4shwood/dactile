@@ -47,7 +47,11 @@ pub fn parts(book: &Path) -> Vec<PathBuf> {
     let Some(name) = book.file_name().map(|n| n.to_string_lossy().to_string()) else {
         return Vec::new();
     };
-    let dir = book.parent().unwrap_or(Path::new("."));
+    // `kitap.tex` alone: its folder is the one we are in.
+    let dir = book
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
     let mut found: Vec<(usize, PathBuf)> = fs::read_dir(dir)
         .into_iter()
         .flatten()
