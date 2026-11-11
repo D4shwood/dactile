@@ -128,7 +128,7 @@ fn main() -> Result<()> {
         }
         Some(Cmd::Book { book }) => {
             let cfg = dactile::config::Config::load()?;
-            println!("{}", dactile::book::pdf(&book, cfg_lang(&cfg))?.display());
+            println!("{}", dactile::book::pdf(&book, &cfg.lang)?.display());
             Ok(())
         }
         Some(Cmd::Install) => {

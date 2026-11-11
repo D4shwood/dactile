@@ -323,7 +323,7 @@ fn file_line(l: &str) -> Option<(&str, usize, &str)> {
 }
 
 /// "Output written on play.pdf (12 pages, …)" → 12.
-fn pages_in(log: &str) -> Option<usize> {
+pub fn pages_in(log: &str) -> Option<usize> {
     let at = log.find("Output written on ")?;
     let rest = &log[at..];
     let open = rest.find('(')?;

@@ -76,6 +76,14 @@ fn has_text(tex: &str) -> bool {
         .any(|l| !l.starts_with(['\\', '%', '#']) && l.chars().any(char::is_alphabetic))
 }
 
+/// A play's TeX numbered from `page`: its first sheet is that page.
+fn from_page(tex: &str, page: usize) -> String {
+    match tex.find("\\begin{document}") {
+        Some(at) => format!("{}\\tiyatrofirstpage{{{page}}}\n{}", &tex[..at], &tex[at..]),
+        None => tex.to_string(),
+    }
+}
+
 /// The book's one document in TeX: `parts` are its titles and PDFs' names.
 fn master(title: &str, author: &str, parts: &[(String, String)], lang: Lang) -> String {
     let esc = |t: &str| escape_pasted(t, false);
@@ -109,8 +117,10 @@ fn master(title: &str, author: &str, parts: &[(String, String)], lang: Lang) -> 
 }
 
 /// The book as one PDF beside its file: `<book>-kitap.pdf`. Each play is
-/// built as it is on disk; where one stops, the book says which.
-pub fn pdf(book: &Path, lang: Lang) -> Result<PathBuf> {
+/// built as it is on disk, numbered from the page it starts on in the book,
+/// so the contents and the pages agree; where one stops, the book says which.
+/// `setting` is the language setting: unset, the plays' own language.
+pub fn pdf(book: &Path, setting: &str) -> Result<PathBuf> {
     let plays = parts(book);
     if plays.is_empty() {
         bail!(
@@ -121,45 +131,69 @@ pub fn pdf(book: &Path, lang: Lang) -> Result<PathBuf> {
     let read = |p: &Path| library::read(p, 150).with_context(|| p.display().to_string());
     let own = read(book)?;
     let text = fs::read_to_string(book)?;
-    let mut sources: Vec<(String, PathBuf)> = Vec::new();
+    let mut sources: Vec<(String, PathBuf, String)> = Vec::new();
     if has_text(&text) {
         sources.push((
             lang::l("Giriş", "Introduction").to_string(),
             book.to_path_buf(),
+            text.clone(),
         ));
     }
     for p in &plays {
-        sources.push((read(p)?.title, p.clone()));
+        sources.push((read(p)?.title, p.clone(), fs::read_to_string(p)?));
     }
+    let all: String = sources.iter().map(|s| s.2.as_str()).collect();
+    let lang = lang::resolve(setting, Some(&all));
     let work = std::env::temp_dir().join(format!("dactile-book-{}", std::process::id()));
     fs::create_dir_all(&work)?;
     let done = (|| -> Result<PathBuf> {
-        let mut parts = Vec::new();
-        for (i, (title, play)) in sources.iter().enumerate() {
-            let built =
-                build::build(play).map_err(|e| anyhow::anyhow!("{}: {}", title, e.message))?;
-            let name = format!("part{i}.pdf");
-            fs::copy(&built.pdf, work.join(&name))?;
-            parts.push((title.clone(), name));
-        }
-        fs::write(
-            work.join("book.tex"),
-            master(&own.title, &own.author, &parts, lang),
-        )?;
-        for _ in 0..2 {
-            let run = outside("xelatex")
-                .args(["-interaction=nonstopmode", "-halt-on-error", "book.tex"])
-                .current_dir(&work)
-                .output()
-                .context("xelatex")?;
-            if !run.status.success() {
-                let log = String::from_utf8_lossy(&run.stdout);
-                let why = log.lines().find(|l| l.starts_with('!')).unwrap_or("");
-                bail!(
-                    "{} {why}",
-                    lang::l("Kitap derlenemedi:", "The book didn't build:")
-                );
+        // The cover and the contents come first; how many pages the contents
+        // take shows once the book is built.
+        let mut front = 2;
+        let mut tries = 0;
+        loop {
+            let mut parts = Vec::new();
+            let mut page = front + 1;
+            for (i, (title, play, tex)) in sources.iter().enumerate() {
+                let name = format!("part{i}.pdf");
+                let built = build::build_aside(
+                    play,
+                    &from_page(tex, page),
+                    &build::casts(&build::outline_of(tex)),
+                    &work.join(&name),
+                )
+                .map_err(|e| anyhow::anyhow!("{}: {}", title, e.message))?;
+                page += built.pages.unwrap_or(0);
+                parts.push((title.clone(), name));
             }
+            fs::write(
+                work.join("book.tex"),
+                master(&own.title, &own.author, &parts, lang),
+            )?;
+            let mut log = String::new();
+            for _ in 0..2 {
+                let run = outside("xelatex")
+                    .args(["-interaction=nonstopmode", "-halt-on-error", "book.tex"])
+                    .current_dir(&work)
+                    .output()
+                    .context("xelatex")?;
+                log = String::from_utf8_lossy(&run.stdout).into_owned();
+                if !run.status.success() {
+                    let why = log.lines().find(|l| l.starts_with('!')).unwrap_or("");
+                    bail!(
+                        "{} {why}",
+                        lang::l("Kitap derlenemedi:", "The book didn't build:")
+                    );
+                }
+            }
+            // The pages before the plays, as the book came out.
+            let plays = page - 1 - front;
+            let real = build::pages_in(&log).map(|t| t.saturating_sub(plays));
+            match real {
+                Some(r) if r > 0 && r != front && tries < 2 => front = r,
+                _ => break,
+            }
+            tries += 1;
         }
         let stem = book.file_stem().unwrap_or_default().to_string_lossy();
         let out = book.with_file_name(format!("{stem}-kitap.pdf"));
@@ -219,5 +253,31 @@ mod tests {
             "{t}"
         );
         assert!(t.contains("İçindekiler") && t.contains("\\tableofcontents"));
+    }
+
+    #[test]
+    fn a_play_in_a_book_starts_on_its_page() {
+        let t = from_page("\\documentclass{tiyatro}\n\\begin{document}\nX\n", 7);
+        assert!(
+            t.contains("\\tiyatrofirstpage{7}\n\\begin{document}"),
+            "{t}"
+        );
+        assert_eq!(from_page("düz metin", 3), "düz metin");
+    }
+
+    /// A book of two made-up plays built in `DACTILE_BOOK_DIR`:
+    /// `cargo test -p dactile -- --ignored a_book_built_in`.
+    #[test]
+    #[ignore]
+    fn a_book_built_in() {
+        let dir = PathBuf::from(std::env::var("DACTILE_BOOK_DIR").unwrap());
+        fs::create_dir_all(&dir).unwrap();
+        let example = include_str!("../../examples/ornek-oyun.tex");
+        let book = make(&dir, "Kış Oyunları", "Deniz Ak", "", Lang::Tr).unwrap();
+        for (i, name) in ["bir.tex", "iki.tex"].iter().enumerate() {
+            fs::write(dir.join(name), example).unwrap();
+            join(&book, &dir.join(name), i).unwrap();
+        }
+        println!("{}", pdf(&book, "").unwrap().display());
     }
 }

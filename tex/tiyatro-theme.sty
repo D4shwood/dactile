@@ -7,7 +7,7 @@
 % characters on the cover.
 
 \NeedsTeXFormat{LaTeX2e}
-\ProvidesExplPackage{tiyatro-theme}{2026-10-30}{1.4.0}{Dactile: page, fonts, cover}
+\ProvidesExplPackage{tiyatro-theme}{2026-11-11}{1.5.0}{Dactile: page, fonts, cover}
 \RequirePackage{fontspec}
 \RequirePackage{setspace}
 \RequirePackage{geometry}
@@ -299,6 +299,18 @@
     % Its title stays out of the next page's head.
     \markboth { } { }
     \setcounter { page } { 1 }
+  }
+
+% \tiyatrofirstpage{n} in the preamble: the play is part of a book and its
+% first sheet is the book's page n. Each sheet is numbered as it falls in the
+% book, whatever the cover and contents reset.
+\NewDocumentCommand \tiyatrofirstpage { m }
+  {
+    \AtBeginDocument
+      {
+        \cs_gset:Npn \thepage
+          { \int_eval:n { \ReadonlyShipoutCounter + (#1) } }
+      }
   }
 
 \RenewDocumentCommand \maketitle { }

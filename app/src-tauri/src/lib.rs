@@ -697,9 +697,9 @@ fn import_write_all(
 /// The book as one PDF, a cover and contents before its plays: where it is.
 #[tauri::command]
 async fn book_pdf(app: Shared<'_>, path: String) -> Res<String> {
-    let lang = play::lang_of(&app.lock().unwrap().cfg);
+    let setting = app.lock().unwrap().cfg.lang.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        dactile::book::pdf(std::path::Path::new(&path), lang)
+        dactile::book::pdf(std::path::Path::new(&path), &setting)
             .map(|p| p.display().to_string())
             .map_err(err)
     })
