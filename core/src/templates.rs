@@ -337,8 +337,7 @@ pub fn save(text: &str, name: &str) -> anyhow::Result<PathBuf> {
 
 /// The example, copied into `dir` under a name of its own.
 pub fn copy_example(dir: &Path) -> anyhow::Result<PathBuf> {
-    std::fs::create_dir_all(dir)?;
-    let path = library::free_path(dir, "ornek-oyun.tex");
+    let path = library::new_home(dir, "ornek-oyun.tex")?;
     crate::file::write_atomic(&path, EXAMPLE)?;
     Ok(path)
 }

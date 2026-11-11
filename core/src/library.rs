@@ -480,6 +480,25 @@ pub fn free_path(dir: &Path, name: &str) -> PathBuf {
     p
 }
 
+/// A folder of its own for a new play in `dir`, named after its file; a
+/// taken name gets a number.
+pub fn new_folder(dir: &Path, name: &str) -> std::io::Result<PathBuf> {
+    let stem = name.strip_suffix(".tex").unwrap_or(name);
+    let mut d = dir.join(stem);
+    let mut n = 2;
+    while d.exists() {
+        d = dir.join(format!("{stem}-{n}"));
+        n += 1;
+    }
+    std::fs::create_dir_all(&d)?;
+    Ok(d)
+}
+
+/// Where a new play goes: in a folder of its own in `dir`.
+pub fn new_home(dir: &Path, name: &str) -> std::io::Result<PathBuf> {
+    Ok(free_path(&new_folder(dir, name)?, name))
+}
+
 /// A new play: the class, the cover, one act and one scene, and three lines
 /// of help as comments.
 pub fn template(title: &str, author: &str, lang: Lang) -> String {
@@ -575,6 +594,17 @@ mod tests {
         assert_eq!(next_draft("02.08.2024", "26.10.2026"), "26.10.2026");
         assert_eq!(next_draft("ilk", "26.10.2026"), "ilk (2)");
         assert_eq!(next_draft("", "26.10.2026"), "0.2");
+    }
+
+    #[test]
+    fn each_new_play_has_a_folder() {
+        let d = std::env::temp_dir().join(format!("dactile-home-{}", std::process::id()));
+        let a = new_home(&d, "kar-masali.tex").unwrap();
+        assert_eq!(a, d.join("kar-masali").join("kar-masali.tex"));
+        std::fs::write(&a, "").unwrap();
+        let b = new_home(&d, "kar-masali.tex").unwrap();
+        assert_eq!(b, d.join("kar-masali-2").join("kar-masali.tex"));
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]

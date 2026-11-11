@@ -66,7 +66,7 @@ fn a_play_made_a_template_keeps_its_shape_not_its_words() {
     assert_eq!(Doc::new(&play).title(&play).as_deref(), Some("Yeni Kış"));
     assert_eq!(info::get(&play, "author").as_deref(), Some("B. Yazar"));
     clean(&play);
-    // The example lands beside it under a name of its own.
+    // The example gets a folder of its own, a new one each time.
     let a = copy_example(&dir).unwrap();
     let b = copy_example(&dir).unwrap();
     assert_ne!(a, b);

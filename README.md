@@ -82,7 +82,7 @@ makes new colours at every press.
 ```sh
 dactile-light                   # the home screen: your plays, a new one, settings
 dactile-light oyun.tex          # straight into a play
-dactile-light new "Kar Masalı"  # a new play in your plays folder
+dactile-light new "Kar Masalı"  # a new play in a folder of its own
 dactile-light import oyun.docx  # a play made of a document (see Importing)
 ```
 
@@ -276,7 +276,7 @@ Before the play is written a preview lists the names found, with how many
 lines each has and the first of them: `e` changes a name, `a` its alias, `m`
 merges two that are the same person (and splits them again), `x` marks one
 that is not a character at all (`NOT: …`), whose lines stay as text, and `t`
-the title and author. ⏎ writes the play to your plays folder and opens it.
+the title and author. ⏎ writes the play to a folder of its own in your plays folder and opens it.
 `dactile-light import FILE` does the same from the command line, taking the names
 as they come. A scanned PDF, pictures of pages, needs OCR first.
 

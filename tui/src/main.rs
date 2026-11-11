@@ -145,9 +145,8 @@ fn main() -> Result<()> {
         }
         Some(Cmd::New { title }) => {
             let cfg = dactile::config::Config::load()?;
-            let path = cfg.plays_dir().join(dactile::library::file_name(&title));
-            anyhow::ensure!(!path.exists(), "{} already exists", path.display());
-            std::fs::create_dir_all(cfg.plays_dir())?;
+            let path =
+                dactile::library::new_home(&cfg.plays_dir(), &dactile::library::file_name(&title))?;
             let lang = cfg_lang(&cfg);
             dactile::file::write_atomic(
                 &path,
@@ -202,7 +201,11 @@ fn import_all(file: &std::path::Path, ocr: bool, book: Option<&str>, front: bool
                 String::new()
             };
             let lang = cfg_lang(&cfg);
-            let root = dactile::book::make(&cfg.plays_dir(), title, &draft.author, &text, lang)?;
+            let dir = dactile::library::new_folder(
+                &cfg.plays_dir(),
+                &dactile::library::file_name(title),
+            )?;
+            let root = dactile::book::make(&dir, title, &draft.author, &text, lang)?;
             println!("{}", root.display());
             Some(root)
         }
@@ -211,7 +214,10 @@ fn import_all(file: &std::path::Path, ocr: bool, book: Option<&str>, front: bool
     // The list shows the newest on top: the first play is written last.
     for (at, play) in draft.plays(&all).iter().enumerate().rev() {
         let name = dactile::library::file_name(&play.title);
-        let path = dactile::library::free_path(&cfg.plays_dir(), &name);
+        let path = match root.as_deref().and_then(std::path::Path::parent) {
+            Some(dir) => dactile::library::free_path(dir, &name),
+            None => dactile::library::new_home(&cfg.plays_dir(), &name)?,
+        };
         dactile::file::write_atomic(&path, &play.tex())?;
         dactile::sidecar::Sidecar::mark_imported(&path, true)?;
         if let Some(root) = &root {
@@ -254,8 +260,7 @@ fn import(
             } else {
                 &draft.title
             };
-            std::fs::create_dir_all(cfg.plays_dir())?;
-            dactile::library::free_path(&cfg.plays_dir(), &dactile::library::file_name(title))
+            dactile::library::new_home(&cfg.plays_dir(), &dactile::library::file_name(title))?
         }
     };
     dactile::file::write_atomic(&path, &draft.tex())?;

@@ -562,7 +562,7 @@ fn import_doc(app: Shared) -> Res<Vec<importing::Para>> {
 fn import_write(app: Shared) -> Res<String> {
     let mut a = app.lock().unwrap();
     let (file, draft) = a.importing.as_ref().ok_or("no import open")?;
-    let path = importing::write(file, draft, &a.cfg).map_err(err)?;
+    let path = importing::write(file, draft, &a.cfg, None).map_err(err)?;
     a.importing = None;
     Ok(path.display().to_string())
 }

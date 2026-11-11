@@ -269,18 +269,14 @@ pub fn create(
             text = dactile::tex::apply(&text, &[e]);
         }
     }
-    let dir = cfg.plays_dir();
-    std::fs::create_dir_all(&dir)?;
-    let path = library::free_path(&dir, &library::file_name(title));
+    let path = library::new_home(&cfg.plays_dir(), &library::file_name(title))?;
     file::write_atomic(&path, &text)?;
     Ok(path)
 }
 
 /// The example play, copied into the plays folder.
 pub fn example(cfg: &Config) -> anyhow::Result<PathBuf> {
-    let dir = cfg.plays_dir();
-    std::fs::create_dir_all(&dir)?;
-    templates::copy_example(&dir)
+    templates::copy_example(&cfg.plays_dir())
 }
 
 /// The play being written.

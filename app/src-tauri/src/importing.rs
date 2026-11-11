@@ -369,7 +369,13 @@ pub fn edit(d: &mut Draft, e: Edit) -> Result<(), String> {
 }
 
 /// The play, in the plays folder under its title's file name.
-pub fn write(file_from: &Path, d: &Draft, cfg: &Config) -> anyhow::Result<PathBuf> {
+/// `book`: the book's folder, where its parts go; else a folder of its own.
+pub fn write(
+    file_from: &Path,
+    d: &Draft,
+    cfg: &Config,
+    book: Option<&Path>,
+) -> anyhow::Result<PathBuf> {
     let title = match d.title.trim() {
         "" => file_from
             .file_stem()
@@ -377,9 +383,11 @@ pub fn write(file_from: &Path, d: &Draft, cfg: &Config) -> anyhow::Result<PathBu
             .unwrap_or_default(),
         t => t.to_string(),
     };
-    let dir = cfg.plays_dir();
-    std::fs::create_dir_all(&dir)?;
-    let path = library::free_path(&dir, &library::file_name(&title));
+    let name = library::file_name(&title);
+    let path = match book {
+        Some(dir) => library::free_path(dir, &name),
+        None => library::new_home(&cfg.plays_dir(), &name)?,
+    };
     file::write_atomic(&path, &d.tex())?;
     dactile::sidecar::Sidecar::mark_imported(&path, true)?;
     Ok(path)
@@ -414,7 +422,8 @@ pub fn write_all(
         } else {
             String::new()
         };
-        dactile::book::make(&cfg.plays_dir(), &b.title, &d.author, &front, d.lang).ok()
+        let dir = library::new_folder(&cfg.plays_dir(), &library::file_name(&b.title)).ok()?;
+        dactile::book::make(&dir, &b.title, &d.author, &front, d.lang).ok()
     });
     // The list shows the newest on top: the first play is written last.
     let plays = d.plays(picked);
@@ -423,12 +432,13 @@ pub fn write_all(
         .enumerate()
         .rev()
         .map(|(at, play)| {
-            let made = write(file_from, play, cfg).and_then(|path| {
-                if let Some(root) = &root {
-                    dactile::book::join(root, &path, at)?;
-                }
-                Ok(path)
-            });
+            let made = write(file_from, play, cfg, root.as_deref().and_then(Path::parent))
+                .and_then(|path| {
+                    if let Some(root) = &root {
+                        dactile::book::join(root, &path, at)?;
+                    }
+                    Ok(path)
+                });
             match made {
                 Ok(path) => Written {
                     title: play.title.clone(),

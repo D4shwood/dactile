@@ -790,7 +790,7 @@ impl Preview {
 
     /// The play, in the plays folder under its title's file name.
     fn write(&mut self, cfg: &Config) -> Step {
-        match self.write_play(&self.draft, cfg) {
+        match self.write_play(&self.draft, cfg, None) {
             Ok(path) => Step::Open(path),
             Err(e) => {
                 self.error = Some(e);
@@ -799,7 +799,8 @@ impl Preview {
         }
     }
 
-    fn write_play(&self, d: &Draft, cfg: &Config) -> Result<PathBuf, String> {
+    /// `book`: the book's folder, where its parts go; else a folder of its own.
+    fn write_play(&self, d: &Draft, cfg: &Config, book: Option<&Path>) -> Result<PathBuf, String> {
         let stem = self
             .file
             .file_stem()
@@ -810,9 +811,15 @@ impl Preview {
         } else {
             d.title.clone()
         };
-        let dir = cfg.plays_dir();
-        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        let path = dactile::library::free_path(&dir, &dactile::library::file_name(&title));
+        let name = dactile::library::file_name(&title);
+        let path = match book {
+            Some(dir) => dactile::library::free_path(dir, &name),
+            None => {
+                let dir = cfg.plays_dir();
+                dactile::library::new_home(&dir, &name)
+                    .map_err(|e| format!("{}: {e}", dir.display()))?
+            }
+        };
         dactile::file::write_atomic(&path, &d.tex()).map_err(|e| format!("{e:#}"))?;
         dactile::sidecar::Sidecar::mark_imported(&path, true).map_err(|e| format!("{e:#}"))?;
         Ok(path)
@@ -838,8 +845,14 @@ impl Preview {
             } else {
                 String::new()
             };
-            let (dir, d) = (cfg.plays_dir(), &self.draft);
-            match dactile::book::make(&dir, &title, &d.author, &text, d.lang) {
+            let d = &self.draft;
+            let made = dactile::library::new_folder(
+                &cfg.plays_dir(),
+                &dactile::library::file_name(&title),
+            )
+            .map_err(anyhow::Error::from)
+            .and_then(|dir| dactile::book::make(&dir, &title, &d.author, &text, d.lang));
+            match made {
                 Ok(root) => Some(root),
                 Err(e) => {
                     self.error = Some(format!("{e:#}"));
@@ -853,10 +866,14 @@ impl Preview {
         let mut failed = Vec::new();
         // The list shows the newest on top: the first play is written last.
         for (at, play) in plays.iter().enumerate().rev() {
-            let done = self.write_play(play, cfg).and_then(|path| match &root {
-                Some(root) => dactile::book::join(root, &path, at).map_err(|e| format!("{e:#}")),
-                None => Ok(()),
-            });
+            let done = self
+                .write_play(play, cfg, root.as_deref().and_then(Path::parent))
+                .and_then(|path| match &root {
+                    Some(root) => {
+                        dactile::book::join(root, &path, at).map_err(|e| format!("{e:#}"))
+                    }
+                    None => Ok(()),
+                });
             match done {
                 Ok(()) => made += 1,
                 Err(e) => failed.push(format!("{}: {e}", play.title)),
