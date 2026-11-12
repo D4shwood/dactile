@@ -1,0 +1,13 @@
+[package]
+name = "dactile-backend"
+description = "Dactile's commands, for the desktop app and the web server alike"
+version.workspace = true
+edition.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+dactile = { path = "../core" }
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

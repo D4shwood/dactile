@@ -1,6 +1,27 @@
-// The Rust side's commands (src-tauri/src/lib.rs), typed.
-import { invoke } from "@tauri-apps/api/core";
+// The Rust side's commands, typed. Most are the backend's (backend/src/
+// commands.rs) and go through its one Tauri command, `call`; the desktop's
+// own (src-tauri/src/lib.rs) are called by name.
+import { invoke as tauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+
+const DESKTOP = new Set([
+  "import_read",
+  "startup",
+  "pick_text",
+  "pick_import",
+  "launch",
+  "reveal",
+  "log",
+  "pick",
+  "pdf",
+  "full_screen",
+  "pdf_print",
+  "open_url",
+]);
+
+function invoke<T>(name: string, args?: Record<string, unknown>): Promise<T> {
+  return DESKTOP.has(name) ? tauri<T>(name, args) : tauri<T>("call", { name, args: args ?? {} });
+}
 
 export interface PlayCard {
   path: string;

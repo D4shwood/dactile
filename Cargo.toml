@@ -1,8 +1,8 @@
 [workspace]
-members = ["core", "tui", "app/src-tauri"]
+members = ["core", "tui", "backend", "app/src-tauri"]
 # The desktop app needs WebKitGTK and a built front end: plain `cargo`
 # commands leave it out; `-p dactile-app` or `--workspace` take it in.
-default-members = ["core", "tui"]
+default-members = ["core", "tui", "backend"]
 resolver = "3"
 
 [workspace.package]

@@ -468,7 +468,7 @@ pub fn view(text: &str) -> View {
 mod tests {
     use super::*;
 
-    const PLAY: &str = include_str!("../../../examples/ornek-oyun.tex");
+    const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 
     fn source(text: &str, m: &Mark) -> String {
         let s: Vec<u16> = text.encode_utf16().collect();

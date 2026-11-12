@@ -193,7 +193,7 @@ pub fn fix_many(notes: &mut Notes, text: &str, which: &[usize]) -> crate::people
 mod tests {
     use super::*;
 
-    const PLAY: &str = include_str!("../../../examples/ornek-oyun.tex");
+    const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 
     #[test]
     fn a_note_finds_its_quote() {

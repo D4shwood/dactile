@@ -134,7 +134,7 @@ pub fn set(text: &str, at: usize, summary: &str, play: &Path) -> anyhow::Result<
 mod tests {
     use super::*;
 
-    const PLAY: &str = include_str!("../../../examples/ornek-oyun.tex");
+    const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 
     #[test]
     fn a_summary_gives_its_scene_an_id_and_comes_back() {

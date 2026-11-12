@@ -1,6 +1,6 @@
 # Dactile
 
-Stage play writer for the tiyatro XeLaTeX class. Rust workspace: `core` (crate `dactile`), `tui` (Dactile Light), `app/src-tauri` + `app/src` (Dactile, the desktop app: Tauri 2, Svelte 5, CodeMirror 6). The class is in `tex/`.
+Stage play writer for the tiyatro XeLaTeX class. Rust workspace: `core` (crate `dactile`), `tui` (Dactile Light), `backend` (the desktop's commands without Tauri, also served by dactile-web), `app/src-tauri` + `app/src` (Dactile, the desktop app: Tauri 2, Svelte 5, CodeMirror 6; the window calls the backend through one `call` command). The class is in `tex/`.
 
 `core` and `tex/` are also used by dactile-web, pinned to a commit: this team owns them, the web team asks. Keep `core` compiling for `wasm32-unknown-unknown`.
 

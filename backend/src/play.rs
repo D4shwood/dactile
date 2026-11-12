@@ -547,7 +547,7 @@ pub fn load_config() -> Config {
 mod tests {
     use super::*;
 
-    const PLAY: &str = include_str!("../../../examples/ornek-oyun.tex");
+    const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 
     fn apply(text: &str, c: &Change) -> String {
         let mut u: Vec<u16> = text.encode_utf16().collect();

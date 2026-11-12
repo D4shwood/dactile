@@ -813,12 +813,23 @@ version = "0.3.0-beta.1"
 dependencies = [
  "anyhow",
  "dactile",
+ "dactile-backend",
  "glib",
  "rfd",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
+]
+
+[[package]]
+name = "dactile-backend"
+version = "0.3.0-beta.1"
+dependencies = [
+ "anyhow",
+ "dactile",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

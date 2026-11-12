@@ -131,7 +131,7 @@ pub fn verbs(text: &str) -> Vec<String> {
 mod tests {
     use super::*;
 
-    const PLAY: &str = include_str!("../../../examples/ornek-oyun.tex");
+    const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 
     #[test]
     fn a_name_comes_first_for_its_letters() {

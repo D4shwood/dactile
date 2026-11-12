@@ -358,7 +358,7 @@ pub fn memo(text: &str, role: &str, at: usize, side: &Sidecar) -> Memo {
 mod tests {
     use super::*;
 
-    const PLAY: &str = include_str!("../../../examples/ornek-oyun.tex");
+    const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 
     #[test]
     fn castings_take_actors_and_the_table_shows_who_is_where() {

@@ -116,7 +116,7 @@ pub fn suggest(sp: &Shared, word: &str) -> Vec<String> {
 mod tests {
     use super::*;
 
-    const PLAY: &str = include_str!("../../../examples/ornek-oyun.tex");
+    const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 
     #[test]
     #[ignore] // loads the dictionary: seconds

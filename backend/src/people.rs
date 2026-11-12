@@ -348,7 +348,7 @@ pub fn shift(text: &str, alias: &str, up: bool) -> Option<Made> {
 mod tests {
     use super::*;
 
-    const PLAY: &str = include_str!("../../../examples/ornek-oyun.tex");
+    const PLAY: &str = include_str!("../../examples/ornek-oyun.tex");
 
     fn apply(text: &str, c: &Change) -> String {
         let u: Vec<u16> = text.encode_utf16().collect();
