@@ -69,3 +69,24 @@ fn a_command_that_panicked_does_not_stop_the_next() {
     let e = dispatch(&ctx, "save", json!({ "text": "", "force": false })).unwrap_err();
     assert_eq!(e, "no play open");
 }
+
+/// What the browser runs by itself must need nothing the browser lacks:
+/// each such command leaves the app's state alone, and takes no file.
+#[test]
+fn the_text_only_commands_take_text_only() {
+    let source = std::fs::read_to_string("src/commands.rs").unwrap();
+    for name in dactile_backend::TEXT_ONLY {
+        assert!(NAMES.contains(name), "{name} is no command");
+        let start = source
+            .find(&format!("pub fn {name}("))
+            .unwrap_or_else(|| panic!("{name} is not in commands.rs"));
+        let signature = &source[start..start + source[start..].find('{').unwrap()];
+        assert!(signature.contains("_app: &Shared"), "{name} uses the app");
+        for file in ["path", "pdf", "file", "draft"] {
+            assert!(
+                !signature.contains(&format!("{file}: ")),
+                "{name} takes a {file}"
+            );
+        }
+    }
+}

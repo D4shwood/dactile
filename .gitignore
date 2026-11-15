@@ -16,6 +16,7 @@
 /app/node_modules
 /app/dist
 /app/dist-web
+/app/web/wasm
 /app/src-tauri/gen
 
 # Where the web server is put up: the owner's own

@@ -11,6 +11,10 @@ edition = "2024"
 repository = "https://github.com/D4shwood/dactile"
 license = "GPL-3.0-or-later"
 
+# What the browser downloads: small before fast.
+[profile.release.package.dactile-wasm]
+opt-level = "s"
+
 # The Turkish dictionary is large: keep its loader fast in debug builds too.
 [profile.dev.package.spellbook]
 opt-level = 3

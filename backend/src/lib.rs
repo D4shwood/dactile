@@ -15,4 +15,7 @@ pub mod spell;
 pub mod summary;
 pub mod view;
 
-pub use commands::{App, Ctx, NAMES, Res, dispatch, err};
+/// The interface's language, for those who have the backend alone.
+pub use dactile::lang;
+
+pub use commands::{App, Ctx, NAMES, Res, TEXT_ONLY, dispatch, dispatch_text, err};

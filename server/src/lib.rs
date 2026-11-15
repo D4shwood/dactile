@@ -100,6 +100,7 @@ pub fn router(server: Shared, web: Option<PathBuf>) -> Router {
         .route("/file", get(file))
         .route("/log", post(log))
         .route("/version", get(version))
+        .route("/lang", get(lang))
         .route("/logout", post(logout))
         .route_layer(middleware::from_fn_with_state(server.clone(), guard))
         .route("/login", post(login))
@@ -501,6 +502,15 @@ struct Message {
 async fn log(Json(m): Json<Message>) -> Json<Value> {
     eprintln!("[window] {}", m.message);
     Json(Value::Null)
+}
+
+/// The interface's language as it is now: the settings say it, or with
+/// "auto" the open play does. The browser's own commands follow it.
+async fn lang() -> Json<&'static str> {
+    Json(match dactile::lang::get() {
+        dactile::lang::Lang::En => "en",
+        dactile::lang::Lang::Tr => "tr",
+    })
 }
 
 async fn version() -> Json<&'static str> {

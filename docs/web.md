@@ -8,7 +8,7 @@ Masaüstü uygulaması ve Dactile Light'ın davranışı bu işten etkilenmez.
 
 - **`server/`** (`dactile-server`): masaüstünün komutları (`backend/`) HTTP üzerinden, parolanın arkasında, **bir süreç bir kişi**. Kişinin her şeyi tek klasörde (`DACTILE_DATA`); dosya yolları o klasörün dışına çıkamaz (`server/src/confine.rs`).
 - **`app/web/`**: tarayıcı girişi. Arayüz masaüstününkiyle aynı dosyalar (`app/src`); `@tauri-apps/api` yerine `app/web/shim/` geçer ve sunucuyla konuşur. Dosya seçme yükleme, dosya açma indirme olur.
-- **`web-wasm/`** (`dactile-wasm`): arka ucun yalnızca metin okuyan komutları tarayıcı için. Şimdilik yalnızca `view`.
+- **`web-wasm/`** (`dactile-wasm`): arka ucun yalnızca metin okuyan 23 komutu (`backend/src/commands.rs`, `TEXT_ONLY`) tarayıcı için; sıkıştırılmış yaklaşık 195 KB. Tarayıcı bunları kendisi çalıştırır: yazarken görünüm, pano, kadro ve `\` menüsü sunucuyu beklemez. Yüklenemezse ya da bozulursa aynı komutlar sunucuya gider.
 - **`deploy/`**: tek kişilik kurulum (Ubuntu, Caddy, kullanıcı systemd'si, saatlik yedek). Adımlar `deploy/kurulum.md`'de.
 
 Yerelde çalıştırma:
@@ -20,7 +20,7 @@ npm run dev:web        # app/ içinde; http://localhost:1421
 
 ## Mimari kararlar
 
-1. **Yazarken tarayıcı, dosyada sunucu.** Yalnızca metin okuyan komutlar (görünüm, tamamlama, yazım denetimi, kadro, özetler) tarayıcıda WebAssembly olarak çalışır; yazarken ağ beklenmez. Kayıt, PDF, içe aktarma ve OCR sunucudadır. Vekil katman (`shim/core.ts`) komutu adına göre birine yollar; arayüz bunu bilmez. Arka ucun tamamı `wasm32`'ye derleniyor; dosyaya dokunan komutlar orada çağrılmaz.
+1. **Yazarken tarayıcı, dosyada sunucu.** Yalnızca metin okuyan komutlar tarayıcıda WebAssembly olarak çalışır; yazarken ağ beklenmez. Kayıt, PDF, içe aktarma ve OCR sunucudadır. Vekil katman (`shim/core.ts`) komutu adına göre birine yollar; arayüz bunu bilmez. Yazarken hâlâ sunucuya gidenler: yazım denetimi (sözlük sunucuda), özetler ve notlar (oyunun yanındaki dosyalarda).
 2. **Bir süreç bir kişi.** Çekirdek ayarların, önbelleğin ve çöpün yerini süreç genelinde bulur; kilit de süreç numarasına bakar. Bunları sökmek yerine her kişiye kendi süreci ve klasörü verilir (systemd şablon birimi); önde bir giriş kapısı isteği doğru sürece yollar. Yalıtımı işletim sistemi verir. Boşta kalan süreç kapanır, istek gelince açılır.
 3. **PDF sunucuda, kutu içinde.** Herkes aynı yazı tipleriyle aynı sayfaları görsün diye PDF tek yerde derlenir. `DACTILE_SANDBOX=bwrap` ile XeLaTeX ağsız, yalnızca oyunun klasörünü ve sınıfı gören bir `bwrap` kutusunda çalışır (`core/src/build.rs`, `tex`; testi `core/tests/sandbox.rs`). Kurulum betiği kutu çalışıyorsa açar, çalışmıyorsa bağırır. Başka biri sunucuya girmeden önce şarttır. Kutuya henüz girmeyenler: içe aktarmada çalışan `pdftotext`, `pdftoppm` ve `tesseract`.
 4. **Giriş Google ile**, site sahibinin izin listesiyle. Parola ve e-posta servisi yok. Google hesabı olmayana süreli, iptal edilebilir, yalnızca okuyan davet bağlantısı.
@@ -42,8 +42,8 @@ Canlı yazmanın sunucu tarafı ile "bir süreç bir kişi" kararının nasıl b
 ## Sıra
 
 1. **Tek kişilik kurulum.** Bugünkü haliyle bir sunucuya; kurulum betikleri gerçek makinede sınanır.
-2. **Güvenlik ve yedek.** XeLaTeX kutusu (yapıldı; Ubuntu'da sınanacak); yedek anahtarlarının ayrılması; son başarılı yedeğin zamanı ana ekranda; yüklenen belgelerin temizliği ve disk sınırı; oturumların diskte tutulması ve süresi; bir kez gerçek geri yükleme.
-3. **Yazarken tarayıcı.** Metin komutları WebAssembly'ye; sözlük siteyle gelir.
+2. **Güvenlik ve yedek.** Yapılanlar: XeLaTeX kutusu (Ubuntu'da sınanacak), kötü giden yedeğin ana ekranda söylenmesi, yüklenen belgelerin temizliği, diskte duran süreli oturumlar, yanlış parola sınırı. Kalanlar: yedek anahtarlarının Dactile'ı çalıştıran kullanıcıdan ayrılması, kişi başına disk sınırı, içe aktarma araçlarının kutusu, bir kez gerçek geri yükleme.
+3. **Yazarken tarayıcı.** Metin komutları WebAssembly'de (yapıldı). Kalan: sözlük siteyle gelsin ki yazım denetimi de tarayıcıda çalışsın; özetler ve notlar metinle birlikte gelsin.
 4. **Çok kişi.** Kişi başına süreç, giriş kapısı, Google girişi ve izin listesi. Üst çubukta kim olduğu ve çıkış. Herkes aynı sayfa: özgür bir yazı tipi iki tarafta varsayılan, sunucuda sabit TeX Live.
 5. **Ekip.** Projeler ve roller, birlikte ve sırayla yazma, notlar, oyuncu görünümü, sürüm geçmişi ekranı.
 

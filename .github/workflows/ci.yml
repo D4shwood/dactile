@@ -42,13 +42,18 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+      # What the browser's build needs: the wasm32 target, and wasm-bindgen
+      # of the version Cargo.lock has.
+      - run: rustup target add wasm32-unknown-unknown
+      - run: cargo install wasm-bindgen-cli --locked --version "$(cargo pkgid wasm-bindgen | sed 's/.*@//')"
       - run: npm ci
         working-directory: app
       - run: npm run check
         working-directory: app
       - run: npm run build
         working-directory: app
-      # The same interface for the browser, over its stand-ins for Tauri.
+      # The same interface for the browser, over its stand-ins for Tauri and
+      # with the text-only commands built into it (web-wasm).
       - run: npm run check:web
         working-directory: app
       - run: npm run build:web

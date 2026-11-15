@@ -857,22 +857,45 @@ impl<T: serde::Serialize> Plain for &Answer<T> {
     }
 }
 
+/// One command's arm: its arguments out of the JSON object, its answer in.
+macro_rules! run {
+    ($app:ident, $args:ident, $name:ident ( $($arg:ident : $ty:ty),* )) => {{
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Args { $($arg: $ty,)* }
+        let Args { $($arg,)* } = serde_json::from_value($args)
+            .map_err(|e| format!("{}: {e}", stringify!($name)))?;
+        (&Answer($name($app, $($arg),*))).json()
+    }};
+}
+
 macro_rules! commands {
-    ($( $name:ident ( $($arg:ident : $ty:ty),* ); )*) => {
+    (
+        text { $( $t:ident ( $($targ:ident : $tty:ty),* ); )* }
+        rest { $( $name:ident ( $($arg:ident : $ty:ty),* ); )* }
+    ) => {
+        /// The commands that read nothing but their arguments: no open play,
+        /// no file, no settings. The browser runs these itself (`web-wasm`),
+        /// with no server to wait for as the writer types.
+        pub const TEXT_ONLY: &[&str] = &[$(stringify!($t)),*];
+
         /// The names `dispatch` answers to.
-        pub const NAMES: &[&str] = &[$(stringify!($name)),*];
+        pub const NAMES: &[&str] = &[$(stringify!($t),)* $(stringify!($name)),*];
+
+        /// Runs a text-only command. It names no other command, so a program
+        /// built with this alone carries none of the rest.
+        pub fn dispatch_text(app: &Ctx, name: &str, args: serde_json::Value) -> Res<serde_json::Value> {
+            match name {
+                $(stringify!($t) => run!(app, args, $t($($targ: $tty),*)),)*
+                _ => Err(format!("no text command {name}")),
+            }
+        }
 
         /// Runs the command `name` with its arguments, a JSON object.
         pub fn dispatch(app: &Ctx, name: &str, args: serde_json::Value) -> Res<serde_json::Value> {
             match name {
-                $(stringify!($name) => {
-                    #[derive(serde::Deserialize)]
-                    #[serde(rename_all = "camelCase")]
-                    struct Args { $($arg: $ty,)* }
-                    let Args { $($arg,)* } = serde_json::from_value(args)
-                        .map_err(|e| format!("{}: {e}", stringify!($name)))?;
-                    (&Answer($name(app, $($arg),*))).json()
-                })*
+                $(stringify!($name) => run!(app, args, $name($($arg: $ty),*)),)*
+                _ if TEXT_ONLY.contains(&name) => dispatch_text(app, name, args),
                 _ => Err(format!("no command {name}")),
             }
         }
@@ -882,6 +905,32 @@ macro_rules! commands {
 // Every command, as the window names it: its arguments come as one JSON
 // object in the window's camelCase, its answer goes back as JSON.
 commands! {
+    text {
+        view(text: String);
+        board(text: String);
+        relocate(text: String, card: usize, to: usize);
+        complete(text: String, at: usize, query: String, hash: bool);
+        heading(text: String, at: usize, act: bool, place: String, time: String);
+        fields(text: String);
+        verbs(text: String);
+        cast(text: String, by_lines: bool);
+        suggest_alias(text: String, name: String);
+        character_add(text: String, form: people::Form, at: Option<usize>);
+        renames(text: String, old: String, new: String);
+        character_remove(text: String, alias: String);
+        character_merge(text: String, from: String, into: String);
+        cast_others(text: String);
+        cast_others_set(text: String, words: String);
+        character_shift(text: String, alias: String, up: bool);
+        cover_read(text: String);
+        cover_write(text: String, form: cover::CoverForm);
+        play_font_size_write(text: String, size: String);
+        play_font_write(text: String, font: String);
+        scene_align_next(text: String);
+        title_file(title: String);
+        guide_view();
+    }
+    rest {
         home();
         play_imported(path: String, on: bool);
         settings();
@@ -893,9 +942,6 @@ commands! {
         close();
         save(text: String, force: bool);
         save_template(text: String, name: String);
-        view(text: String);
-        board(text: String);
-        relocate(text: String, card: usize, to: usize);
         build();
         notes_list(text: String);
         note_add(text: String, at: usize, author: String, body: String);
@@ -908,20 +954,7 @@ commands! {
         misspelt(text: String, from: usize, to: usize);
         suggest(word: String);
         learn(word: String);
-        complete(text: String, at: usize, query: String, hash: bool);
-        heading(text: String, at: usize, act: bool, place: String, time: String);
-        fields(text: String);
-        verbs(text: String);
-        cast(text: String, by_lines: bool);
-        suggest_alias(text: String, name: String);
-        character_add(text: String, form: people::Form, at: Option<usize>);
-        renames(text: String, old: String, new: String);
         character_edit(text: String, old: String, form: people::Form);
-        character_remove(text: String, alias: String);
-        character_merge(text: String, from: String, into: String);
-        cast_others(text: String);
-        cast_others_set(text: String, words: String);
-        character_shift(text: String, alias: String, up: bool);
         summaries(text: String);
         summary_here(text: String, at: usize);
         summary_set(text: String, at: usize, summary: String);
@@ -929,11 +962,6 @@ commands! {
         docx_export(path: String, text: String);
         notes_pdf(text: String);
         notes_docx(text: String);
-        cover_read(text: String);
-        cover_write(text: String, form: cover::CoverForm);
-        play_font_size_write(text: String, size: String);
-        play_font_write(text: String, font: String);
-        scene_align_next(text: String);
         scene_join(text: String, at: usize);
         casting_roles(text: String);
         casting_edit(edit: casting::Edit);
@@ -953,7 +981,6 @@ commands! {
         fork_start(path: String, draft: Option<String>, today: String);
         fork_file(path: String, draft: String);
         copy_start(title: String);
-        title_file(title: String);
         rename_start(path: String);
         play_make(path: String, title: Option<String>, draft: Option<String>, file: String);
         play_rename(path: String, title: String, file: String);
@@ -967,5 +994,5 @@ commands! {
         sync_view(line: usize, column: usize);
         sync_edit(pdf: String, page: usize, x: f32, y: f32);
         keys_view();
-        guide_view();
+    }
 }

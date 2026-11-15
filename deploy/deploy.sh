@@ -25,7 +25,7 @@ if ! git -C "$repo" diff --quiet HEAD; then
 fi
 
 echo "== interface"
-(cd "$repo/app" && npx vite build -c vite.web.config.ts --logLevel warn)
+(cd "$repo/app" && npm run --silent build:web -- --logLevel warn)
 
 echo "== source"
 src=$(mktemp -d /tmp/dactile-deploy.XXXXXX)

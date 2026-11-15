@@ -3,7 +3,44 @@
 // own; what a desktop does with its own dialogs and programs becomes
 // uploads, downloads and the browser's own tabs here.
 
+import init, { call as callHere, names, set_lang } from "../wasm/dactile_wasm.js";
+
 const IMPORT = ".docx,.odt,.pdf,.md,.txt,.tex";
+
+// The commands that only read the play's text run here, in WebAssembly
+// (web-wasm/): the writer waits for no network as they type. Until they have
+// loaded, and if they ever break, the server runs them as it runs the rest.
+let here: Set<string> | null = null;
+void init()
+  .then(() => (here = new Set(JSON.parse(names()))))
+  .catch((e) => console.warn("the browser's own commands didn't load", e));
+
+/// After these the interface's language may be another: the browser's
+/// commands are told before the answer goes on.
+const SPEAKS = new Set(["home", "open", "set_setting", "create", "example"]);
+
+async function follow() {
+  if (!here) return;
+  const lang = await fetch("/api/lang")
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null);
+  if (lang) set_lang(lang);
+}
+
+/// A text-only command run here; `undefined` when it has to go to the server.
+function local<T>(name: string, args: unknown): T | undefined {
+  if (!here?.has(name)) return undefined;
+  try {
+    return JSON.parse(callHere(name, JSON.stringify(args ?? {}))) as T;
+  } catch (e) {
+    // The command's own error, as the server would give it.
+    if (typeof e === "string") throw e;
+    // Anything else is ours: the server takes over from here on.
+    console.warn(`${name} failed in the browser`, e);
+    here = null;
+    return undefined;
+  }
+}
 
 export class SignedOut extends Error {}
 
@@ -99,8 +136,15 @@ export async function invoke<T>(cmd: string, args: Args = {}): Promise<T> {
     case "call":
       // The plays' folder is the server's: the settings form still sends it.
       if (args.name === "set_setting" && args.args?.key === "plays_dir") return done();
+      {
+        const answer = local<T>(args.name, args.args);
+        if (answer !== undefined) return answer;
+      }
       // A save is finished even if the tab closes on it.
-      return post<T>(`/api/call/${args.name}`, args.args, args.name === "save");
+      return post<T>(`/api/call/${args.name}`, args.args, args.name === "save").then(async (v) => {
+        if (SPEAKS.has(args.name)) await follow();
+        return v;
+      });
     case "import_read":
       return post<T>("/api/import_read", args);
     case "startup":
