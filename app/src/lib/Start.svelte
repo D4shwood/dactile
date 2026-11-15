@@ -8,6 +8,7 @@
   import FileList from "./FileList.svelte";
   import Import from "./Import.svelte";
   import LookForm from "./LookForm.svelte";
+  import People from "./People.svelte";
   import { applyLook, pickLook } from "./look";
   import Temporary from "./Temporary.svelte";
   import { getVersion } from "@tauri-apps/api/app";
@@ -613,7 +614,10 @@
         }}
       >
         <label>{l("Yazar", "Author")} <input bind:value={author} /></label>
-        <label>{l("Oyunlar klasörü", "Plays folder")} <input bind:value={playsDir} /></label>
+        <!-- In the browser the plays' folder is the server's to say. -->
+        {#if !door}
+          <label>{l("Oyunlar klasörü", "Plays folder")} <input bind:value={playsDir} /></label>
+        {/if}
         <label
           >{l("Dil", "Language")}
           <select bind:value={lang}>
@@ -627,6 +631,10 @@
       <h2 class="lookhead">{l("Görünüş", "Appearance")}</h2>
       <LookForm {tr} {look} set={setLook} />
       {#if lookError}<p class="error">{lookError}</p>{/if}
+      {#if door?.owner}
+        <h2 class="lookhead">{l("Kişiler", "People")}</h2>
+        <People {tr} />
+      {/if}
     {/if}
 
     {#if section === "keys"}

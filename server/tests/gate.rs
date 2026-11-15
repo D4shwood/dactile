@@ -133,6 +133,54 @@ async fn each_person_has_a_dactile_of_their_own() {
     let straight = reqwest_free_get(&gate, "baran").await;
     assert_eq!(straight, 401);
 
+    // The list is the owner's: Ada sees and changes it, Baran doesn't.
+    let (s, b, _) = send(&app, get("/api/people", &ada)).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(json(&b).as_array().unwrap().len(), 2);
+    let (s, _, _) = send(&app, get("/api/people", &baran)).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let new = json!({ "id": "ceren", "name": "Ceren Ak", "mail": "ceren@example.com" });
+    let (s, _, _) = send(&app, post("/api/people", &baran, new.clone())).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let (s, _, _) = send(&app, post("/api/people", &ada, new)).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(
+        people::find(&home, "ceren").unwrap().mail,
+        "ceren@example.com"
+    );
+    let (s, _, _) = send(&app, post("/api/people", &ada, json!({ "id": "No Good" }))).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    // A link made on the site lets its person in.
+    let (s, _, _) = send(&app, post("/api/people/ceren/invite", &baran, json!({}))).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let (s, b, _) = send(&app, post("/api/people/ceren/invite", &ada, json!({}))).await;
+    assert_eq!(s, StatusCode::OK);
+    let path = json(&b)["path"].as_str().unwrap().to_string();
+    let ceren = come_in(&app, path.trim_start_matches("/giris/"))
+        .await
+        .expect("ceren's cookie");
+    let (_, b, _) = send(&app, get("/api/me", &ceren)).await;
+    assert_eq!(json(&b)["name"], "Ceren Ak");
+    // The owner stays the owner and on the list, whatever they send.
+    let (s, _, _) = send(&app, post("/api/people/ada/remove", &ada, json!({}))).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST);
+    let (s, _, _) = send(
+        &app,
+        post(
+            "/api/people",
+            &ada,
+            json!({ "id": "ada", "name": "Ada Yıldız" }),
+        ),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(people::find(&home, "ada").unwrap().role, "owner");
+    // Taken off on the site, Ceren is out at once.
+    let (s, _, _) = send(&app, post("/api/people/ceren/remove", &ada, json!({}))).await;
+    assert_eq!(s, StatusCode::OK);
+    let (s, _, _) = send(&app, get("/api/me", &ceren)).await;
+    assert_eq!(s, StatusCode::UNAUTHORIZED);
+
     // Taken off the list, Baran is out at once; Ada is not.
     people::remove(&home, "baran").unwrap();
     let (s, _, _) = send(&app, post("/api/call/home", &baran, json!({}))).await;

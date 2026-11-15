@@ -192,8 +192,19 @@ export async function invoke<T>(cmd: string, args: Args = {}): Promise<T> {
       return done();
     case "log":
       return post<T>("/api/log", args).catch(() => done());
-    case "door":
-      return fetch("/api/me").then(answer<T>);
+    case "door": {
+      const me = await fetch("/api/me").then(answer<{ name: string | null; role?: string }>);
+      return done({ name: me.name, owner: me.role === "owner" });
+    }
+    case "people":
+      return fetch("/api/people").then(answer<T>);
+    case "person_add":
+      // No address typed leaves the one they had.
+      return post<T>("/api/people", { id: args.id, name: args.name, mail: args.mail || undefined });
+    case "person_invite":
+      return post<T>(`/api/people/${encodeURIComponent(args.id)}/invite`, {});
+    case "person_remove":
+      return post<T>(`/api/people/${encodeURIComponent(args.id)}/remove`, {});
     case "sign_out":
       await post("/api/logout", {});
       location.reload();

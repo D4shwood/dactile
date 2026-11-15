@@ -174,6 +174,9 @@ pub fn router(gate: Shared, web: Option<PathBuf>) -> Router {
         .route("/me", get(me))
         .route("/version", get(version))
         .route("/logout", post(logout))
+        .route("/people", get(people_list).post(person_add))
+        .route("/people/{id}/invite", post(person_invite))
+        .route("/people/{id}/remove", post(person_remove))
         // What isn't the gate's own is the person's server's.
         .route("/{*rest}", any(pass))
         .route_layer(middleware::from_fn_with_state(gate.clone(), guard));
@@ -225,6 +228,103 @@ async fn no_password() -> Response {
 
 async fn me(Extension(p): Extension<Person>) -> Json<Value> {
     Json(json!({ "id": p.id, "name": p.name, "role": p.role }))
+}
+
+/// The list is the owner's to see and change: the answer anyone else gets.
+fn not_the_owner(p: &Person) -> Option<Response> {
+    (p.role != "owner").then(|| {
+        fail(
+            StatusCode::FORBIDDEN,
+            dactile::lang::l(
+                "Kişi listesi site sahibinindir.",
+                "The list of people is the owner's.",
+            ),
+        )
+    })
+}
+
+fn as_json(p: &Person) -> Value {
+    json!({ "id": p.id, "name": p.name, "role": p.role, "mail": p.mail })
+}
+
+async fn people_list(State(g): State<Shared>, Extension(me): Extension<Person>) -> Response {
+    if let Some(no) = not_the_owner(&me) {
+        return no;
+    }
+    let all: Vec<Value> = people::list(&g.home).iter().map(as_json).collect();
+    Json(all).into_response()
+}
+
+#[derive(serde::Deserialize)]
+struct NewPerson {
+    id: String,
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    owner: bool,
+    /// Their Google account's address; none, the one they had stays.
+    mail: Option<String>,
+}
+
+/// A new person, or a new name, role or address for one who is there.
+async fn person_add(
+    State(g): State<Shared>,
+    Extension(me): Extension<Person>,
+    Json(new): Json<NewPerson>,
+) -> Response {
+    if let Some(no) = not_the_owner(&me) {
+        return no;
+    }
+    // An owner can't stop being one by a slip of their own hand: the site
+    // would be left with no one to open its list.
+    let owner = new.owner || new.id == me.id;
+    match people::add(&g.home, &new.id, &new.name, owner, new.mail.as_deref()) {
+        Ok(()) => Json(json!(true)).into_response(),
+        Err(e) => fail(StatusCode::BAD_REQUEST, e),
+    }
+}
+
+/// A link for them: the path, which the page puts the site's address before.
+async fn person_invite(
+    State(g): State<Shared>,
+    Extension(me): Extension<Person>,
+    Url(id): Url<String>,
+) -> Response {
+    if let Some(no) = not_the_owner(&me) {
+        return no;
+    }
+    match people::invite(&g.home, &id, 7) {
+        Ok(token) => Json(json!({ "path": format!("/giris/{token}"), "days": 7 })).into_response(),
+        Err(e) => fail(StatusCode::BAD_REQUEST, e),
+    }
+}
+
+async fn person_remove(
+    State(g): State<Shared>,
+    Extension(me): Extension<Person>,
+    Url(id): Url<String>,
+) -> Response {
+    if let Some(no) = not_the_owner(&me) {
+        return no;
+    }
+    if id == me.id {
+        return fail(
+            StatusCode::BAD_REQUEST,
+            dactile::lang::l(
+                "Kendini listeden çıkaramazsın.",
+                "You can't take yourself off the list.",
+            ),
+        );
+    }
+    match people::remove(&g.home, &id) {
+        Ok(()) => {
+            // Out at once, wherever they are signed in.
+            g.door.sign_out_all(&id);
+            g.rest().await;
+            Json(json!(true)).into_response()
+        }
+        Err(e) => fail(StatusCode::BAD_REQUEST, e),
+    }
 }
 
 async fn version() -> Json<&'static str> {

@@ -20,6 +20,11 @@ const DESKTOP = new Set([
   "open_url",
   "door",
   "sign_out",
+  // The browser's alone: the desktop has no list of people.
+  "people",
+  "person_add",
+  "person_invite",
+  "person_remove",
 ]);
 
 function invoke<T>(name: string, args?: Record<string, unknown>): Promise<T> {
@@ -292,12 +297,28 @@ export interface GuideGroup {
 /// if the site knows people by name.
 export interface Door {
   name: string | null;
+  /// The site's owner, who keeps its list of people.
+  owner: boolean;
+}
+
+/// Someone who may come in to the site.
+export interface Person {
+  id: string;
+  name: string;
+  role: string;
+  /// Their Google account's address, if they sign in with it.
+  mail: string;
 }
 
 export const api = {
   /// Null on the desktop, where nobody signs in.
   door: () => invoke<Door | null>("door"),
   signOut: () => invoke<void>("sign_out"),
+  people: () => invoke<Person[]>("people"),
+  personAdd: (id: string, name: string, mail: string) => invoke<void>("person_add", { id, name, mail }),
+  /// A link good once for them: its path on the site.
+  personInvite: (id: string) => invoke<{ path: string; days: number }>("person_invite", { id }),
+  personRemove: (id: string) => invoke<void>("person_remove", { id }),
   playImported: (path: string, on: boolean) => invoke<void>("play_imported", { path, on }),
   keys: () => invoke<KeysView>("keys_view"),
   guide: () => invoke<GuideGroup[]>("guide_view"),
