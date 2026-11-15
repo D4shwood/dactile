@@ -63,6 +63,7 @@ done
 put "$here/backup.sh" "$to:bin/backup.sh"
 put "$here/dactile.service" "$here/backup.service" "$here/backup.timer" "$to:.config/systemd/user/"
 
+# Each person may keep two gigabytes; past that they can't upload more.
 # XeLaTeX boxed in, where the machine lets its users have the box.
 box=
 if run 'bwrap --unshare-all --unshare-user --ro-bind /usr /usr --ro-bind-try /lib /lib --ro-bind-try /lib64 /lib64 --ro-bind-try /bin /bin /usr/bin/true' 2>/dev/null; then
@@ -70,7 +71,7 @@ if run 'bwrap --unshare-all --unshare-user --ro-bind /usr /usr --ro-bind-try /li
 else
   echo "!! bwrap doesn't start for the dactile user: XeLaTeX will run UNBOXED. Run setup.sh again, or see docs/web.md."
 fi
-printf "$box"'DACTILE_HOME=/home/dactile/data\nDACTILE_WEB=/home/dactile/web\nDACTILE_ADDR=127.0.0.1:1430\nDACTILE_SECURE=1\nDACTILE_DICT=/home/dactile/dict\nDACTILE_BACKUP=/home/dactile/data/cache/backup\n' |
+printf "$box"'DACTILE_HOME=/home/dactile/data\nDACTILE_WEB=/home/dactile/web\nDACTILE_ADDR=127.0.0.1:1430\nDACTILE_SECURE=1\nDACTILE_DICT=/home/dactile/dict\nDACTILE_BACKUP=/home/dactile/data/cache/backup\nDACTILE_QUOTA_MB=2048\n' |
   run 'umask 077 && mkdir -p ~/.config/dactile-server && cat > ~/.config/dactile-server/env'
 
 run 'systemctl --user daemon-reload && systemctl --user enable --now -q dactile.service backup.timer && systemctl --user restart dactile.service'

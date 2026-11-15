@@ -32,15 +32,20 @@ struct Tools {
 }
 
 impl Tools {
-    fn command(&self, program: &str) -> Command {
+    /// The program, with what it is to read and to write: boxed in where
+    /// that is asked for (`build::tool`), it reaches nothing else.
+    fn command(&self, program: &str, reads: &[&Path], writes: &[&Path]) -> Command {
         match &self.bundle {
             Some(dir) => {
-                let mut c = crate::build::outside(&dir.join("bin").join(program).to_string_lossy());
+                let mut reads = reads.to_vec();
+                reads.push(dir);
+                let path = dir.join("bin").join(program);
+                let mut c = crate::build::tool(&path.to_string_lossy(), &reads, writes);
                 c.env("LD_LIBRARY_PATH", dir.join("lib"));
                 c.env("TESSDATA_PREFIX", dir.join("tessdata"));
                 c
             }
-            None => crate::build::outside(program),
+            None => crate::build::tool(program, reads, writes),
         }
     }
 }
@@ -72,13 +77,13 @@ fn is_bundle(dir: &Path) -> bool {
 }
 
 fn system() -> Option<Tools> {
-    let out = crate::build::outside("tesseract")
+    let out = crate::build::tool("tesseract", &[], &[])
         .arg("--list-langs")
         .output()
         .ok()?;
     let list = String::from_utf8_lossy(&out.stdout);
     let has = |lang: &str| list.lines().any(|l| l.trim() == lang);
-    let there = |p: &str| crate::build::outside(p).arg("-v").output().is_ok();
+    let there = |p: &str| crate::build::tool(p, &[], &[]).arg("-v").output().is_ok();
     (there("pdftoppm") && there("pdftotext") && has("tur")).then(|| Tools {
         bundle: None,
         langs: if has("Latin") { BOTH } else { TURKISH },
@@ -95,6 +100,9 @@ fn tools() -> Option<&'static Tools> {
             places(&exe, appdir.as_deref(), asked.as_deref())
                 .into_iter()
                 .find(|d| is_bundle(d))
+                // As it really is: boxed in, a `..` on the way to it leads
+                // through folders that aren't there.
+                .map(|dir| dir.canonicalize().unwrap_or(dir))
                 .map(|dir| Tools {
                     langs: if dir.join("tessdata/Latin.traineddata").is_file() {
                         BOTH
@@ -113,17 +121,18 @@ pub fn ready() -> bool {
     tools().is_some()
 }
 
-/// A program for reading PDFs: the one carried along, else the system's.
-pub(super) fn poppler(program: &str) -> Command {
+/// A program for reading the PDF `pdf`: the one carried along, else the
+/// system's.
+pub(super) fn poppler(program: &str, pdf: &Path) -> Command {
     match tools() {
         Some(t)
             if t.bundle
                 .as_ref()
                 .is_some_and(|d| d.join("bin").join(program).is_file()) =>
         {
-            t.command(program)
+            t.command(program, &[pdf], &[])
         }
-        _ => crate::build::outside(program),
+        _ => crate::build::tool(program, &[pdf], &[]),
     }
 }
 
@@ -179,7 +188,11 @@ impl Drop for Scratch {
 }
 
 fn page_count(t: &Tools, pdf: &Path) -> Result<usize> {
-    let out = t.command("pdfinfo").arg(pdf).output().context("pdfinfo")?;
+    let out = t
+        .command("pdfinfo", &[pdf], &[])
+        .arg(pdf)
+        .output()
+        .context("pdfinfo")?;
     pages_said(&String::from_utf8_lossy(&out.stdout)).context("pdfinfo")
 }
 
@@ -193,7 +206,7 @@ fn page(t: &Tools, pdf: &Path, dir: &Path, n: usize) -> Result<String> {
     let image = dir.join(format!("p{n}"));
     let number = n.to_string();
     let drawn = t
-        .command("pdftoppm")
+        .command("pdftoppm", &[pdf], &[dir])
         .args([
             "-r",
             DPI,
@@ -219,7 +232,7 @@ fn page(t: &Tools, pdf: &Path, dir: &Path, n: usize) -> Result<String> {
     // Through a PDF of the words alone: `pdftotext` then keeps where they
     // stood, which a cast page's columns need, as with any other PDF.
     let read = t
-        .command("tesseract")
+        .command("tesseract", &[], &[dir])
         .arg(&png)
         .arg(&image)
         .args(["-l", t.langs, "--psm", "6", "--dpi", DPI])
@@ -237,7 +250,7 @@ fn page(t: &Tools, pdf: &Path, dir: &Path, n: usize) -> Result<String> {
     }
     let words = image.with_extension("pdf");
     let out = t
-        .command("pdftotext")
+        .command("pdftotext", &[dir], &[])
         .args(["-layout", "-enc", "UTF-8"])
         .arg(&words)
         .arg("-")

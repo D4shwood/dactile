@@ -56,7 +56,7 @@ fn line_key(t: &str) -> String {
 /// The lines in italics on each page, by `pdftohtml`, the one tool that
 /// says; none where it isn't there.
 fn italic_lines(path: &Path) -> Vec<Italics> {
-    let out = super::ocr::poppler("pdftohtml")
+    let out = super::ocr::poppler("pdftohtml", path)
         .args(["-xml", "-i", "-stdout", "-enc", "UTF-8"])
         .arg(path)
         .output();
@@ -314,7 +314,7 @@ pub(super) fn of_text(text: &str, italics: &[Italics]) -> Source {
 }
 
 fn pdftotext(path: &Path) -> Option<String> {
-    let out = super::ocr::poppler("pdftotext")
+    let out = super::ocr::poppler("pdftotext", path)
         .args(["-layout", "-enc", "UTF-8"])
         .arg(path)
         .arg("-")

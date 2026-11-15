@@ -401,6 +401,33 @@ pub fn sweep_uploads(dir: &Path, age: std::time::Duration, room: u64) {
     }
 }
 
+/// All the bytes under `dir`, links not followed.
+pub fn bytes_under(dir: &Path) -> u64 {
+    std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .map(|e| match e.file_type() {
+            Ok(t) if t.is_dir() => bytes_under(&e.path()),
+            Ok(t) if t.is_file() => e.metadata().map_or(0, |m| m.len()),
+            _ => 0,
+        })
+        .sum()
+}
+
+/// How much one person may keep here, from `DACTILE_QUOTA_MB`; no limit
+/// unless it says. Past it nothing more can be uploaded. Writing is never
+/// stopped by it: a play is small, and theirs to save.
+fn quota() -> Option<u64> {
+    let mb: u64 = std::env::var("DACTILE_QUOTA_MB").ok()?.parse().ok()?;
+    Some(mb << 20)
+}
+
+/// Whether `more` bytes still fit in `root` under a limit of `room`.
+pub fn fits(root: &Path, more: u64, room: u64) -> bool {
+    bytes_under(root).saturating_add(more) <= room
+}
+
 /// A file from the browser: a play (`.tex`) gets its own folder among the
 /// plays, a document to import waits in the uploads. The answer is its path.
 async fn upload(
@@ -430,6 +457,17 @@ async fn upload(
         .file_stem()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
+    if let Some(room) = quota()
+        && !fits(&s.root, body.len() as u64, room)
+    {
+        return fail(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            dactile::lang::l(
+                "Yerin doldu: yeni bir dosya yüklemeden önce eski oyunlardan ya da belgelerden yer aç.",
+                "Your space is full: make room among the old plays or documents before uploading another file.",
+            ),
+        );
+    }
     let to = match kind.as_str() {
         "play" if ext == "tex" => {
             let stem = dactile::library::file_name(&stem);
@@ -452,6 +490,10 @@ async fn upload(
             } else {
                 stem
             };
+            // `file_name` makes a play's name of it: the folder and the
+            // document take it without the `.tex`.
+            let stem = stem.strip_suffix(".tex").unwrap_or(&stem);
+            let stem = if stem.is_empty() { "belge" } else { stem }.to_string();
             dactile::library::new_folder(&s.uploads(), &stem)
                 .map(|d| d.join(format!("{stem}.{ext}")))
         }
@@ -586,6 +628,21 @@ mod tests {
         let failing = said("ok=1799996400\naway=1\nerror=git push\n").unwrap();
         assert!(failing.contains("git push"), "{failing}");
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn what_a_person_keeps_is_counted_folder_by_folder() {
+        let dir = std::env::temp_dir().join(format!("dactile-quota-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("plays/kar")).unwrap();
+        std::fs::write(dir.join("plays/kar/kar.tex"), vec![0u8; 700]).unwrap();
+        std::fs::write(dir.join("a.txt"), vec![0u8; 300]).unwrap();
+        // A link to something large elsewhere counts for nothing.
+        std::os::unix::fs::symlink("/usr", dir.join("elsewhere")).unwrap();
+        assert_eq!(bytes_under(&dir), 1000);
+        assert!(fits(&dir, 24, 1024));
+        assert!(!fits(&dir, 25, 1024));
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

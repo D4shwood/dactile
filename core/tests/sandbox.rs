@@ -2,7 +2,7 @@
 //! nothing but its own folder. Needs `bwrap` and `xelatex`; without them
 //! the tests pass having checked nothing.
 
-use dactile::build::boxed_tex;
+use dactile::build::{boxed_tex, boxed_tool};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -102,6 +102,69 @@ fn a_play_reads_its_folder_and_what_it_is_given_and_nothing_else() {
     let _ = run(&play, &[&other], &write);
     assert!(!other.join("written.tex").exists());
     fs::remove_dir_all(play.parent().unwrap()).unwrap();
+}
+
+#[test]
+fn the_tools_that_read_a_pdf_work_in_the_box_on_that_pdf_alone() {
+    let Some((play, other)) = folders("tools") else {
+        return;
+    };
+    if !have_v("pdftotext") || !have_v("pdftoppm") {
+        eprintln!("no poppler: nothing checked");
+        return;
+    }
+    let (ok, log) = run(&play, &[], PLAY);
+    assert!(ok, "{log}");
+    let pdf = play.join("play.pdf");
+    let secret = other.join("secret.pdf");
+    fs::copy(&pdf, &secret).unwrap();
+    let text = |pdf: &Path, reads: &[&Path]| {
+        let out = boxed_tool("pdftotext", reads, &[])
+            .args(["-layout", "-enc", "UTF-8"])
+            .arg(pdf)
+            .arg("-")
+            .output()
+            .unwrap();
+        (
+            out.status.success(),
+            String::from_utf8_lossy(&out.stdout).into_owned(),
+        )
+    };
+    // The PDF it was given, read.
+    let (ok, said) = text(&pdf, &[&pdf]);
+    assert!(ok && said.contains("Kar"), "{said}");
+    // Another one on the machine, not given: not there.
+    let (ok, said) = text(&secret, &[&pdf]);
+    assert!(!ok && said.is_empty(), "{said}");
+    // A page's image goes where it was told it may write, and nowhere else.
+    let images = play.join("images");
+    fs::create_dir_all(&images).unwrap();
+    let draw = |to: &Path| {
+        boxed_tool("pdftoppm", &[&pdf], &[&images])
+            .args(["-r", "50", "-png", "-singlefile", "-f", "1", "-l", "1"])
+            .arg(&pdf)
+            .arg(to)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .unwrap()
+            .success()
+    };
+    assert!(draw(&images.join("p1")));
+    assert!(images.join("p1.png").exists());
+    assert!(!draw(&other.join("p1")));
+    assert!(!other.join("p1.png").exists());
+    fs::remove_dir_all(play.parent().unwrap()).unwrap();
+}
+
+/// Poppler's tools say their version with `-v`, and not all with success.
+fn have_v(program: &str) -> bool {
+    Command::new(program)
+        .arg("-v")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok()
 }
 
 #[test]

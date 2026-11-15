@@ -550,8 +550,29 @@ pub fn tex(work: &Path, reads: &[&Path]) -> Command {
 
 /// `tex`, boxed in whatever the setting says.
 pub fn boxed_tex(work: &Path, reads: &[&Path]) -> Command {
+    in_box("xelatex", reads, &[work], Some(work))
+}
+
+/// Another program that reads what someone sent (a PDF's pages, their
+/// images): boxed in like XeLaTeX where that is asked for, with `reads` to
+/// read and `writes` to write and nothing else of the machine's.
+pub fn tool(program: &str, reads: &[&Path], writes: &[&Path]) -> Command {
+    if boxed() {
+        boxed_tool(program, reads, writes)
+    } else {
+        outside(program)
+    }
+}
+
+/// `tool`, boxed in whatever the setting says.
+pub fn boxed_tool(program: &str, reads: &[&Path], writes: &[&Path]) -> Command {
+    in_box(program, reads, writes, None)
+}
+
+/// `program` in the box: what it may read, what it may write, where it
+/// starts (`/tmp`, the box's own, unless said).
+fn in_box(program: &str, reads: &[&Path], writes: &[&Path], start: Option<&Path>) -> Command {
     let real = |p: &Path| fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
-    let work = real(work);
     let mut c = Command::new("bwrap");
     // Nothing of the server's own goes in: its password is in its environment.
     c.env_clear();
@@ -587,9 +608,13 @@ pub fn boxed_tex(work: &Path, reads: &[&Path]) -> Command {
         let r = real(r);
         c.arg("--ro-bind").arg(&r).arg(&r);
     }
-    // Last, so it stays writable inside something bound to read.
-    c.arg("--bind").arg(&work).arg(&work);
-    c.arg("--chdir").arg(&work);
+    // Last, so they stay writable inside something bound to read.
+    for w in writes {
+        let w = real(w);
+        c.arg("--bind").arg(&w).arg(&w);
+    }
+    c.arg("--chdir")
+        .arg(start.map_or_else(|| PathBuf::from("/tmp"), real));
     c.env("PATH", "/usr/bin:/bin")
         .env("HOME", "/tmp")
         .env("LANG", "C.UTF-8")
@@ -606,7 +631,7 @@ pub fn boxed_tex(work: &Path, reads: &[&Path]) -> Command {
     c.arg(format!("--as={}", 2048u64 << 20));
     c.arg(format!("--cpu={}", TIMEOUT.as_secs()));
     c.arg(format!("--fsize={}", 512u64 << 20));
-    c.args(["--nproc=64", "--core=0", "--", "xelatex"]);
+    c.args(["--nproc=64", "--core=0", "--", program]);
     c
 }
 
