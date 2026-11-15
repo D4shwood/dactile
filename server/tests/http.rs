@@ -161,4 +161,41 @@ async fn a_signed_in_browser_works_inside_its_folder_only() {
     let (s, _, _) = send(&app, post("/api/call/home", &cookie, json!({}))).await;
     assert_eq!(s, StatusCode::UNAUTHORIZED);
     std::fs::remove_dir_all(&dir).unwrap();
+
+    // A new server on the same folder knows the session of the old one...
+    let (s, _, kept) = send(
+        &app,
+        post("/api/login", "", json!({"password": "kar-yağıyor-1234"})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    let kept = kept.unwrap();
+    let again = dactile_server::router(
+        Arc::new(dactile_server::Server::new(
+            root.clone(),
+            "kar-yağıyor-1234".into(),
+            false,
+        )),
+        None,
+    );
+    let (s, _, _) = send(&again, post("/api/call/home", &kept, json!({}))).await;
+    assert_eq!(s, StatusCode::OK);
+
+    // ...and an address that keeps guessing has to wait, the right password
+    // or not; another address doesn't.
+    let guess = |from: &str, password: &str| {
+        Request::post("/api/login")
+            .header(header::CONTENT_TYPE, "application/json")
+            .header("x-forwarded-for", from)
+            .body(Body::from(json!({ "password": password }).to_string()))
+            .unwrap()
+    };
+    for _ in 0..5 {
+        let (s, _, _) = send(&again, guess("203.0.113.7", "yanlış")).await;
+        assert_eq!(s, StatusCode::UNAUTHORIZED);
+    }
+    let (s, _, _) = send(&again, guess("203.0.113.7", "kar-yağıyor-1234")).await;
+    assert_eq!(s, StatusCode::TOO_MANY_REQUESTS);
+    let (s, _, _) = send(&again, guess("203.0.113.8", "kar-yağıyor-1234")).await;
+    assert_eq!(s, StatusCode::OK);
 }

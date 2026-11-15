@@ -6,6 +6,7 @@
 //! file dialogs and programs becomes uploads and downloads here.
 
 pub mod confine;
+pub mod door;
 
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Path as Url, Query, Request, State};
@@ -17,10 +18,9 @@ use axum::{Json, Router};
 use dactile_backend::{Ctx, importing, play};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
 
 const COOKIE: &str = "dactile";
 
@@ -32,7 +32,7 @@ pub struct Server {
     /// The cookie gets `Secure` behind HTTPS.
     pub secure: bool,
     pub ctx: Ctx,
-    sessions: Mutex<HashSet<String>>,
+    door: door::Door,
     /// The OCR's pages read and to read, while a document is being read.
     progress: (AtomicUsize, AtomicUsize),
 }
@@ -42,11 +42,11 @@ type Shared = Arc<Server>;
 impl Server {
     pub fn new(root: PathBuf, password: String, secure: bool) -> Server {
         Server {
+            door: door::Door::open(root.join("cache/sessions")),
             root,
             password,
             secure,
             ctx: Ctx::default(),
-            sessions: Mutex::new(HashSet::new()),
             progress: (AtomicUsize::new(0), AtomicUsize::new(0)),
         }
     }
@@ -133,7 +133,7 @@ fn session(headers: &HeaderMap) -> Option<String> {
 /// Only a signed-in browser gets through, and a write must carry the
 /// interface's own header: another site's form can't add it.
 async fn guard(State(s): State<Shared>, req: Request, next: Next) -> Response {
-    let known = session(req.headers()).is_some_and(|t| s.sessions.lock().unwrap().contains(&t));
+    let known = session(req.headers()).is_some_and(|t| s.door.signed_in(&t));
     if !known {
         return fail(StatusCode::UNAUTHORIZED, "signed out");
     }
@@ -148,11 +148,17 @@ fn same(a: &str, b: &str) -> bool {
     a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0, |d, (x, y)| d | (x ^ y)) == 0
 }
 
-fn token() -> anyhow::Result<String> {
-    use std::io::Read;
-    let mut b = [0u8; 32];
-    std::fs::File::open("/dev/urandom")?.read_exact(&mut b)?;
-    Ok(b.iter().map(|x| format!("{x:02x}")).collect())
+/// Where the request came from, as the web server in front says it (it
+/// writes the last of these itself); "local" with none in front.
+fn address(headers: &HeaderMap) -> String {
+    headers
+        .get_all("x-forwarded-for")
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(','))
+        .map(|a| a.trim().to_string())
+        .rfind(|a| !a.is_empty())
+        .unwrap_or_else(|| "local".into())
 }
 
 #[derive(Deserialize)]
@@ -160,25 +166,36 @@ struct Login {
     password: String,
 }
 
-async fn login(State(s): State<Shared>, Json(l): Json<Login>) -> Response {
+async fn login(State(s): State<Shared>, headers: HeaderMap, Json(l): Json<Login>) -> Response {
+    let from = address(&headers);
+    if s.door.waiting(&from) {
+        return fail(
+            StatusCode::TOO_MANY_REQUESTS,
+            dactile::lang::l(
+                "Çok fazla yanlış deneme: on beş dakika sonra yine dene.",
+                "Too many wrong tries: try again in fifteen minutes.",
+            ),
+        );
+    }
     if !same(&l.password, &s.password) {
+        s.door.wrong(&from);
         // Slows a guesser down.
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         return fail(StatusCode::UNAUTHORIZED, "wrong password");
     }
-    let Ok(t) = token() else {
+    s.door.right(&from);
+    let Ok(t) = s.door.sign_in() else {
         return fail(StatusCode::INTERNAL_SERVER_ERROR, "no randomness");
     };
-    s.sessions.lock().unwrap().insert(t.clone());
     let secure = if s.secure { "; Secure" } else { "" };
-    let cookie =
-        format!("{COOKIE}={t}; Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000{secure}");
+    let life = door::SESSION.as_secs();
+    let cookie = format!("{COOKIE}={t}; Path=/; HttpOnly; SameSite=Strict; Max-Age={life}{secure}");
     ([(header::SET_COOKIE, cookie)], Json(json!(true))).into_response()
 }
 
 async fn logout(State(s): State<Shared>, headers: HeaderMap) -> Response {
     if let Some(t) = session(&headers) {
-        s.sessions.lock().unwrap().remove(&t);
+        s.door.sign_out(&t);
     }
     let gone = format!("{COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0");
     ([(header::SET_COOKIE, gone)], Json(json!(true))).into_response()
@@ -242,6 +259,49 @@ async fn progress(State(s): State<Shared>) -> Json<(usize, usize)> {
     ))
 }
 
+/// A document waits in the uploads this long after it came: time enough to
+/// read it again another way, and then it is the play that is kept.
+const UPLOAD_DAYS: u64 = 7;
+/// All the waiting documents together: past this the oldest go first.
+const UPLOADS_BYTES: u64 = 1 << 30;
+
+fn folder_bytes(dir: &Path) -> u64 {
+    std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| e.metadata().ok())
+        .filter(|m| m.is_file())
+        .map(|m| m.len())
+        .sum()
+}
+
+/// Removes the uploads' folders that have waited too long, and the oldest
+/// of the rest while they are more than `room` together.
+pub fn sweep_uploads(dir: &Path, age: std::time::Duration, room: u64) {
+    let mut folders: Vec<(std::time::SystemTime, PathBuf, u64)> = std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+        .filter_map(|e| {
+            let came = e.metadata().and_then(|m| m.modified()).ok()?;
+            Some((came, e.path(), folder_bytes(&e.path())))
+        })
+        .collect();
+    folders.sort();
+    let mut all: u64 = folders.iter().map(|f| f.2).sum();
+    for (came, path, bytes) in folders {
+        let old = came.elapsed().is_ok_and(|waited| waited > age);
+        if old || all > room {
+            // Only ever a folder straight inside the uploads.
+            if path.parent() == Some(dir) && std::fs::remove_dir_all(&path).is_ok() {
+                all -= bytes;
+            }
+        }
+    }
+}
+
 /// A file from the browser: a play (`.tex`) gets its own folder among the
 /// plays, a document to import waits in the uploads. The answer is its path.
 async fn upload(
@@ -282,6 +342,11 @@ async fn upload(
             dactile::library::new_home(&s.plays(), &stem)
         }
         "import" if dactile::import::EXTENSIONS.contains(&ext.as_str()) => {
+            sweep_uploads(
+                &s.uploads(),
+                std::time::Duration::from_secs(UPLOAD_DAYS * 24 * 3600),
+                UPLOADS_BYTES.saturating_sub(body.len() as u64),
+            );
             let stem = dactile::library::file_name(&stem);
             let stem = if stem.is_empty() {
                 "belge".to_string()
@@ -374,4 +439,38 @@ async fn log(Json(m): Json<Message>) -> Json<Value> {
 
 async fn version() -> Json<&'static str> {
     Json(env!("CARGO_PKG_VERSION"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_uploads_go_and_the_oldest_when_there_is_no_room() {
+        let dir = std::env::temp_dir().join(format!("dactile-uploads-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let put = |name: &str, bytes: usize, days_ago: u64| {
+            let d = dir.join(name);
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::write(d.join("belge.pdf"), vec![0u8; bytes]).unwrap();
+            let when =
+                std::time::SystemTime::now() - std::time::Duration::from_secs(days_ago * 24 * 3600);
+            std::fs::File::open(&d).unwrap().set_modified(when).unwrap();
+        };
+        put("eski", 10, 9);
+        put("dun", 600, 1);
+        put("bugun", 600, 0);
+        std::fs::write(dir.join("a-file"), "left alone").unwrap();
+        let week = std::time::Duration::from_secs(7 * 24 * 3600);
+        // Room for both of the new ones: only the old one goes.
+        sweep_uploads(&dir, week, 2000);
+        assert!(!dir.join("eski").exists());
+        assert!(dir.join("dun").exists() && dir.join("bugun").exists());
+        // Room for one: the older goes.
+        sweep_uploads(&dir, week, 1000);
+        assert!(!dir.join("dun").exists());
+        assert!(dir.join("bugun").exists());
+        assert!(dir.join("a-file").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }
