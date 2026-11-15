@@ -909,6 +909,7 @@ dependencies = [
  "dactile",
  "dactile-backend",
  "http-body-util",
+ "hyper-util",
  "percent-encoding",
  "serde",
  "serde_json",

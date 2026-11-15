@@ -130,6 +130,23 @@ function print(path: string) {
 
 type Args = Record<string, any>;
 
+// The play that is open, as the server knows it. A person's server is
+// stopped when they have been away a while and started again when they come
+// back, with no play open: the next command that needs one opens it first.
+let openPath: string | null = null;
+
+async function call<T>(name: string, args: unknown): Promise<T> {
+  // A save is finished even if the tab closes on it.
+  const send = () => post<T>(`/api/call/${name}`, args, name === "save");
+  try {
+    return await send();
+  } catch (e) {
+    if (e !== "no play open" || !openPath || name === "open") throw e;
+    await post("/api/call/open", { path: openPath });
+    return send();
+  }
+}
+
 export async function invoke<T>(cmd: string, args: Args = {}): Promise<T> {
   const done = (v?: unknown) => v as T;
   switch (cmd) {
@@ -140,8 +157,9 @@ export async function invoke<T>(cmd: string, args: Args = {}): Promise<T> {
         const answer = local<T>(args.name, args.args);
         if (answer !== undefined) return answer;
       }
-      // A save is finished even if the tab closes on it.
-      return post<T>(`/api/call/${args.name}`, args.args, args.name === "save").then(async (v) => {
+      return call<T>(args.name, args.args).then(async (v) => {
+        if (args.name === "open") openPath = (v as { path: string }).path;
+        if (args.name === "close") openPath = null;
         if (SPEAKS.has(args.name)) await follow();
         return v;
       });
@@ -174,6 +192,12 @@ export async function invoke<T>(cmd: string, args: Args = {}): Promise<T> {
       return done();
     case "log":
       return post<T>("/api/log", args).catch(() => done());
+    case "door":
+      return fetch("/api/me").then(answer<T>);
+    case "sign_out":
+      await post("/api/logout", {});
+      location.reload();
+      return done();
     default:
       throw `${cmd}: not in the browser`;
   }

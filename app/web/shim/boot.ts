@@ -30,7 +30,25 @@ function askPassword(wrong = false) {
   });
 }
 
-window.addEventListener("dactile-signed-out", () => askPassword());
+/// Where one comes in with a link the owner sends, there is nothing to type.
+function askForLink() {
+  document.body.innerHTML = `
+    <div style="max-width:22rem;margin:20vh auto;padding:0 1rem;font-family:system-ui,sans-serif">
+      <h1 style="font-family:serif;letter-spacing:.3em;margin:0 0 1.5rem">DACTILE</h1>
+      <p style="font-size:1.1rem;margin:0 0 1rem">Girmek için sana gönderilen bağlantıyı aç.</p>
+      <p style="color:#666;margin:0">Bağlantın yoksa ya da süresi dolduysa site sahibinden yenisini iste.</p>
+    </div>`;
+}
+
+async function ask() {
+  const door = await fetch("/api/door")
+    .then((r) => r.json())
+    .catch(() => null);
+  if (door?.kind === "link") askForLink();
+  else askPassword();
+}
+
+window.addEventListener("dactile-signed-out", () => void ask());
 
 if (await signedIn()) await import("../../src/main");
-else askPassword();
+else await ask();

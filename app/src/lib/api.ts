@@ -18,6 +18,8 @@ const DESKTOP = new Set([
   "full_screen",
   "pdf_print",
   "open_url",
+  "door",
+  "sign_out",
 ]);
 
 function invoke<T>(name: string, args?: Record<string, unknown>): Promise<T> {
@@ -286,7 +288,16 @@ export interface GuideGroup {
   entries: { name: string; what: string; example: string }[];
 }
 
+/// Who is signed in, where one signs in at all: in the browser. Their name,
+/// if the site knows people by name.
+export interface Door {
+  name: string | null;
+}
+
 export const api = {
+  /// Null on the desktop, where nobody signs in.
+  door: () => invoke<Door | null>("door"),
+  signOut: () => invoke<void>("sign_out"),
   playImported: (path: string, on: boolean) => invoke<void>("play_imported", { path, on }),
   keys: () => invoke<KeysView>("keys_view"),
   guide: () => invoke<GuideGroup[]>("guide_view"),

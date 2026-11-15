@@ -7,6 +7,8 @@
 
 pub mod confine;
 pub mod door;
+pub mod gate;
+pub mod people;
 
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Path as Url, Query, Request, State};
@@ -22,7 +24,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-const COOKIE: &str = "dactile";
+pub const COOKIE: &str = "dactile";
+/// The header the gate's word comes in.
+pub const GATE: &str = "x-dactile-gate";
 
 /// One person's server: their folder, their password, their open play.
 pub struct Server {
@@ -31,6 +35,9 @@ pub struct Server {
     pub password: String,
     /// The cookie gets `Secure` behind HTTPS.
     pub secure: bool,
+    /// Behind the gate (`gate.rs`), which has signed the person in already:
+    /// the word it sends with every request, and the only way in.
+    pub gate: Option<String>,
     pub ctx: Ctx,
     door: door::Door,
     /// The OCR's pages read and to read, while a document is being read.
@@ -41,14 +48,26 @@ type Shared = Arc<Server>;
 
 impl Server {
     pub fn new(root: PathBuf, password: String, secure: bool) -> Server {
+        let ctx = Ctx::default();
+        // Their settings from the first command on, whichever it is: the
+        // interface asks for the start screen first, another caller may not.
+        ctx.lock().cfg = play::load_config();
         Server {
             door: door::Door::open(root.join("cache/sessions")),
             root,
             password,
             secure,
-            ctx: Ctx::default(),
+            gate: None,
+            ctx,
             progress: (AtomicUsize::new(0), AtomicUsize::new(0)),
         }
+    }
+
+    /// One person's server behind the gate: no password of its own.
+    pub fn behind(root: PathBuf, gate: String) -> Server {
+        let mut s = Server::new(root, String::new(), false);
+        s.gate = Some(gate);
+        s
     }
 
     pub fn plays(&self) -> PathBuf {
@@ -102,8 +121,10 @@ pub fn router(server: Shared, web: Option<PathBuf>) -> Router {
         .route("/version", get(version))
         .route("/lang", get(lang))
         .route("/logout", post(logout))
+        .route("/me", get(me))
         .route_layer(middleware::from_fn_with_state(server.clone(), guard))
         .route("/login", post(login))
+        .route("/door", get(door_kind))
         .layer(DefaultBodyLimit::max(64 << 20));
     let app = Router::new().nest("/api", api).with_state(server);
     match web {
@@ -116,11 +137,11 @@ pub fn router(server: Shared, web: Option<PathBuf>) -> Router {
 }
 
 /// A command's error, as the desktop's window gets it: its message.
-fn fail(code: StatusCode, message: impl Into<String>) -> Response {
+pub fn fail(code: StatusCode, message: impl Into<String>) -> Response {
     (code, Json(Value::String(message.into()))).into_response()
 }
 
-fn session(headers: &HeaderMap) -> Option<String> {
+pub fn session(headers: &HeaderMap) -> Option<String> {
     headers
         .get_all(header::COOKIE)
         .iter()
@@ -134,7 +155,14 @@ fn session(headers: &HeaderMap) -> Option<String> {
 /// Only a signed-in browser gets through, and a write must carry the
 /// interface's own header: another site's form can't add it.
 async fn guard(State(s): State<Shared>, req: Request, next: Next) -> Response {
-    let known = session(req.headers()).is_some_and(|t| s.door.signed_in(&t));
+    let known = match &s.gate {
+        Some(word) => req
+            .headers()
+            .get(GATE)
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|said| same(said, word)),
+        None => session(req.headers()).is_some_and(|t| s.door.signed_in(&t)),
+    };
     if !known {
         return fail(StatusCode::UNAUTHORIZED, "signed out");
     }
@@ -145,13 +173,11 @@ async fn guard(State(s): State<Shared>, req: Request, next: Next) -> Response {
     next.run(req).await
 }
 
-fn same(a: &str, b: &str) -> bool {
-    a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0, |d, (x, y)| d | (x ^ y)) == 0
-}
+use door::same;
 
 /// Where the request came from, as the web server in front says it (it
 /// writes the last of these itself); "local" with none in front.
-fn address(headers: &HeaderMap) -> String {
+pub fn address(headers: &HeaderMap) -> String {
     headers
         .get_all("x-forwarded-for")
         .iter()
@@ -168,6 +194,9 @@ struct Login {
 }
 
 async fn login(State(s): State<Shared>, headers: HeaderMap, Json(l): Json<Login>) -> Response {
+    if s.gate.is_some() {
+        return fail(StatusCode::NOT_FOUND, "the gate signs in");
+    }
     let from = address(&headers);
     if s.door.waiting(&from) {
         return fail(
@@ -185,7 +214,7 @@ async fn login(State(s): State<Shared>, headers: HeaderMap, Json(l): Json<Login>
         return fail(StatusCode::UNAUTHORIZED, "wrong password");
     }
     s.door.right(&from);
-    let Ok(t) = s.door.sign_in() else {
+    let Ok(t) = s.door.sign_in("") else {
         return fail(StatusCode::INTERNAL_SERVER_ERROR, "no randomness");
     };
     let secure = if s.secure { "; Secure" } else { "" };
@@ -236,11 +265,14 @@ async fn call(
 const BACKUP_LATE: u64 = 26 * 3600;
 
 /// What is wrong with the backup, from what `deploy/backup.sh` last wrote
-/// in `cache/backup` (`ok=` the second it last went well, `away=1` if it
+/// in `cache/backup` of the folder it backs up, or in `$DACTILE_BACKUP` (`ok=` the second it last went well, `away=1` if it
 /// leaves this machine, `error=` what stopped it). Nothing if all is well,
 /// or if no backup has ever run here.
 pub fn backup_notice(root: &Path, now: std::time::SystemTime) -> Option<String> {
-    let said = std::fs::read_to_string(root.join("cache/backup")).ok()?;
+    // Behind the gate one backup takes everyone's folders: it says where.
+    let file =
+        std::env::var_os("DACTILE_BACKUP").map_or_else(|| root.join("cache/backup"), PathBuf::from);
+    let said = std::fs::read_to_string(file).ok()?;
     let get = |key: &str| {
         said.lines()
             .find_map(|l| l.strip_prefix(key)?.strip_prefix('='))
@@ -502,6 +534,16 @@ struct Message {
 async fn log(Json(m): Json<Message>) -> Json<Value> {
     eprintln!("[window] {}", m.message);
     Json(Value::Null)
+}
+
+/// How one signs in here, for the page that asks: with the password.
+async fn door_kind() -> Json<Value> {
+    Json(json!({ "kind": "password" }))
+}
+
+/// Who is signed in: with one password for the one person, no one by name.
+async fn me() -> Json<Value> {
+    Json(json!({ "name": null }))
 }
 
 /// The interface's language as it is now: the settings say it, or with

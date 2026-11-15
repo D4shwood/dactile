@@ -17,6 +17,8 @@ const DESKTOP: &[&str] = &[
     "full_screen",
     "pdf_print",
     "open_url",
+    "door",
+    "sign_out",
 ];
 
 #[test]

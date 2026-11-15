@@ -39,7 +39,8 @@ Bu, `setup.sh`'ı makineye gönderip `sudo` ile bir kez çalıştırır: paketle
 
 ## 4. Sonrası (Claude)
 
-- `bash deploy/deploy.sh`: arayüzü burada, sunucuyu orada derler, servisi yeniden başlatır. Parola bu bilgisayarda `~/.config/dactile-web/password`.
+- `bash deploy/deploy.sh`: arayüzü burada, sunucuyu orada derler, servisi yeniden başlatır. Commit'lenmemiş değişiklik varsa durur; önceki sürüm `~/bin/*.before` olarak yanında kalır.
+- **Kişiler:** Parola yok. `bash deploy/people.sh add ada "Ada Yıldız" --owner` kişiyi listeye ekler, `bash deploy/people.sh invite ada` bir giriş bağlantısı yazar: bir kez çalışır, yedi gün geçerlidir, açan kişi o kişi olarak girer. Bağlantı yalnızca o kişiye gönderilir. `people` listeyi gösterir, `remove ada` kişiyi çıkarır (oyunları kalır).
 - Yedek: saatte bir `~/data` git'e commit'lenir. Özel GitHub deposu ve Google Drive (`rclone`, `drive.file`) bağlanınca oraya da gider; Drive'da son 5 gün kalır. Geri yükleme bir kez denenir.
 
 ## Bilinenler

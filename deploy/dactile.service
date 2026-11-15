@@ -1,10 +1,10 @@
 [Unit]
-Description=Dactile in the browser
+Description=Dactile in the browser: the gate, and each person's server under it
 After=network-online.target
 
 [Service]
 EnvironmentFile=%h/.config/dactile-server/env
-ExecStart=%h/bin/dactile-server
+ExecStart=%h/bin/dactile-gate
 Restart=on-failure
 RestartSec=3
 UMask=0077

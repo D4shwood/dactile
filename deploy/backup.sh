@@ -40,6 +40,7 @@ uploads/
 share/Trash/
 share/dactile/history/
 share/dactile/dict/
+gate/secret/
 *.aux
 *.log
 *.out

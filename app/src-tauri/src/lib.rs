@@ -154,6 +154,16 @@ fn open_url(url: String) -> Res<()> {
     dactile::build::open_url(&url).map_err(err)
 }
 
+/// Who is signed in: on the desktop nobody signs in, and the window shows
+/// no way out. The browser's stand-in answers otherwise.
+#[tauri::command]
+fn door() -> Option<()> {
+    None
+}
+
+#[tauri::command]
+fn sign_out() {}
+
 /// In a debug build with `DACTILE_DEV_EVAL=file`: JavaScript written to that
 /// file runs in the window, and the file goes; `!close` alone closes the
 /// window as its own button would. For trying the app out from a script,
@@ -206,6 +216,8 @@ pub fn run() {
             full_screen,
             pdf_print,
             open_url,
+            door,
+            sign_out,
         ])
         .run(tauri::generate_context!())
         .expect("the window could not open");

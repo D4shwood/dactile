@@ -2,6 +2,9 @@
 //!
 //! - `DACTILE_DATA`: their folder (plays, uploads, settings).
 //! - `DACTILE_PASSWORD`: the password to sign in with.
+//! - `DACTILE_GATE_WORD`: instead of a password, behind `dactile-gate`: the
+//!   word the gate sends with every request. The gate starts such a server
+//!   for each person itself.
 //! - `DACTILE_WEB`: the built interface (`web/dist`), if this server serves it.
 //! - `DACTILE_ADDR`: where to listen, `127.0.0.1:1430` unless said.
 //! - `DACTILE_SECURE=1`: behind HTTPS, the cookie only goes over it.
@@ -18,16 +21,28 @@ fn need(name: &str) -> anyhow::Result<String> {
 
 fn main() -> anyhow::Result<()> {
     let root = dactile_server::prepare(&PathBuf::from(need("DACTILE_DATA")?))?;
-    let password = need("DACTILE_PASSWORD")?;
+    let gate = std::env::var("DACTILE_GATE_WORD")
+        .ok()
+        .filter(|w| !w.is_empty());
+    let password = match &gate {
+        Some(_) => String::new(),
+        None => need("DACTILE_PASSWORD")?,
+    };
     anyhow::ensure!(
-        password.len() >= 12,
+        gate.is_some() || password.len() >= 12,
         "DACTILE_PASSWORD needs 12 characters or more"
     );
     let web = std::env::var_os("DACTILE_WEB").map(PathBuf::from);
     let addr = std::env::var("DACTILE_ADDR").unwrap_or_else(|_| "127.0.0.1:1430".into());
     let secure = std::env::var("DACTILE_SECURE").is_ok_and(|v| v == "1");
     sandbox(&root)?;
-    let server = Arc::new(dactile_server::Server::new(root, password, secure));
+    if gate.is_some() {
+        leave_with_the_gate();
+    }
+    let server = Arc::new(match gate {
+        Some(word) => dactile_server::Server::behind(root, word),
+        None => dactile_server::Server::new(root, password, secure),
+    });
     dactile_backend::spell::load(server.ctx.spell.clone());
     tokio::runtime::Runtime::new()?.block_on(async {
         let listener = tokio::net::TcpListener::bind(&addr).await?;
@@ -56,4 +71,18 @@ fn sandbox(root: &std::path::Path) -> anyhow::Result<()> {
         ),
         Err(e) => anyhow::bail!("DACTILE_SANDBOX=bwrap, but bwrap doesn't run: {e}"),
     }
+}
+
+/// Behind the gate, this server is the gate's to stop. Should the gate go
+/// without stopping it, the pipe it held open closes, and this goes too:
+/// left behind it would keep the person's play locked against their next
+/// server.
+fn leave_with_the_gate() {
+    std::thread::spawn(|| {
+        use std::io::Read;
+        let mut sink = [0u8; 64];
+        let mut from = std::io::stdin();
+        while matches!(from.read(&mut sink), Ok(n) if n > 0) {}
+        std::process::exit(0);
+    });
 }

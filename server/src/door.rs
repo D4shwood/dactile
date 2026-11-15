@@ -21,7 +21,21 @@ const WAIT: Duration = Duration::from_secs(15 * 60);
 /// rather than filling the memory.
 const ADDRESSES: usize = 10_000;
 
-fn now() -> u64 {
+/// 64 hex digits no one can guess.
+pub fn random() -> std::io::Result<String> {
+    use std::io::Read;
+    let mut b = [0u8; 32];
+    std::fs::File::open("/dev/urandom")?.read_exact(&mut b)?;
+    Ok(b.iter().map(|x| format!("{x:02x}")).collect())
+}
+
+/// Whether two secrets are the same, in a time that says nothing of where
+/// they differ.
+pub fn same(a: &str, b: &str) -> bool {
+    a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0, |d, (x, y)| d | (x ^ y)) == 0
+}
+
+pub fn now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
@@ -29,8 +43,9 @@ fn now() -> u64 {
 
 pub struct Door {
     file: PathBuf,
-    /// Each token and the second it ends.
-    sessions: Mutex<HashMap<String, u64>>,
+    /// Each token: the second it ends, and whose it is (no one's name where
+    /// one password is the only way in).
+    sessions: Mutex<HashMap<String, (u64, String)>>,
     /// Each address's wrong guesses, and the second they are forgotten.
     guesses: Mutex<HashMap<String, (u32, u64)>>,
 }
@@ -43,9 +58,11 @@ impl Door {
             .unwrap_or_default()
             .lines()
             .filter_map(|l| {
-                let (token, ends) = l.split_once(' ')?;
-                let ends: u64 = ends.parse().ok()?;
-                (ends > now).then(|| (token.to_string(), ends))
+                let mut parts = l.splitn(3, ' ');
+                let token = parts.next()?;
+                let ends: u64 = parts.next()?.parse().ok()?;
+                let who = parts.next().unwrap_or("");
+                (ends > now).then(|| (token.to_string(), (ends, who.to_string())))
             })
             .collect();
         Door {
@@ -55,7 +72,7 @@ impl Door {
         }
     }
 
-    fn sessions(&self) -> std::sync::MutexGuard<'_, HashMap<String, u64>> {
+    fn sessions(&self) -> std::sync::MutexGuard<'_, HashMap<String, (u64, String)>> {
         self.sessions.lock().unwrap_or_else(|e| e.into_inner())
     }
 
@@ -65,7 +82,7 @@ impl Door {
 
     /// Written whole to a file of its own and moved over, readable by the
     /// person alone. A write that fails only means signing in again later.
-    fn keep(&self, sessions: &HashMap<String, u64>) {
+    fn keep(&self, sessions: &HashMap<String, (u64, String)>) {
         let tmp = self.file.with_extension("new");
         let written = (|| {
             if let Some(d) = self.file.parent() {
@@ -77,8 +94,8 @@ impl Door {
                 .truncate(true)
                 .mode(0o600)
                 .open(&tmp)?;
-            for (token, ends) in sessions {
-                writeln!(f, "{token} {ends}")?;
+            for (token, (ends, who)) in sessions {
+                writeln!(f, "{token} {ends} {who}")?;
             }
             f.sync_all()?;
             std::fs::rename(&tmp, &self.file)
@@ -88,22 +105,38 @@ impl Door {
         }
     }
 
-    /// A new session's token.
-    pub fn sign_in(&self) -> std::io::Result<String> {
-        use std::io::Read;
-        let mut b = [0u8; 32];
-        std::fs::File::open("/dev/urandom")?.read_exact(&mut b)?;
-        let token: String = b.iter().map(|x| format!("{x:02x}")).collect();
+    /// A new session's token, for `who` (a name with no space or line
+    /// break in it, or none).
+    pub fn sign_in(&self, who: &str) -> std::io::Result<String> {
+        let token = random()?;
         let now = now();
         let mut sessions = self.sessions();
-        sessions.retain(|_, ends| *ends > now);
-        sessions.insert(token.clone(), now + SESSION.as_secs());
+        sessions.retain(|_, (ends, _)| *ends > now);
+        sessions.insert(token.clone(), (now + SESSION.as_secs(), who.to_string()));
         self.keep(&sessions);
         Ok(token)
     }
 
     pub fn signed_in(&self, token: &str) -> bool {
-        self.sessions().get(token).is_some_and(|ends| *ends > now())
+        self.who(token).is_some()
+    }
+
+    /// Whose session `token` is, if it is one that hasn't ended.
+    pub fn who(&self, token: &str) -> Option<String> {
+        self.sessions()
+            .get(token)
+            .filter(|(ends, _)| *ends > now())
+            .map(|(_, who)| who.clone())
+    }
+
+    /// Every session of `who` ends: they were taken off the list.
+    pub fn sign_out_all(&self, who: &str) {
+        let mut sessions = self.sessions();
+        let before = sessions.len();
+        sessions.retain(|_, (_, theirs)| theirs != who);
+        if sessions.len() != before {
+            self.keep(&sessions);
+        }
     }
 
     pub fn sign_out(&self, token: &str) {
@@ -153,12 +186,18 @@ mod tests {
     fn a_session_outlives_the_server_and_ends_when_signed_out() {
         let f = file("sessions");
         let door = Door::open(f.clone());
-        let token = door.sign_in().unwrap();
+        let token = door.sign_in("ada").unwrap();
         assert!(door.signed_in(&token));
+        assert_eq!(door.who(&token).as_deref(), Some("ada"));
         assert!(!door.signed_in("someone-else"));
         // A new server on the same folder.
         let again = Door::open(f.clone());
-        assert!(again.signed_in(&token));
+        assert_eq!(again.who(&token).as_deref(), Some("ada"));
+        // Off the list: all of theirs end, and no one else's.
+        let other = again.sign_in("baran").unwrap();
+        again.sign_out_all("ada");
+        assert!(!again.signed_in(&token) && again.signed_in(&other));
+        let token = again.sign_in("ada").unwrap();
         again.sign_out(&token);
         assert!(!Door::open(f.clone()).signed_in(&token));
         // Readable by the person alone.

@@ -1,16 +1,18 @@
 [package]
 name = "dactile-server"
-description = "Dactile's desktop commands over HTTP, behind a password"
+description = "Dactile in the browser: one person's server, and the gate that gives each person theirs"
 version.workspace = true
 edition.workspace = true
 repository.workspace = true
 license.workspace = true
+default-run = "dactile-server"
 
 [dependencies]
 dactile = { path = "../core" }
 dactile-backend = { path = "../backend" }
 anyhow = "1"
 axum = "0.8"
+hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
 percent-encoding = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -18,5 +20,6 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time"]
 tower-http = { version = "0.6", features = ["fs"] }
 
 [dev-dependencies]
+tokio = { version = "1", features = ["io-util"] }
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"

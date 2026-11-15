@@ -4,7 +4,7 @@
   // left, tiles for a new play along the top, the plays below with a
   // preview of the one picked.
   import { untrack } from "svelte";
-  import { api, type Files, type Home, type Look, type PlayCard, type Preview, type Shown, type TemplateCard } from "./api";
+  import { api, type Door, type Files, type Home, type Look, type PlayCard, type Preview, type Shown, type TemplateCard } from "./api";
   import FileList from "./FileList.svelte";
   import Import from "./Import.svelte";
   import LookForm from "./LookForm.svelte";
@@ -19,6 +19,12 @@
   let section = $state<Section>("home");
   let version = $state("");
   void getVersion().then((v) => (version = v));
+  // In the browser: who is signed in, and the way out.
+  let door = $state<Door | null>(null);
+  void api
+    .door()
+    .then((d) => (door = d))
+    .catch(() => {});
   let chosen = $state<PlayCard | null>(null);
   let preview = $state<Preview | null>(null);
   let files = $state<Files | null>(null);
@@ -370,6 +376,12 @@
       </button>
     {/each}
     <div class="grow"></div>
+    {#if door}
+      {#if door.name}<div class="who">{door.name}</div>{/if}
+      <button onclick={() => api.signOut()}>
+        <span class="icon">⇥</span>{tr ? "Çıkış" : "Sign out"}
+      </button>
+    {/if}
     <div class="ver">{version}</div>
   </nav>
 
@@ -849,6 +861,14 @@
   }
   .grow {
     flex: 1;
+  }
+  .who {
+    padding: 0 22px 6px;
+    font-size: 13px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .ver {
     padding: 0 22px;
