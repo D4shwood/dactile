@@ -392,12 +392,19 @@ async fn link(State(g): State<Shared>, headers: HeaderMap, Url(token): Url<Strin
 /// from (`Origin`), and that is the host it was sent to. A browser that
 /// says nothing is let through; they all do say, on a form sent elsewhere.
 fn own_page(headers: &HeaderMap) -> bool {
-    let said = |name| {
+    let said = |name: &str| {
         headers
             .get(name)
             .and_then(|v: &HeaderValue| v.to_str().ok())
     };
-    let (Some(origin), Some(host)) = (said(header::ORIGIN), said(header::HOST)) else {
+    // Browsers of today say it themselves.
+    if let Some(site) = said("sec-fetch-site") {
+        return site == "same-origin";
+    }
+    // Older ones give the page's origin. (Behind the site's
+    // `Referrer-Policy: no-referrer`, Firefox gives "null" even for our own
+    // page; it says Sec-Fetch-Site too, so it never gets this far.)
+    let (Some(origin), Some(host)) = (said("origin"), said("host")) else {
         return true;
     };
     origin

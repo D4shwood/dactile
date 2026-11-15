@@ -83,6 +83,24 @@ async fn each_person_has_a_dactile_of_their_own() {
         .unwrap();
     let (s, _, cookie) = send(&app, elsewhere).await;
     assert_eq!((s, cookie), (StatusCode::FORBIDDEN, None));
+    let foreign = |site: &str, origin: &str| {
+        Request::post(format!("/giris/{link}"))
+            .header(header::HOST, "dactile.example")
+            .header(header::ORIGIN, origin)
+            .header("sec-fetch-site", site)
+            .body(Body::empty())
+            .unwrap()
+    };
+    let (s, _, _) = send(&app, foreign("cross-site", "https://another.example")).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let (s, _, _) = send(&app, foreign("cross-site", "null")).await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    // Firefox behind no-referrer: Origin "null", but it says it is our page.
+    let ours = foreign("same-origin", "null");
+    let (s, _, cookie) = send(&app, ours).await;
+    assert_eq!(s, StatusCode::SEE_OTHER, "own page with Origin null");
+    assert!(cookie.is_some());
+    let link = people::invite(&home, "ada", 7).unwrap();
     let ada = come_in(&app, &link).await.expect("ada's cookie");
     assert!(come_in(&app, &link).await.is_none());
     let baran = come_in(&app, &people::invite(&home, "baran", 7).unwrap())
