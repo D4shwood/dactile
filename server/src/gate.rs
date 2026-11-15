@@ -277,11 +277,33 @@ async fn link(State(g): State<Shared>, headers: HeaderMap, Url(token): Url<Strin
     .into_response()
 }
 
+/// Whether a form was sent from a page of this site: the browser says where
+/// from (`Origin`), and that is the host it was sent to. A browser that
+/// says nothing is let through; they all do say, on a form sent elsewhere.
+fn own_page(headers: &HeaderMap) -> bool {
+    let said = |name| {
+        headers
+            .get(name)
+            .and_then(|v: &HeaderValue| v.to_str().ok())
+    };
+    let (Some(origin), Some(host)) = (said(header::ORIGIN), said(header::HOST)) else {
+        return true;
+    };
+    origin
+        .split_once("://")
+        .is_some_and(|(_, from)| from == host)
+}
+
 /// The button of a link's page: the link is used up, the browser signed in.
 async fn come_in(State(g): State<Shared>, headers: HeaderMap, Url(token): Url<String>) -> Response {
     let from = address(&headers);
     if g.door.waiting(&from) {
         return too_many();
+    }
+    // The button of our own page only: another site's form could sign a
+    // visitor in as someone of its choosing, to write into their folder.
+    if !own_page(&headers) {
+        return fail(StatusCode::FORBIDDEN, "not from this site");
     }
     let Some(person) = people::redeem(&g.home, &token) else {
         g.door.wrong(&from);

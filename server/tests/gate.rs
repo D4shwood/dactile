@@ -73,8 +73,16 @@ async fn each_person_has_a_dactile_of_their_own() {
     assert_eq!(json(&b)["kind"], "link");
     assert!(come_in(&app, "not-a-link").await.is_none());
 
-    // A link lets its person in, once.
+    // A link lets its person in, once; and only from its own page's button,
+    // not from a form on someone else's site.
     let link = people::invite(&home, "ada", 7).unwrap();
+    let elsewhere = Request::post(format!("/giris/{link}"))
+        .header(header::HOST, "dactile.example")
+        .header(header::ORIGIN, "https://another.example")
+        .body(Body::empty())
+        .unwrap();
+    let (s, _, cookie) = send(&app, elsewhere).await;
+    assert_eq!((s, cookie), (StatusCode::FORBIDDEN, None));
     let ada = come_in(&app, &link).await.expect("ada's cookie");
     assert!(come_in(&app, &link).await.is_none());
     let baran = come_in(&app, &people::invite(&home, "baran", 7).unwrap())
