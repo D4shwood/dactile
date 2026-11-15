@@ -12,7 +12,7 @@ Masaüstü uygulaması ve Dactile Light'ın davranışı bu işten etkilenmez.
   - **Hesaplar:** Herkesin kullanıcı adı (klasörünün adı, değişmez), görünen adı, e-posta adresi ve parolası var; ya da parolasız, adresinin Google hesabıyla girer (`people.rs`). Kimse kendi kendine hesap açamaz: sahip e-postayla davet eder, davet edilen kullanıcı adını ve parolasını kendisi seçer. Parolalar argon2id ile, yedeğe girmeyen ayrı bir dosyada. Unutulan parola postayla gelen bir bağlantıyla (bir saat) ya da sahibin ürettiği bir bağlantıyla (yedi gün) yenilenir; parola değişince kişinin öteki oturumları kapanır. Yanlış parola hem adres hem hesap başına sayılır: beşte on beş dakika bekletir. Oturum otuz gün sürer. Listeden çıkarılan o an dışarıdadır; yazdıkları klasöründe kalır. Giriş ekranları ayrı, küçük bir Svelte sayfası (`app/web/door/`).
 - **`app/web/`**: tarayıcı girişi. Arayüz masaüstününkiyle aynı dosyalar (`app/src`); `@tauri-apps/api` yerine `app/web/shim/` geçer ve sunucuyla konuşur. Dosya seçme yükleme, dosya açma indirme olur.
 - **`web-wasm/`** (`dactile-wasm`): arka ucun yalnızca metin okuyan 23 komutu (`backend/src/commands.rs`, `TEXT_ONLY`) tarayıcı için; sıkıştırılmış yaklaşık 195 KB. Tarayıcı bunları kendisi çalıştırır: yazarken görünüm, pano, kadro ve `\` menüsü sunucuyu beklemez. Yüklenemezse ya da bozulursa aynı komutlar sunucuya gider.
-- **`deploy/`**: tek kişilik kurulum (Ubuntu, Caddy, kullanıcı systemd'si, saatlik yedek). Adımlar `deploy/kurulum.md`'de.
+- **`deploy/`**: kurulum (Ubuntu, Caddy, kullanıcı systemd'si, saatlik yedek), iki site olarak: gerçek site ve önce her şeyin gittiği deneme sitesi (PBE, `DACTILE_STAGE=pbe`). Adımlar `deploy/kurulum.md`'de.
 
 Yerelde çalıştırma, tek kişi:
 

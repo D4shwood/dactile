@@ -7,6 +7,7 @@
 # with the owner's own Oracle key. Reads deploy/site.env (not in git):
 #   IP=...          the machine's reserved public IP
 #   DOMAIN=...      e.g. ornek.duckdns.org
+#   PBE_DOMAIN=...  the test site's, e.g. ornek-pbe.duckdns.org; optional
 #   OWNER_KEY=...   the private key Oracle was given for the machine
 #   OWNER=ubuntu    the image's own user
 
@@ -19,4 +20,4 @@ key=$HOME/.ssh/dactile_oracle
 to="${OWNER:-ubuntu}@$IP"
 opts=(-i "$OWNER_KEY" -o StrictHostKeyChecking=accept-new)
 scp "${opts[@]}" "$here/setup.sh" "$key.pub" "$to:/tmp/"
-ssh -t "${opts[@]}" "$to" "sudo bash /tmp/setup.sh '$DOMAIN' /tmp/dactile_oracle.pub && rm /tmp/setup.sh /tmp/dactile_oracle.pub"
+ssh -t "${opts[@]}" "$to" "sudo bash /tmp/setup.sh '$DOMAIN' /tmp/dactile_oracle.pub '${PBE_DOMAIN:-}' && rm /tmp/setup.sh /tmp/dactile_oracle.pub"

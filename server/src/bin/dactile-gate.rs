@@ -15,6 +15,7 @@
 //! - `DACTILE_MAIL_URL`, `DACTILE_MAIL_USER`, `DACTILE_MAIL_PASS`,
 //!   `DACTILE_MAIL_FROM`: the mail service invitations and new passwords go
 //!   by (`smtps://…`), or `file:///a/folder` to write them there instead.
+//! - `DACTILE_STAGE=pbe`: a trial site; the page says so.
 //!
 //! The owner's commands, on the same `DACTILE_HOME`, while it serves or not:
 //!
@@ -137,6 +138,7 @@ fn serve() -> anyhow::Result<()> {
     } else {
         gate.site = format!("http://{addr}");
     }
+    gate.stage = std::env::var("DACTILE_STAGE").unwrap_or_default();
     let gate = Arc::new(gate);
     tokio::runtime::Runtime::new()?.block_on(async {
         let listener = tokio::net::TcpListener::bind(&addr).await?;

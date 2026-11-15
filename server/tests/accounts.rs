@@ -330,12 +330,13 @@ async fn without_mail_the_owner_passes_links_on() {
     let home = dir.canonicalize().unwrap();
     people::add(&home, "ada", "Ada", true, Some("ada@example.com")).unwrap();
     people::set_password(&home, "ada", "ada'nın parolası").unwrap();
-    let app = gate::router(
-        Arc::new(gate::Gate::new(home.clone(), "/bin/false".into(), false)),
-        None,
-    );
+    let mut g = gate::Gate::new(home.clone(), "/bin/false".into(), false);
+    g.stage = "pbe".into();
+    let app = gate::router(Arc::new(g), None);
     let (_, door, _) = send(&app, get("/api/door", "")).await;
     assert_eq!(door["mail"], false);
+    // A trial site says so, for its page to show.
+    assert_eq!(door["stage"], "pbe");
     let ada = sign_in(&app, "ada", "ada'nın parolası").await.unwrap();
     // The invitation is made, not sent: its link is the owner's to pass on.
     let (s, made, _) = send(

@@ -35,13 +35,29 @@ function askPassword(wrong = false) {
 /// open the door's page whether or not this browser is signed in.
 const DOOR = /^\/(davet|parola|giris|dogrula)(\/[0-9a-f]+)?$/;
 
+const door = fetch("/api/door")
+  .then((r) => r.json())
+  .catch(() => null);
+
+/// The trial site says so on every page, the door's and the app's. Kept
+/// outside <body>, which the door and the password page write over.
+void door.then((d) => {
+  if (d?.stage !== "pbe") return;
+  const mark = document.createElement("div");
+  mark.textContent = "DENEME SİTESİ · yazdıkların silinebilir";
+  mark.setAttribute("role", "note");
+  mark.style.cssText =
+    "position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99999;pointer-events:none;" +
+    "background:#8a2a2a;color:#fff;font:600 11px/1 system-ui,sans-serif;letter-spacing:.08em;" +
+    "padding:4px 12px;border-radius:0 0 6px 6px;opacity:.9";
+  document.documentElement.appendChild(mark);
+});
+
 async function ask() {
-  const door = await fetch("/api/door")
-    .then((r) => r.json())
-    .catch(() => null);
-  if (door?.kind === "accounts") {
+  const d = await door;
+  if (d?.kind === "accounts") {
     const { open } = await import("../door/main");
-    open({ google: door.google === true, mail: door.mail === true });
+    open({ google: d.google === true, mail: d.mail === true });
   } else askPassword();
 }
 

@@ -78,6 +78,9 @@ pub struct Gate {
     /// The site as browsers reach it, for links in mail:
     /// `https://oyun.example`.
     pub site: String,
+    /// `pbe` on the site friends try things on before the real one gets
+    /// them: the page then says it is a trial. Empty on the real site.
+    pub stage: String,
     door: Door,
     /// Invitations being taken up with Google, for the trip: by its state.
     trips: std::sync::Mutex<HashMap<String, (u64, Joining)>>,
@@ -98,6 +101,7 @@ impl Gate {
             google: None,
             mail: None,
             site: "http://127.0.0.1:1430".into(),
+            stage: String::new(),
             trips: std::sync::Mutex::new(HashMap::new()),
             running: tokio::sync::Mutex::new(HashMap::new()),
             client: Client::builder(TokioExecutor::new()).build(HttpConnector::new()),
@@ -254,6 +258,7 @@ async fn door_kind(State(g): State<Shared>) -> Json<Value> {
         "kind": "accounts",
         "google": g.google.is_some(),
         "mail": g.mail.is_some(),
+        "stage": g.stage,
     }))
 }
 

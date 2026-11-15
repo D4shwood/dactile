@@ -1,0 +1,13 @@
+[Unit]
+Description=Dactile's trial site (PBE): the same gate, with its own people and plays
+After=network-online.target
+
+[Service]
+EnvironmentFile=%h/.config/dactile-pbe/env
+ExecStart=%h/pbe/bin/dactile-gate
+Restart=on-failure
+RestartSec=3
+UMask=0077
+
+[Install]
+WantedBy=default.target

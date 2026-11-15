@@ -3,7 +3,11 @@
 # here, so the owner runs it one time and never again. After it, Dactile is
 # put up and kept running by the `dactile` user, who has no sudo.
 #
-#   sudo bash setup.sh <domain> <dactile.pub>
+#   sudo bash setup.sh <domain> <dactile.pub> [<pbe domain>]
+#
+# With a second domain, the machine has two sites: the live one, for the
+# people who use Dactile, and the PBE (a test site) where every change goes
+# first. Each has its own folder, its own accounts and its own service.
 #
 # Ubuntu 24.04 or later on an Ampere (ARM) machine. Safe to run again.
 
@@ -11,6 +15,7 @@ set -euo pipefail
 
 domain=${1:?the domain of the site, e.g. ornek.duckdns.org}
 key=${2:?the public key the dactile user is reached with}
+pbe=${3:-}
 [ "$(id -u)" = 0 ] || { echo "run it with sudo"; exit 1; }
 grep -q '^ssh-' "$key" || { echo "$key is not a public key"; exit 1; }
 
@@ -74,8 +79,10 @@ fi
 
 # Caddy: HTTPS with its own Let's Encrypt certificate, renewed by itself, in
 # front of Dactile, which listens on this machine alone.
-cat > /etc/caddy/Caddyfile <<EOF
-$domain {
+# Each site: its domain, the port its gate listens on, and any header more.
+site() {
+  cat <<EOF
+$1 {
 	encode zstd gzip
 	request_body {
 		max_size 64MB
@@ -86,10 +93,18 @@ $domain {
 		X-Frame-Options SAMEORIGIN
 		Referrer-Policy no-referrer
 		-Server
+		${3:-}
 	}
-	reverse_proxy 127.0.0.1:1430
+	reverse_proxy 127.0.0.1:$2
 }
 EOF
+}
+{
+  site "$domain" 1430
+  # The PBE: no search engine is to list it.
+  [ -z "$pbe" ] || site "$pbe" 1431 'X-Robots-Tag "noindex, nofollow"'
+} > /etc/caddy/Caddyfile
+caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null
 systemctl enable caddy >/dev/null
 systemctl reload caddy || systemctl restart caddy
 
