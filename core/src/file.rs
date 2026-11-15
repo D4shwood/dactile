@@ -9,8 +9,11 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, SystemTime};
 
-/// Keep this many versions of each play.
+/// The newest versions of a play, all kept.
 const HISTORY_KEEP: usize = 100;
+/// Of the older ones, the last of each day stays for this many days of
+/// writing; before those, the last of each month.
+const HISTORY_DAYS: usize = 60;
 /// A version is kept at most this often while writing.
 const HISTORY_EVERY: Duration = Duration::from_secs(5 * 60);
 
@@ -271,10 +274,40 @@ pub fn snapshot(dir: &Path, text: &str, force: bool) -> Result<bool> {
         std::thread::sleep(Duration::from_millis(1));
     }
     write_atomic(&name, text)?;
-    for old in kept.iter().rev().skip(HISTORY_KEEP - 1) {
+    for old in outgrown(&kept) {
         let _ = fs::remove_file(old);
     }
     Ok(true)
+}
+
+/// The versions (oldest first, one more about to join them) that go: the
+/// newest all stay, then one a day, then one a month, so a year's writing is
+/// still a few hundred small files.
+fn outgrown(kept: &[PathBuf]) -> Vec<&PathBuf> {
+    // "20261115-021500.123.tex": its day is the first eight, its month six.
+    let name = |p: &PathBuf| p.file_name().map(|n| n.to_string_lossy().into_owned());
+    let mut days: Vec<String> = Vec::new();
+    let mut months: Vec<String> = Vec::new();
+    let mut out = Vec::new();
+    for old in kept.iter().rev().skip(HISTORY_KEEP - 1) {
+        let Some(n) = name(old).filter(|n| n.len() >= 8 && n.is_char_boundary(8)) else {
+            continue;
+        };
+        let (day, month) = (n[..8].to_string(), n[..6].to_string());
+        if days.len() < HISTORY_DAYS {
+            if days.contains(&day) {
+                out.push(old);
+            } else {
+                days.push(day);
+                months.push(month);
+            }
+        } else if months.contains(&month) {
+            out.push(old);
+        } else {
+            months.push(month);
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -372,5 +405,42 @@ mod tests {
         assert!(snapshot(&d, "dört", true).unwrap());
         assert_eq!(versions(&d).len(), 4);
         fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn old_versions_thin_out_to_one_a_day_then_one_a_month() {
+        // Three a day for 200 days of 2026, oldest first.
+        let mut kept = Vec::new();
+        for day in 0..200 {
+            let date =
+                chrono::NaiveDate::from_ymd_opt(2026, 1, 1).unwrap() + chrono::Duration::days(day);
+            for hour in [9, 13, 21] {
+                kept.push(PathBuf::from(format!(
+                    "/h/{}-{hour:02}0000.000.tex",
+                    date.format("%Y%m%d")
+                )));
+            }
+        }
+        let gone = outgrown(&kept);
+        let stay: Vec<&PathBuf> = kept.iter().filter(|p| !gone.contains(p)).collect();
+        // The newest 99 (one more is on its way), untouched.
+        assert!(kept[kept.len() - 99..].iter().all(|p| stay.contains(&p)));
+        let older = &stay[..stay.len() - 99];
+        // Before them, the day's last one for 60 days...
+        let daily = &older[older.len() - 60..];
+        assert!(
+            daily
+                .iter()
+                .all(|p| p.to_string_lossy().contains("-210000"))
+        );
+        // ...and before those one a month; April has its days above already.
+        let monthly = &older[..older.len() - 60];
+        let months: Vec<String> = monthly
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy()[..6].to_string())
+            .collect();
+        assert_eq!(months, ["202601", "202602", "202603"]);
+        // What isn't a version by its name is left alone.
+        assert!(outgrown(&[PathBuf::from("/h/x.tex")]).is_empty());
     }
 }

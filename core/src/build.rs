@@ -125,6 +125,10 @@ fn failed(message: String) -> Failed {
 /// the class that came with this Dactile (a `tiyatro.cls` beside the play
 /// still comes first).
 pub fn build(play: &Path) -> Result<Built, Failed> {
+    // One at a time: two builds of a play would write the same `.aux` and
+    // `.log`. The second waits and builds what is on disk by then.
+    static ONE: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _one = ONE.lock().unwrap_or_else(|e| e.into_inner());
     let start = Instant::now();
     let text = fs::read_to_string(play).map_err(|e| failed(format!("{}: {e}", play.display())))?;
     seed(play, &casts(&outline_of(&text)), true).map_err(|e| failed(format!("{e:#}")))?;
