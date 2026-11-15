@@ -10,6 +10,7 @@
   import LookForm from "./LookForm.svelte";
   import People from "./People.svelte";
   import AccountForm from "./AccountForm.svelte";
+  import Projects from "./Projects.svelte";
   import { applyLook, pickLook } from "./look";
   import Temporary from "./Temporary.svelte";
   import { getVersion } from "@tauri-apps/api/app";
@@ -17,7 +18,7 @@
   let { home, tr, open, reload }: { home: Home; tr: boolean; open: (path: string) => void; reload: () => Promise<void> } =
     $props();
 
-  type Section = "home" | "new" | "open" | "settings" | "keys";
+  type Section = "home" | "new" | "open" | "projects" | "settings" | "keys";
   let section = $state<Section>("home");
   let version = $state("");
   void getVersion().then((v) => (version = v));
@@ -65,15 +66,27 @@
     return d.toLocaleDateString(tr ? "tr-TR" : "en-GB", { day: "numeric", month: "short", year: "numeric" });
   };
 
-  /// The list's tab: the plays written here, or those imported.
-  let shelf = $state<"mine" | "imported">("mine");
+  /// The list's tab: the plays written here, those imported, or a
+  /// project's (`p:` and its id, on the web).
+  let shelf = $state<string>("mine");
+  const projects = $derived(home.projects ?? []);
+  const project = $derived(projects.find((p) => "p:" + p.id === shelf) ?? null);
+  /// A reader of the open tab's project: they read its plays, nothing more.
+  const reader = $derived(project?.role === "reader");
   const importedCount = $derived(home.plays.filter((p) => p.imported).length);
+  const everyPlay = $derived([...home.plays, ...projects.flatMap((p) => p.plays)]);
   const plays = $derived(
-    home.plays.filter((p) =>
-      p.imported === (shelf === "imported") &&
+    (project ? project.plays : home.plays.filter((p) => p.imported === (shelf === "imported"))).filter((p) =>
       (p.title + " " + p.author + " " + p.path).toLocaleLowerCase("tr").includes(filter.toLocaleLowerCase("tr")),
     ),
   );
+  /// Where a new play goes: the open tab's project, where they may write.
+  const into = $derived(project && !reader ? project : null);
+  const ROLE: Record<string, [string, string]> = {
+    admin: ["yönetici", "admin"],
+    writer: ["yazar", "writer"],
+    reader: ["okur", "reader"],
+  };
   const tiles = $derived(home.templates.filter((t) => t.kind !== "own").slice(0, 3));
 
   /// A play and its drafts to the other tab, and the list after it.
@@ -124,7 +137,7 @@
     try {
       const filled = Object.fromEntries(Object.entries(details).filter(([, v]) => v.trim()));
       if (Object.keys(filled).length) await api.set("cover_last", { ...home.settings.cover_last, ...filled });
-      open(await api.create(making.index, title, filled));
+      open(await api.create(making.index, title, filled, into?.folder ?? null));
     } catch (e) {
       error = String(e);
     }
@@ -344,13 +357,15 @@
   }
 
   $effect(() => {
-    const wanted = want && home.plays.find((p) => p.path === want);
+    const wanted = want && everyPlay.find((p) => p.path === want);
     if (wanted) {
       want = null;
-      shelf = wanted.imported ? "imported" : "mine";
+      const theirs = projects.find((x) => x.plays.includes(wanted));
+      shelf = theirs ? "p:" + theirs.id : wanted.imported ? "imported" : "mine";
       choose(wanted);
     }
-    if (chosen && !home.plays.some((p) => p.path === chosen!.path)) chosen = null;
+    if (shelf.startsWith("p:") && !project) shelf = "mine";
+    if (chosen && !everyPlay.some((p) => p.path === chosen!.path)) chosen = null;
     if (chosen && !plays.some((p) => p.path === chosen!.path)) chosen = null;
     if (!chosen && plays.length) choose(plays[0]);
   });
@@ -359,6 +374,7 @@
     ["home", "⌂", "Giriş", "Home"],
     ["new", "✚", "Yeni", "New"],
     ["open", "▤", "Aç", "Open"],
+    ["projects", "◫", "Projeler", "Projects"],
     ["settings", "⚙", "Ayarlar", "Settings"],
     ["keys", "⌨", "Tuşlar", "Keys"],
   ];
@@ -372,7 +388,7 @@
       <div class="name">D A C T I L E<span class="caret"></span></div>
       <div class="what">Dynamic Stagewright</div>
     </div>
-    {#each SIDE as [id, icon, t, e]}
+    {#each SIDE.filter(([id]) => id !== "projects" || door) as [id, icon, t, e]}
       <button class:on={section === id} onclick={() => (section = id)}>
         <span class="icon">{icon}</span>{tr ? t : e}
       </button>
@@ -435,7 +451,7 @@
             create();
           }}
         >
-          <span>{making.name}:</span>
+          <span>{making.name}{#if into}<em class="into"> → {into.name}</em>{/if}:</span>
           <!-- svelte-ignore a11y_autofocus -->
           <input bind:value={title} placeholder={l("Oyunun adı", "The play's title")} autofocus />
           <button class="primary" disabled={!title.trim()}>{l("Oluştur", "Create")}</button>
@@ -502,8 +518,20 @@
             <button role="tab" aria-selected={shelf === "imported"} class:on={shelf === "imported"} onclick={() => (shelf = "imported")}>
               {l("İçe aktarılanlar", "Imported")} <small>{importedCount}</small>
             </button>
+            {#each projects as p (p.id)}
+              <button role="tab" aria-selected={shelf === "p:" + p.id} class:on={shelf === "p:" + p.id} onclick={() => (shelf = "p:" + p.id)}>
+                {p.name} <small>{p.plays.length}</small>
+                <span class="role">{l(...ROLE[p.role])}</span>
+              </button>
+            {/each}
           </div>
-          {#if shelf === "imported" && !plays.length}
+          {#if project && !plays.length}
+            <p class="muted">
+              {reader
+                ? l("Bu projede henüz oyun yok.", "No plays in this project yet.")
+                : l("Bu projede henüz oyun yok. Yukarıdan yeni bir tane başlat: bu projeye açılır.", "No plays in this project yet. Start one above: it goes in this project.")}
+            </p>
+          {:else if shelf === "imported" && !plays.length}
             <p class="muted">
               {l("İçe aktarılan oyun yok. Eski bir oyunu buraya almak için ona sağ tıkla.", "Nothing imported. To bring an older play here, right click it.")}
             </p>
@@ -567,12 +595,16 @@
               {chosen.characters} {l("kişi", "characters")} · {chosen.words} {l("söz", "words")}
             </div>
             <button class="primary wide" onclick={() => open(chosen!.path)}>{l("Aç", "Open")}</button>
+            {#if reader}
+              <p class="muted">{l("Bu projede okursun: oyunlarını okursun, değiştirmezsin.", "You are a reader in this project: you read its plays, you don't change them.")}</p>
+            {:else}
             <div class="tools">
               <button class="plain" onclick={() => startForm("fork")} title={l("Bu hâlinden yeni bir taslak; hangi oyundan geldiğini hatırlar", "A new draft from it as it is; it remembers where it came from")}>{l("Yeni taslak", "New draft")}</button>
               <button class="plain" onclick={() => startForm("copy")}>{l("Kopya", "Copy")}</button>
               <button class="plain" onclick={() => startForm("rename")}>{l("Adını değiştir", "Rename")}</button>
               <button class="plain" onclick={throwAway}>{l("Çöpe at", "To the trash")}</button>
             </div>
+            {/if}
             {#if arming !== null}
               <p class="undo">
                 {l("Çöp kutusuna gitsin mi?", "To the trash?")}
@@ -607,6 +639,10 @@
           {/if}
         </aside>
       </div>
+    {/if}
+
+    {#if section === "projects"}
+      <Projects {tr} changed={() => void reload()} />
     {/if}
 
     {#if section === "settings"}
@@ -661,7 +697,9 @@
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="scrim" onclick={() => (menu = null)} oncontextmenu={(e) => (e.preventDefault(), (menu = null))}></div>
   <div class="context" role="menu" style:left="{menu.x}px" style:top="{menu.y}px">
-    {#if picks.length > 1}
+    {#if reader}
+      <button role="menuitem" onclick={pick(() => open(chosen!.path))}>{l("Aç", "Open")}</button>
+    {:else if picks.length > 1}
       <button role="menuitem" onclick={pick(() => (gathering = ""))}>{l("Kitapta topla", "Gather in a book")}</button>
       <button role="menuitem" onclick={pick(throwPicks)}>{l(`${picks.length} oyunu çöpe at`, `${picks.length} plays to the trash`)}</button>
     {:else}
@@ -674,9 +712,11 @@
       <button role="menuitem" onclick={pick(() => startForm("copy"))}>{l("Kopya", "Copy")}</button>
       <button role="menuitem" onclick={pick(() => startForm("rename"))}>{l("Adını değiştir", "Rename")}</button>
       <button role="menuitem" onclick={pick(() => api.reveal(p.path))}>{l("Dosya gezgininde göster", "Show in the file manager")}</button>
-      <button role="menuitem" onclick={pick(() => moveShelf(p))}>
-        {p.imported ? l("Oyunlarıma taşı", "Move to my plays") : l("İçe aktarılanlara taşı", "Move to imported")}
-      </button>
+      {#if !project}
+        <button role="menuitem" onclick={pick(() => moveShelf(p))}>
+          {p.imported ? l("Oyunlarıma taşı", "Move to my plays") : l("İçe aktarılanlara taşı", "Move to imported")}
+        </button>
+      {/if}
       <button role="menuitem" onclick={pick(throwAway)}>{l("Çöpe at", "To the trash")}</button>
     {/if}
   </div>
@@ -1060,6 +1100,19 @@
   .shelves small {
     margin-left: 3px;
     opacity: 0.7;
+  }
+  .shelves .role {
+    margin-left: 6px;
+    padding: 0 6px;
+    font-size: 11px;
+    font-weight: 400;
+    border: 1px solid currentColor;
+    border-radius: 8px;
+    opacity: 0.7;
+  }
+  .into {
+    font-style: normal;
+    color: var(--accent-ink);
   }
   .lead {
     position: absolute;

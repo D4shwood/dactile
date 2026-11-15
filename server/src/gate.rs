@@ -18,6 +18,7 @@ use crate::door::{self, Door};
 use crate::google::Google;
 use crate::mail::{self, Mail};
 use crate::people::{self, Account, Errand, Person};
+use crate::projects::{self, Mode, Role};
 use crate::{COOKIE, GATE, address, fail, session};
 use axum::body::Body;
 use axum::extract::{Path as Url, Request, State};
@@ -126,8 +127,14 @@ impl Gate {
             .map_err(|e| e.to_string())?
             .port();
         let word = door::random().map_err(|e| e.to_string())?;
+        let reach = serde_json::to_string(&projects::reach(&self.home, id)).unwrap_or_default();
+        let who = people::find(&self.home, id)
+            .map(|p| p.name)
+            .unwrap_or_default();
         let mut c = std::process::Command::new(&self.server);
         c.env("DACTILE_DATA", &folder)
+            .env("DACTILE_PROJECTS", reach)
+            .env("DACTILE_WHO", who)
             .env("DACTILE_ADDR", format!("127.0.0.1:{port}"))
             .env("DACTILE_GATE_WORD", &word)
             // The gate serves the pages itself, and has no password to give.
@@ -177,6 +184,12 @@ impl Gate {
         });
     }
 
+    /// Stops `who`'s servers, for them to start again with what changed:
+    /// the projects they reach, their name.
+    pub async fn restart(&self, who: &[String]) {
+        self.running.lock().await.retain(|id, _| !who.contains(id));
+    }
+
     /// The port of a person's server, if it runs.
     pub async fn port_of(&self, id: &str) -> Option<u16> {
         self.running.lock().await.get(id).map(|t| t.port)
@@ -202,6 +215,12 @@ pub fn router(gate: Shared, web: Option<PathBuf>) -> Router {
         .route("/people/davet/geri", post(person_uninvite))
         .route("/people/{id}/reset", post(person_reset))
         .route("/people/{id}/remove", post(person_remove))
+        .route("/projects", get(project_list).post(project_create))
+        .route("/projects/people", get(project_people))
+        .route("/projects/{id}/member", post(project_member))
+        .route("/projects/{id}/mode", post(project_mode))
+        .route("/projects/{id}/name", post(project_rename))
+        .route("/projects/{id}/leave", post(project_leave))
         // What isn't the gate's own is the person's server's.
         .route("/{*rest}", any(pass))
         .route_layer(middleware::from_fn_with_state(gate.clone(), guard));
@@ -917,7 +936,7 @@ async fn person_remove(
             ),
         );
     }
-    match people::remove(&g.home, &id) {
+    match people::remove(&g.home, &id).and_then(|()| projects::forget(&g.home, &id)) {
         Ok(()) => {
             // Out at once, wherever they are signed in.
             g.door.sign_out_all(&id);
@@ -1148,5 +1167,131 @@ async fn pass(
                 ),
             )
         }
+    }
+}
+
+// ------------------------------------------------------------- projects
+
+/// A project as its members see it: who is in it, and their role.
+fn project_json(g: &Gate, p: &projects::Project, me: &str) -> Value {
+    let everyone = people::list(&g.home);
+    let members: Vec<Value> = p
+        .members
+        .iter()
+        .map(|(id, role)| {
+            let name = everyone
+                .iter()
+                .find(|x| &x.id == id)
+                .map_or(id.as_str(), |x| x.name.as_str());
+            json!({ "id": id, "name": name, "role": role })
+        })
+        .collect();
+    json!({
+        "id": p.id, "name": p.name, "mode": p.mode,
+        "role": p.members.get(me), "members": members,
+    })
+}
+
+fn project_answer(g: &Gate, done: Result<projects::Project, String>, me: &str) -> Response {
+    match done {
+        Ok(p) => Json(project_json(g, &p, me)).into_response(),
+        Err(why) => fail(StatusCode::BAD_REQUEST, why),
+    }
+}
+
+async fn project_list(State(g): State<Shared>, Extension(me): Extension<Person>) -> Response {
+    let mine: Vec<Value> = projects::of(&g.home, &me.id)
+        .iter()
+        .map(|(p, _)| project_json(&g, p, &me.id))
+        .collect();
+    Json(json!(mine)).into_response()
+}
+
+/// Who can be put in a project: everyone with an account here.
+async fn project_people(State(g): State<Shared>) -> Response {
+    let all: Vec<Value> = people::list(&g.home)
+        .iter()
+        .map(|p| json!({ "id": p.id, "name": p.name }))
+        .collect();
+    Json(json!(all)).into_response()
+}
+
+#[derive(serde::Deserialize)]
+struct Named {
+    name: String,
+}
+
+async fn project_create(
+    State(g): State<Shared>,
+    Extension(me): Extension<Person>,
+    Json(n): Json<Named>,
+) -> Response {
+    let made = projects::create(&g.home, &n.name, &me.id);
+    if made.is_ok() {
+        g.restart(std::slice::from_ref(&me.id)).await;
+    }
+    project_answer(&g, made, &me.id)
+}
+
+#[derive(serde::Deserialize)]
+struct Member {
+    who: String,
+    role: Option<Role>,
+}
+
+async fn project_member(
+    State(g): State<Shared>,
+    Extension(me): Extension<Person>,
+    Url(id): Url<String>,
+    Json(m): Json<Member>,
+) -> Response {
+    let done = projects::set_member(&g.home, &id, &me.id, &m.who, m.role);
+    if done.is_ok() {
+        // What they reach changed: their server starts again with it.
+        g.restart(std::slice::from_ref(&m.who)).await;
+    }
+    project_answer(&g, done, &me.id)
+}
+
+#[derive(serde::Deserialize)]
+struct Writing {
+    mode: Mode,
+}
+
+async fn project_mode(
+    State(g): State<Shared>,
+    Extension(me): Extension<Person>,
+    Url(id): Url<String>,
+    Json(w): Json<Writing>,
+) -> Response {
+    let done = projects::set_mode(&g.home, &id, &me.id, w.mode);
+    project_answer(&g, done, &me.id)
+}
+
+async fn project_rename(
+    State(g): State<Shared>,
+    Extension(me): Extension<Person>,
+    Url(id): Url<String>,
+    Json(n): Json<Named>,
+) -> Response {
+    let done = projects::rename(&g.home, &id, &me.id, &n.name);
+    if let Ok(p) = &done {
+        let members: Vec<String> = p.members.keys().cloned().collect();
+        g.restart(&members).await;
+    }
+    project_answer(&g, done, &me.id)
+}
+
+async fn project_leave(
+    State(g): State<Shared>,
+    Extension(me): Extension<Person>,
+    Url(id): Url<String>,
+) -> Response {
+    match projects::leave(&g.home, &id, &me.id) {
+        Ok(_) => {
+            g.restart(std::slice::from_ref(&me.id)).await;
+            Json(json!(true)).into_response()
+        }
+        Err(why) => fail(StatusCode::BAD_REQUEST, why),
     }
 }

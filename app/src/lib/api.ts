@@ -31,6 +31,13 @@ const DESKTOP = new Set([
   "account_password",
   "account_mail",
   "account_out",
+  "projects",
+  "project_create",
+  "project_people",
+  "project_member",
+  "project_mode",
+  "project_rename",
+  "project_leave",
 ]);
 
 function invoke<T>(name: string, args?: Record<string, unknown>): Promise<T> {
@@ -147,8 +154,33 @@ export interface Folder {
   temporary: boolean;
 }
 
+/// A project the person is in, on the start screen: its plays.
+export interface ProjectHome {
+  id: string;
+  name: string;
+  role: Role;
+  mode: Mode;
+  /// Its plays' folder: where a new play of it goes.
+  folder: string;
+  plays: PlayCard[];
+}
+
+export type Role = "admin" | "writer" | "reader";
+export type Mode = "turns" | "together";
+
+/// A project as its members see it.
+export interface Project {
+  id: string;
+  name: string;
+  mode: Mode;
+  role: Role | null;
+  members: { id: string; name: string; role: Role }[];
+}
+
 export interface Home {
   plays: PlayCard[];
+  /// On the web: the projects the person is in.
+  projects?: ProjectHome[];
   templates: TemplateCard[];
   settings: Settings;
   folder: Folder;
@@ -185,6 +217,10 @@ export interface Opened {
   text: string;
   read_only: boolean;
   holder: string | null;
+  /// Who writes it, where their lock says.
+  writer: string | null;
+  /// Opened to read only: the person is a reader of its project.
+  reader: boolean;
 }
 
 export type Saved =
@@ -355,6 +391,16 @@ export const api = {
   accountMail: (mail: string) => invoke<void>("account_mail", { mail }),
   /// Out on every device, this one too.
   accountOut: () => invoke<void>("account_out"),
+  projects: () => invoke<Project[]>("projects"),
+  projectCreate: (name: string) => invoke<Project>("project_create", { name }),
+  /// Everyone with an account, to put in a project.
+  projectPeople: () => invoke<{ id: string; name: string }[]>("project_people"),
+  /// Puts `who` in with `role`, or takes them out with null.
+  projectMember: (id: string, who: string, role: Role | null) =>
+    invoke<Project>("project_member", { id, who, role }),
+  projectMode: (id: string, mode: Mode) => invoke<Project>("project_mode", { id, mode }),
+  projectRename: (id: string, name: string) => invoke<Project>("project_rename", { id, name }),
+  projectLeave: (id: string) => invoke<void>("project_leave", { id }),
   playImported: (path: string, on: boolean) => invoke<void>("play_imported", { path, on }),
   keys: () => invoke<KeysView>("keys_view"),
   guide: () => invoke<GuideGroup[]>("guide_view"),
@@ -362,8 +408,9 @@ export const api = {
   settings: () => invoke<Settings>("settings"),
   set: (key: string, value: unknown) => invoke<void>("set_setting", { key, value }),
   preview: (path: string) => invoke<Preview>("preview", { path }),
-  create: (template: number, title: string, details: Record<string, string>) =>
-    invoke<string>("create", { template, title, details }),
+  /// A new play: in the plays folder, or in `folder` (a project's).
+  create: (template: number, title: string, details: Record<string, string>, folder: string | null = null) =>
+    invoke<string>("create", { template, title, details, folder }),
   coverRead: (text: string) => invoke<CoverForm>("cover_read", { text }),
   coverWrite: (text: string, form: CoverForm) => invoke<Made>("cover_write", { text, form }),
   example: () => invoke<string>("example"),

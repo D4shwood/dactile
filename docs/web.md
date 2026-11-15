@@ -49,7 +49,7 @@ target/debug/dactile-gate                 # 1430'da dinler
 - **Roller:** Sahip, yazar, notçu, okur, oyuncu. Yönetmen notları ve dağıtımdaki kişi bilgileri oyunculara rol bazında gizlenir.
 - **Oyuncu görünümü:** Telefona göre ayrı, küçük bir sayfa: kendi rolü vurgulu, ezber, provada not.
 
-Bugün herkesin oyunları kendi klasöründedir; kimse ötekinin oyununu görmez. Ortak oyun (proje) henüz yok. Canlı yazmanın sunucu tarafı ile "bir süreç bir kişi" kararının nasıl buluşacağı (ortak belge hangi süreçte durur: büyük olasılıkla proje başına bir süreç) ayrıca tasarlanır.
+Herkesin oyunları kendi klasöründedir; ortak oyunlar projelerdedir (`server/src/projects.rs`). Projeyi açan yöneticisidir; üyeleri yönetici, yazar ya da okurdur. Kapı her kişinin sunucusunu başlatırken ona projelerini ve rollerini söyler (`DACTILE_PROJECTS`); sunucu yolları bu klasörlerle sınırlar (`confine::Roots`) ve okurun bir projede yazan komut çalıştırmasını reddeder (`confine::WRITES`, her komut ya orada ya `READS`'te). Okur oyunu kilit almadan, salt okunur açar. Sırayla yazma bugünkü kilitle çalışır: kilit yazanın adını taşır, ikinci açan "Ada yazıyor" görür. Üyelik değişince kapı o kişinin sunucusunu yeniden başlatır. Proje başına "Sırayla / Birlikte" seçimi tutulur; birlikte yazma henüz yok, şimdilik sırayla yazılır. Canlı yazmanın sunucu tarafı (ortak belge büyük olasılıkla proje başına bir süreçte) 3. aşamada ayrıca tasarlanır.
 
 ## Sıra
 
@@ -57,7 +57,7 @@ Bugün herkesin oyunları kendi klasöründedir; kimse ötekinin oyununu görmez
 2. **Güvenlik ve yedek.** Yapılanlar: XeLaTeX kutusu (Ubuntu'da sınanacak), kötü giden yedeğin ana ekranda söylenmesi, yüklenen belgelerin temizliği, diskte duran süreli oturumlar, yanlış parola sınırı. Sonra eklenenler: içe aktarma araçları (`pdftotext`, `pdftoppm`, `tesseract`) da kutuda; kişi başına disk sınırı (`DACTILE_QUOTA_MB`, yalnızca yüklemeyi durdurur, yazmayı asla). Kalanlar: yedek anahtarlarının Dactile'ı çalıştıran kullanıcıdan ayrılması, bir kez gerçek geri yükleme.
 3. **Yazarken tarayıcı.** Metin komutları WebAssembly'de (yapıldı). Kalan: sözlük siteyle gelsin ki yazım denetimi de tarayıcıda çalışsın; özetler ve notlar metinle birlikte gelsin.
 4. **Çok kişi.** Yapılanlar: kişi başına süreç, giriş kapısı, hesaplar (kullanıcı adı ve parola, e-postayla davet, parolamı unuttum, adres doğrulama), ana ekranda kim olduğu ve çıkış, Ayarlar'da "Hesabım" ve sahibe "Kişiler" (davet, geri alma, parola bağlantısı, çıkarma). Google girişi de yazıldı (gerçek Google'a karşı denenecek). Kalanlar: işletim sistemi düzeyinde ayrım; herkes aynı sayfa (özgür bir yazı tipi iki tarafta varsayılan, sunucuda sabit TeX Live).
-5. **Ekip.** Projeler ve roller, birlikte ve sırayla yazma, notlar, oyuncu görünümü, sürüm geçmişi ekranı.
+5. **Ekip.** Yapılanlar: projeler ve proje başına roller (yönetici, yazar, okur), Projeler sayfası, ana ekranda proje sekmeleri, projeye yeni oyun, sırayla yazmada yazanın adı. Kalanlar: birlikte yazma ve geçiş, okurun görünümünün kendiliğinden tazelenmesi, notçu ve oyuncu rolleri, oyuncu görünümü, sürüm geçmişi ekranı.
 
 Sonraya: herkese açık site, kendi kurulum rehberi, çevrimdışı yazma, tarayıcıda derleme, uçtan uca şifreleme.
 

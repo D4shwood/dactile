@@ -206,6 +206,20 @@ export async function invoke<T>(cmd: string, args: Args = {}): Promise<T> {
       return post<T>(`/api/people/${encodeURIComponent(args.id)}/reset`, {});
     case "person_remove":
       return post<T>(`/api/people/${encodeURIComponent(args.id)}/remove`, {});
+    case "projects":
+      return fetch("/api/projects").then(answer<T>);
+    case "project_people":
+      return fetch("/api/projects/people").then(answer<T>);
+    case "project_create":
+      return post<T>("/api/projects", { name: args.name });
+    case "project_member":
+      return post<T>(`/api/projects/${encodeURIComponent(args.id)}/member`, { who: args.who, role: args.role });
+    case "project_mode":
+      return post<T>(`/api/projects/${encodeURIComponent(args.id)}/mode`, { mode: args.mode });
+    case "project_rename":
+      return post<T>(`/api/projects/${encodeURIComponent(args.id)}/name`, { name: args.name });
+    case "project_leave":
+      return post<T>(`/api/projects/${encodeURIComponent(args.id)}/leave`, {});
     case "account":
       return fetch("/api/hesap").then(answer<T>);
     case "account_name":

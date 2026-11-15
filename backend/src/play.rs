@@ -247,12 +247,14 @@ pub fn preview(path: &Path) -> anyhow::Result<Preview> {
     })
 }
 
-/// A new play from template `index`, in the plays folder: its path.
+/// A new play from template `index`, in the plays folder or `folder`: its
+/// path.
 pub fn create(
     cfg: &Config,
     index: usize,
     title: &str,
     details: &std::collections::BTreeMap<String, String>,
+    folder: Option<&Path>,
 ) -> anyhow::Result<PathBuf> {
     let title = title.trim();
     anyhow::ensure!(
@@ -271,7 +273,8 @@ pub fn create(
             text = dactile::tex::apply(&text, &[e]);
         }
     }
-    let path = library::new_home(&cfg.plays_dir(), &library::file_name(title))?;
+    let home = folder.map_or_else(|| cfg.plays_dir(), Path::to_path_buf);
+    let path = library::new_home(&home, &library::file_name(title))?;
     file::write_atomic(&path, &text)?;
     Ok(path)
 }
@@ -298,23 +301,39 @@ pub struct Opened {
     pub read_only: bool,
     /// Who holds the play when it is read only.
     pub holder: Option<String>,
+    /// Their name, where their lock says it.
+    pub writer: Option<String>,
+    /// Opened to read only, as the person may only read here.
+    pub reader: bool,
 }
 
-pub fn open(cfg: &mut Config, path: &Path) -> anyhow::Result<(Open, Opened)> {
-    let opened = open_at(path, &cfg.lang, file::history_dir(path))?;
+/// Opens a play; `reader`: to read only, taking no lock, as in a shared
+/// folder the person may only read.
+pub fn open(cfg: &mut Config, path: &Path, reader: bool) -> anyhow::Result<(Open, Opened)> {
+    let opened = open_at(path, &cfg.lang, file::history_dir(path), reader)?;
     cfg.opened(path);
     let _ = cfg.save_recent();
     Ok(opened)
 }
 
 /// Opens a play under its lock, keeping its versions in `history`.
-fn open_at(path: &Path, lang_setting: &str, history: PathBuf) -> anyhow::Result<(Open, Opened)> {
+fn open_at(
+    path: &Path,
+    lang_setting: &str,
+    history: PathBuf,
+    reader: bool,
+) -> anyhow::Result<(Open, Opened)> {
     let text = file::read(path)?;
     lang::set(lang::resolve(lang_setting, Some(&text)));
-    let (lock, holder) = match file::lock(path)? {
-        LockState::Ours(l) => (Some(l), None),
-        LockState::Taken(who) => (None, Some(who)),
+    let (lock, holder) = if reader {
+        (None, file::holder(path))
+    } else {
+        match file::lock(path)? {
+            LockState::Ours(l) => (Some(l), None),
+            LockState::Taken(who) => (None, Some(who)),
+        }
     };
+    let writer = holder.as_ref().and_then(|_| file::holder_name(path));
     let _ = file::snapshot(&history, &text, true);
     let opened = Opened {
         path: path.display().to_string(),
@@ -324,6 +343,8 @@ fn open_at(path: &Path, lang_setting: &str, history: PathBuf) -> anyhow::Result<
             .unwrap_or_default(),
         read_only: lock.is_none(),
         holder,
+        writer,
+        reader,
         text,
     };
     let open = Open {
@@ -640,7 +661,7 @@ mod tests {
         let path = dir.join("oyun.tex");
         std::fs::write(&path, PLAY).unwrap();
         let history = dir.join("history");
-        let (mut open, opened) = open_at(&path, "tr", history.clone()).unwrap();
+        let (mut open, opened) = open_at(&path, "tr", history.clone(), false).unwrap();
         assert!(!opened.read_only);
         assert_eq!(opened.text, PLAY);
         let edited = PLAY.replacen("\\begin{document}", "\\begin{document}\n% bir not", 1);
@@ -659,7 +680,7 @@ mod tests {
         assert!(!file::lock_path(&path).exists());
         // Open on another machine (a shared folder): this one only reads.
         std::fs::write(file::lock_path(&path), "1 elsewhere 2026-01-01T00:00 0\n").unwrap();
-        let (mut second, opened) = open_at(&path, "tr", history.clone()).unwrap();
+        let (mut second, opened) = open_at(&path, "tr", history.clone(), false).unwrap();
         assert!(opened.read_only && opened.holder.is_some());
         assert!(matches!(second.save(PLAY, true).unwrap(), Saved::ReadOnly));
         let _ = std::fs::remove_dir_all(&dir);

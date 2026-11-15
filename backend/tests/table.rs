@@ -29,6 +29,13 @@ const DESKTOP: &[&str] = &[
     "account_password",
     "account_mail",
     "account_out",
+    "projects",
+    "project_create",
+    "project_people",
+    "project_member",
+    "project_mode",
+    "project_rename",
+    "project_leave",
 ];
 
 #[test]

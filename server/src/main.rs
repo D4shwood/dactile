@@ -8,6 +8,9 @@
 //! - `DACTILE_WEB`: the built interface (`web/dist`), if this server serves it.
 //! - `DACTILE_ADDR`: where to listen, `127.0.0.1:1430` unless said.
 //! - `DACTILE_SECURE=1`: behind HTTPS, the cookie only goes over it.
+//! - `DACTILE_PROJECTS`: behind the gate, the projects the person is in
+//!   (`projects::Reach`, as JSON): their plays' folders are reached too.
+//! - `DACTILE_WHO`: their name, which a play's lock shows the others.
 //! - `DACTILE_SANDBOX=bwrap`: XeLaTeX runs boxed in (`dactile::build::tex`).
 //!   Needed before anyone but the owner writes here: a play can read what
 //!   XeLaTeX can.
@@ -39,10 +42,13 @@ fn main() -> anyhow::Result<()> {
     if gate.is_some() {
         leave_with_the_gate();
     }
-    let server = Arc::new(match gate {
-        Some(word) => dactile_server::Server::behind(root, word),
-        None => dactile_server::Server::new(root, password, secure),
-    });
+    let server = Arc::new(
+        match gate {
+            Some(word) => dactile_server::Server::behind(root, word),
+            None => dactile_server::Server::new(root, password, secure),
+        }
+        .with_projects(projects()),
+    );
     dactile_backend::spell::load(server.ctx.spell.clone());
     tokio::runtime::Runtime::new()?.block_on(async {
         let listener = tokio::net::TcpListener::bind(&addr).await?;
@@ -50,6 +56,13 @@ fn main() -> anyhow::Result<()> {
         axum::serve(listener, dactile_server::router(server, web)).await?;
         Ok(())
     })
+}
+
+fn projects() -> Vec<dactile_server::projects::Reach> {
+    std::env::var("DACTILE_PROJECTS")
+        .ok()
+        .and_then(|j| serde_json::from_str(&j).ok())
+        .unwrap_or_default()
 }
 
 /// Says how XeLaTeX will run, and stops if it was asked to be boxed in and

@@ -144,17 +144,32 @@ pub fn holder(play: &Path) -> Option<String> {
         .then(|| format!("{pid} {lock_host} {since}").trim().to_string())
 }
 
-/// "pid host since n": the last, a count of this run's locks, tells two of
-/// them apart.
+/// "pid host since n name": n, a count of this run's locks, tells two of
+/// them apart; the name, where one is known (`DACTILE_WHO`, given by the
+/// web's gate), says who writes.
 fn lock_line() -> String {
     static LOCKS: AtomicUsize = AtomicUsize::new(0);
+    let who: String = std::env::var("DACTILE_WHO")
+        .unwrap_or_default()
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
     format!(
-        "{} {} {} {}\n",
+        "{} {} {} {} {}\n",
         std::process::id(),
         host(),
         Local::now().format("%Y-%m-%dT%H:%M"),
-        LOCKS.fetch_add(1, Ordering::Relaxed)
+        LOCKS.fetch_add(1, Ordering::Relaxed),
+        who.trim()
     )
+    .replace(" \n", "\n")
+}
+
+/// The name of who holds the play, where their lock says it.
+pub fn holder_name(play: &Path) -> Option<String> {
+    let held = fs::read_to_string(lock_path(play)).ok()?;
+    let name = held.trim().splitn(5, ' ').nth(4)?.trim().to_string();
+    (!name.is_empty()).then_some(name)
 }
 
 /// Takes the lock, unless a living Dactile holds it. A stale lock (its

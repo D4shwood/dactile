@@ -11,6 +11,7 @@ pub mod gate;
 pub mod google;
 pub mod mail;
 pub mod people;
+pub mod projects;
 
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Path as Url, Query, Request, State};
@@ -41,6 +42,10 @@ pub struct Server {
     /// the word it sends with every request, and the only way in.
     pub gate: Option<String>,
     pub ctx: Ctx,
+    /// Their folder and the projects' they reach (`with_projects`).
+    pub roots: confine::Roots,
+    /// The projects they are in, as the gate said when it started this.
+    pub projects: Vec<projects::Reach>,
     door: door::Door,
     /// The OCR's pages read and to read, while a document is being read.
     progress: (AtomicUsize, AtomicUsize),
@@ -56,6 +61,8 @@ impl Server {
         ctx.lock().cfg = play::load_config();
         Server {
             door: door::Door::open(root.join("cache/sessions")),
+            roots: confine::Roots::alone(root.clone()),
+            projects: Vec::new(),
             root,
             password,
             secure,
@@ -70,6 +77,49 @@ impl Server {
         let mut s = Server::new(root, String::new(), false);
         s.gate = Some(gate);
         s
+    }
+
+    /// The projects the gate says they are in: their plays' folders are
+    /// reached too, those they are a reader of only to read. A folder that
+    /// isn't there is left out.
+    pub fn with_projects(mut self, reach: Vec<projects::Reach>) -> Server {
+        for mut r in reach {
+            let Ok(dir) = r.dir.canonicalize() else {
+                continue;
+            };
+            r.dir = dir.clone();
+            let writes = r.role.writes();
+            self.roots.shared.push((dir.clone(), writes));
+            if !writes {
+                self.ctx.lock().reads_only.push(dir);
+            }
+            self.projects.push(r);
+        }
+        self
+    }
+
+    /// The projects and their plays, for the start screen: each read as
+    /// the person's own plays are, from its folder alone.
+    fn projects_home(&self) -> Value {
+        let cfg = self.ctx.lock().cfg.clone();
+        let all: Vec<Value> = self
+            .projects
+            .iter()
+            .map(|r| {
+                let mut c = cfg.clone();
+                c.plays_dir = r.dir.display().to_string();
+                c.recent.clear();
+                let plays = serde_json::to_value(play::home(&c))
+                    .ok()
+                    .and_then(|h| h.get("plays").cloned())
+                    .unwrap_or_else(|| json!([]));
+                json!({
+                    "id": r.id, "name": r.name, "role": r.role, "mode": r.mode,
+                    "folder": r.dir.display().to_string(), "plays": plays,
+                })
+            })
+            .collect();
+        Value::Array(all)
     }
 
     pub fn plays(&self) -> PathBuf {
@@ -239,15 +289,33 @@ async fn call(
     Url(name): Url<String>,
     Json(args): Json<Value>,
 ) -> Response {
-    if let Err(e) = confine::check(&s.root, &name, &args) {
+    let open_reads = s
+        .ctx
+        .lock()
+        .open
+        .as_ref()
+        .is_some_and(|o| !s.roots.writes_at(&o.path));
+    if let Err(e) = confine::check(&s.roots, &name, &args, open_reads) {
         return fail(StatusCode::FORBIDDEN, e);
     }
     let home = name == "home";
     let root = s.root.clone();
+    let server = s.clone();
     let done =
         tokio::task::spawn_blocking(move || dactile_backend::dispatch(&s.ctx, &name, args)).await;
     match done {
         Ok(Ok(mut v)) => {
+            if home {
+                // A project's plays are under the project, not among theirs,
+                // though they were opened lately.
+                if let Some(Value::Array(plays)) = v.get_mut("plays") {
+                    plays.retain(|p| {
+                        let path = Path::new(p["path"].as_str().unwrap_or(""));
+                        !server.roots.shared.iter().any(|(d, _)| path.starts_with(d))
+                    });
+                }
+                v["projects"] = server.projects_home();
+            }
             // The start screen's one line of warning, if it has none of its
             // own: the backup's.
             if home
@@ -329,8 +397,8 @@ struct Read {
 /// Reads an uploaded document and keeps its draft for the preview, as the
 /// desktop's `import_read`; the OCR's pages are counted for `progress`.
 async fn import_read(State(s): State<Shared>, Json(r): Json<Read>) -> Response {
-    let file = match confine::inside(&s.root, &r.path) {
-        Ok(f) => f,
+    let file = match s.roots.place(&r.path) {
+        Ok((f, _)) => f,
         Err(e) => return fail(StatusCode::FORBIDDEN, e),
     };
     let done = tokio::task::spawn_blocking(move || {
@@ -536,8 +604,8 @@ fn kind(p: &Path) -> &'static str {
 
 /// A file of theirs to the browser: shown in a tab, or saved.
 async fn file(State(s): State<Shared>, Query(w): Query<Wanted>) -> Response {
-    let p = match confine::inside(&s.root, &w.path) {
-        Ok(p) => p,
+    let p = match s.roots.place(&w.path) {
+        Ok((p, _)) => p,
         Err(e) => return fail(StatusCode::FORBIDDEN, e),
     };
     if p.is_dir() {

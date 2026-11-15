@@ -146,7 +146,7 @@ fn clean_name(name: &str) -> String {
 
 /// Whole, to a file of its own, then moved over; `private` for the owner's
 /// eyes alone.
-fn write(file: &Path, text: &str, private: bool) -> std::io::Result<()> {
+pub(crate) fn write(file: &Path, text: &str, private: bool) -> std::io::Result<()> {
     if let Some(d) = file.parent() {
         std::fs::create_dir_all(d)?;
     }

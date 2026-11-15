@@ -164,6 +164,15 @@
 
   const l = (t: string, e: string) => (tr ? t : e);
 
+  /// Why the play is read only: a reader of its project, or someone else
+  /// writes it.
+  function held() {
+    if (opened.reader) return l("Salt okunur: bu projede okursun.", "Read only: you are a reader in this project.");
+    if (opened.writer)
+      return l(`Salt okunur: ${opened.writer} yazıyor; o kapatınca yazabilirsin.`, `Read only: ${opened.writer} is writing it; you can once they close it.`);
+    return l(`Salt okunur: ${opened.holder ?? "başka bir Dactile"} açık tutuyor.`, `Read only: held by ${opened.holder ?? "another Dactile"}.`);
+  }
+
   function say(text: string, warn = false) {
     message = { text, warn };
     const m = message;
@@ -237,7 +246,7 @@
 
   async function save(force = false): Promise<boolean> {
     if (opened.read_only) {
-      say(l("Bu oyun salt okunur: başka bir Dactile'da açık.", "Read only: open in another Dactile."), true);
+      say(held(), true);
       return false;
     }
     clearTimeout(saveTimer);
@@ -1294,7 +1303,11 @@
     <span class="grow"></span>
     {#if message}<span class:warn={message.warn}>{message.text}</span>{/if}
     {#if opened.read_only}
-      <span class="warn">{l(`Salt okunur: ${opened.holder ?? "başka bir Dactile"} açık tutuyor.`, `Read only: held by ${opened.holder ?? "another Dactile"}.`)}</span>
+      <span class="warn">{held()}</span>
+      {#if !opened.reader}
+        <!-- Opened again: theirs, once they have closed it. -->
+        <button class="zoom" onclick={() => close(opened.path)}>{l("Yeniden dene", "Try again")}</button>
+      {/if}
     {:else}
       <span class="muted">{dirty ? l("kaydedilmedi", "unsaved") : l("kaydedildi", "saved")}</span>
     {/if}

@@ -57,6 +57,9 @@ pub struct App {
     pub importing: Option<(PathBuf, dactile::import::shape::Draft)>,
     /// The play last thrown away, to bring back.
     pub thrown: Option<Vec<dactile::trash::Moved>>,
+    /// Folders whose plays open to read only, taking no lock: on the web,
+    /// a shared project's, where the person is a reader. None on a desktop.
+    pub reads_only: Vec<PathBuf>,
 }
 
 impl App {
@@ -147,9 +150,11 @@ pub fn create(
     template: usize,
     title: String,
     details: std::collections::BTreeMap<String, String>,
+    folder: Option<String>,
 ) -> Res<String> {
     let a = app.lock();
-    play::create(&a.cfg, template, &title, &details)
+    let folder = folder.map(PathBuf::from);
+    play::create(&a.cfg, template, &title, &details, folder.as_deref())
         .map(|p| p.display().to_string())
         .map_err(err)
 }
@@ -164,7 +169,9 @@ pub fn open(app: &Shared, path: String) -> Res<Opened> {
     let mut a = app.lock();
     // The play open before goes first, and its lock with it.
     a.open = None;
-    let (open, opened) = play::open(&mut a.cfg, &PathBuf::from(path)).map_err(err)?;
+    let path = PathBuf::from(path);
+    let reader = a.reads_only.iter().any(|d| path.starts_with(d));
+    let (open, opened) = play::open(&mut a.cfg, &path, reader).map_err(err)?;
     a.kept = None;
     let words = dactile::sidecar::Sidecar::load(&open.path)
         .map(|s| s.words)
@@ -936,7 +943,7 @@ commands! {
         settings();
         set_setting(key: String, value: serde_json::Value);
         preview(path: String);
-        create(template: usize, title: String, details: std::collections::BTreeMap<String, String>);
+        create(template: usize, title: String, details: std::collections::BTreeMap<String, String>, folder: Option<String>);
         example();
         open(path: String);
         close();
