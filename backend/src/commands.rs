@@ -27,10 +27,12 @@ impl Default for Ctx {
     }
 }
 
-impl std::ops::Deref for Ctx {
-    type Target = Mutex<App>;
-    fn deref(&self) -> &Mutex<App> {
-        &self.app
+impl Ctx {
+    /// Their Dactile, to read or change. A command that panicked while it
+    /// held this leaves it as it was at that moment: the next command goes
+    /// on from there, where a poisoned lock would stop every one after it.
+    pub fn lock(&self) -> std::sync::MutexGuard<'_, App> {
+        self.app.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
 
@@ -116,24 +118,24 @@ pub fn err(e: anyhow::Error) -> String {
 }
 
 pub fn home(app: &Shared) -> Home {
-    let mut a = app.lock().unwrap();
+    let mut a = app.lock();
     a.cfg = play::load_config();
     play::home(&a.cfg)
 }
 
 /// The home screen's menu: a play's family to the imported tab, or back.
 pub fn play_imported(app: &Shared, path: String, on: bool) -> Res<()> {
-    let cfg = app.lock().unwrap().cfg.clone();
+    let cfg = app.lock().cfg.clone();
     let plays = dactile::library::list(&cfg);
     dactile::library::set_imported(&plays, std::path::Path::new(&path), on).map_err(err)
 }
 
 pub fn settings(app: &Shared) -> Settings {
-    play::settings(&app.lock().unwrap().cfg)
+    play::settings(&app.lock().cfg)
 }
 
 pub fn set_setting(app: &Shared, key: String, value: serde_json::Value) -> Res<()> {
-    play::set(&mut app.lock().unwrap().cfg, &key, &value).map_err(err)
+    play::set(&mut app.lock().cfg, &key, &value).map_err(err)
 }
 
 pub fn preview(_app: &Shared, path: String) -> Res<Preview> {
@@ -146,20 +148,20 @@ pub fn create(
     title: String,
     details: std::collections::BTreeMap<String, String>,
 ) -> Res<String> {
-    let a = app.lock().unwrap();
+    let a = app.lock();
     play::create(&a.cfg, template, &title, &details)
         .map(|p| p.display().to_string())
         .map_err(err)
 }
 
 pub fn example(app: &Shared) -> Res<String> {
-    play::example(&app.lock().unwrap().cfg)
+    play::example(&app.lock().cfg)
         .map(|p| p.display().to_string())
         .map_err(err)
 }
 
 pub fn open(app: &Shared, path: String) -> Res<Opened> {
-    let mut a = app.lock().unwrap();
+    let mut a = app.lock();
     // The play open before goes first, and its lock with it.
     a.open = None;
     let (open, opened) = play::open(&mut a.cfg, &PathBuf::from(path)).map_err(err)?;
@@ -174,11 +176,11 @@ pub fn open(app: &Shared, path: String) -> Res<Opened> {
 }
 
 pub fn close(app: &Shared) {
-    app.lock().unwrap().open = None;
+    app.lock().open = None;
 }
 
 pub fn save(app: &Shared, text: String, force: bool) -> Res<Saved> {
-    let mut a = app.lock().unwrap();
+    let mut a = app.lock();
     let open = a.open.as_mut().ok_or("no play open")?;
     open.save(&text, force).map_err(err)
 }
@@ -208,7 +210,7 @@ pub fn build(app: &Shared) -> Res<BuildResult> {
 }
 
 pub fn notes_list(app: &Shared, text: String) -> Vec<NoteCard> {
-    let mut a = app.lock().unwrap();
+    let mut a = app.lock();
     a.fresh_notes();
     notes::cards(&text, &a.notes)
 }
@@ -220,7 +222,7 @@ pub fn note_add(
     author: String,
     body: String,
 ) -> Res<Vec<NoteCard>> {
-    let mut a = app.lock().unwrap();
+    let mut a = app.lock();
     a.fresh_notes();
     notes::add(&mut a.notes, &text, at, &author, &body).map_err(err)?;
     a.keep_notes()?;
@@ -229,7 +231,7 @@ pub fn note_add(
 
 /// "open", "done", "hidden", "archive", "unarchive" or "delete".
 pub fn note_set(app: &Shared, text: String, i: usize, state: String) -> Res<Vec<NoteCard>> {
-    let mut a = app.lock().unwrap();
+    let mut a = app.lock();
     a.same_notes()?;
     notes::set_state(&mut a.notes, i, &state).map_err(err)?;
     a.keep_notes()?;
@@ -243,7 +245,7 @@ pub fn note_reply(
     author: String,
     reply: String,
 ) -> Res<Vec<NoteCard>> {
-    let mut a = app.lock().unwrap();
+    let mut a = app.lock();
     a.same_notes()?;
     notes::reply(&mut a.notes, i, &author, &reply).map_err(err)?;
     a.keep_notes()?;
@@ -252,7 +254,7 @@ pub fn note_reply(
 
 /// A pasted reply's numbered items as notes: how many came.
 pub fn notes_paste(app: &Shared, reply: String, author: String) -> Res<usize> {
-    let mut a = app.lock().unwrap();
+    let mut a = app.lock();
     a.fresh_notes();
     let n = notes::paste(&mut a.notes, &reply, &author);
     a.keep_notes()?;
@@ -260,7 +262,7 @@ pub fn notes_paste(app: &Shared, reply: String, author: String) -> Res<usize> {
 }
 
 pub fn note_fix(app: &Shared, text: String, i: usize) -> Res<Vec<Change>> {
-    let mut a = app.lock().unwrap();
+    let mut a = app.lock();
     a.same_notes()?;
     let changes = notes::fix(&mut a.notes, &text, i)?;
     a.keep_notes()?;
@@ -268,7 +270,7 @@ pub fn note_fix(app: &Shared, text: String, i: usize) -> Res<Vec<Change>> {
 }
 
 pub fn note_fix_many(app: &Shared, text: String, which: Vec<usize>) -> Res<people::Made> {
-    let mut a = app.lock().unwrap();
+    let mut a = app.lock();
     a.same_notes()?;
     let made = notes::fix_many(&mut a.notes, &text, &which);
     a.keep_notes()?;
@@ -276,14 +278,14 @@ pub fn note_fix_many(app: &Shared, text: String, which: Vec<usize>) -> Res<peopl
 }
 
 pub fn note_authors(app: &Shared) -> Vec<String> {
-    let mut a = app.lock().unwrap();
+    let mut a = app.lock();
     a.fresh_notes();
     a.notes.authors()
 }
 
 /// The misspelt words between two places in the text.
 pub fn misspelt(app: &Shared, text: String, from: usize, to: usize) -> spell::Checked {
-    spell::misspelt(&app.spell, &mut app.lock().unwrap().known, &text, from, to)
+    spell::misspelt(&app.spell, &mut app.lock().known, &text, from, to)
 }
 
 pub fn suggest(app: &Shared, word: String) -> Vec<String> {
@@ -292,7 +294,7 @@ pub fn suggest(app: &Shared, word: String) -> Vec<String> {
 
 /// A word the play keeps as spelt right, in its `.dactile.toml`.
 pub fn learn(app: &Shared, word: String) -> Res<()> {
-    let mut a = app.lock().unwrap();
+    let mut a = app.lock();
     let path = a.open.as_ref().ok_or("no play open")?.path.clone();
     let mut side = dactile::sidecar::Sidecar::load(&path).map_err(err)?;
     side.add_word(&word);
@@ -362,7 +364,7 @@ pub fn character_edit(
     let made = people::edit(&text, &old, &form)?;
     let alias = form.alias.trim();
     if alias != old
-        && let Some(open) = app.lock().unwrap().open.as_ref()
+        && let Some(open) = app.lock().open.as_ref()
         && let Ok(mut side) = dactile::sidecar::Sidecar::load(&open.path)
     {
         side.rename(&old, alias);
@@ -402,7 +404,7 @@ pub fn character_shift(
 }
 
 fn sidecar(app: &Shared) -> Res<(PathBuf, dactile::sidecar::Sidecar)> {
-    let a = app.lock().unwrap();
+    let a = app.lock();
     let path = a.open.as_ref().ok_or("no play open")?.path.clone();
     let side = dactile::sidecar::Sidecar::load(&path).map_err(err)?;
     Ok((path, side))
@@ -422,7 +424,7 @@ pub fn summary_set(app: &Shared, text: String, at: usize, summary: String) -> Re
 }
 
 pub fn scene_split(app: &Shared, text: String, at: usize) -> Res<people::Made> {
-    let mut a = app.lock().unwrap();
+    let mut a = app.lock();
     let path = a.open.as_ref().ok_or("no play open")?.path.clone();
     scenes::split(&text, at, &path, &mut a.kept)
 }
@@ -437,7 +439,7 @@ pub fn docx_export(_app: &Shared, path: String, text: String) -> Res<String> {
 /// The play and its open notes: the play as it stands, and its notes, or
 /// what says there are none.
 fn with_notes(app: &Shared) -> Res<(PathBuf, Notes)> {
-    let mut a = app.lock().unwrap();
+    let mut a = app.lock();
     a.fresh_notes();
     let path = a.open.as_ref().ok_or("no play open")?.path.clone();
     let open = a
@@ -493,14 +495,14 @@ pub fn scene_align_next(_app: &Shared, text: String) -> Res<people::Made> {
 }
 
 pub fn scene_join(app: &Shared, text: String, at: usize) -> Res<people::Made> {
-    let mut a = app.lock().unwrap();
+    let mut a = app.lock();
     let path = a.open.as_ref().ok_or("no play open")?.path.clone();
     scenes::join(&text, at, &path, &mut a.kept)
 }
 
 /// An error in the window, written where `npm run tauri dev` shows it.
 pub fn casting_roles(app: &Shared, text: String) -> Res<casting::Roles> {
-    let default = app.lock().unwrap().cfg.wpm;
+    let default = app.lock().cfg.wpm;
     let side = sidecar(app)?.1;
     Ok(casting::roles(&text, &side, casting::wpm(&side, default)))
 }
@@ -523,7 +525,7 @@ pub fn casting_pdf(app: &Shared, text: String) -> Res<String> {
 }
 
 pub fn casting_copies(app: &Shared, text: String, kind: casting::Kind) -> Res<(String, usize)> {
-    let default = app.lock().unwrap().cfg.wpm;
+    let default = app.lock().cfg.wpm;
     let (path, side) = sidecar(app)?;
     let wpm = casting::wpm(&side, default);
     casting::copies(&text, &side, &path, wpm, kind).map(|(dir, n)| (dir.display().to_string(), n))
@@ -538,21 +540,21 @@ pub fn import_stop(_app: &Shared) {
 }
 
 pub fn import_edit(app: &Shared, edit: importing::Edit) -> Res<importing::Shown> {
-    let mut a = app.lock().unwrap();
+    let mut a = app.lock();
     let (file, draft) = a.importing.as_mut().ok_or("no import open")?;
     importing::edit(draft, edit)?;
     Ok(importing::shown(file, draft))
 }
 
 pub fn import_doc(app: &Shared) -> Res<Vec<importing::Para>> {
-    let a = app.lock().unwrap();
+    let a = app.lock();
     let (_, draft) = a.importing.as_ref().ok_or("no import open")?;
     Ok(importing::document(draft))
 }
 
 /// The play written: where it is, to open.
 pub fn import_write(app: &Shared) -> Res<String> {
-    let mut a = app.lock().unwrap();
+    let mut a = app.lock();
     let (file, draft) = a.importing.as_ref().ok_or("no import open")?;
     let path = importing::write(file, draft, &a.cfg, None).map_err(err)?;
     a.importing = None;
@@ -560,7 +562,7 @@ pub fn import_write(app: &Shared) -> Res<String> {
 }
 
 pub fn import_volume(app: &Shared) -> Res<Vec<importing::PlayLine>> {
-    let a = app.lock().unwrap();
+    let a = app.lock();
     let (_, draft) = a.importing.as_ref().ok_or("no import open")?;
     Ok(importing::volume(draft))
 }
@@ -572,7 +574,7 @@ pub fn import_write_all(
     picked: Vec<usize>,
     book: Option<importing::Book>,
 ) -> Res<Vec<importing::Written>> {
-    let a = app.lock().unwrap();
+    let a = app.lock();
     let (file, draft) = a.importing.as_ref().ok_or("no import open")?;
     Ok(importing::write_all(
         file,
@@ -585,7 +587,7 @@ pub fn import_write_all(
 
 /// The book as one PDF, a cover and contents before its plays: where it is.
 pub fn book_pdf(app: &Shared, path: String) -> Res<String> {
-    let setting = app.lock().unwrap().cfg.lang.clone();
+    let setting = app.lock().cfg.lang.clone();
     dactile::book::pdf(std::path::Path::new(&path), &setting)
         .map(|p| p.display().to_string())
         .map_err(err)
@@ -593,7 +595,7 @@ pub fn book_pdf(app: &Shared, path: String) -> Res<String> {
 
 /// These plays as the parts of a new book, in this order: where it is.
 pub fn book_gather(app: &Shared, paths: Vec<String>, title: String) -> Res<String> {
-    let a = app.lock().unwrap();
+    let a = app.lock();
     let first = paths.first().ok_or("no plays")?;
     let first = std::path::Path::new(first);
     let dir = first.parent().ok_or("no folder")?;
@@ -606,7 +608,7 @@ pub fn book_gather(app: &Shared, paths: Vec<String>, title: String) -> Res<Strin
 }
 
 pub fn import_drop(app: &Shared) {
-    app.lock().unwrap().importing = None;
+    app.lock().importing = None;
 }
 
 pub fn fork_start(
@@ -641,7 +643,7 @@ pub fn play_make(
     draft: Option<String>,
     file: String,
 ) -> Res<String> {
-    let cfg = &mut app.lock().unwrap().cfg;
+    let cfg = &mut app.lock().cfg;
     plays::make(
         std::path::Path::new(&path),
         title.as_deref(),
@@ -653,16 +655,16 @@ pub fn play_make(
 }
 
 pub fn play_rename(app: &Shared, path: String, title: String, file: String) -> Res<String> {
-    let cfg = &mut app.lock().unwrap().cfg;
+    let cfg = &mut app.lock().cfg;
     plays::rename(std::path::Path::new(&path), &title, &file, cfg).map(|p| p.display().to_string())
 }
 
 pub fn play_drafts(app: &Shared, path: String) -> usize {
-    plays::drafts(std::path::Path::new(&path), &app.lock().unwrap().cfg)
+    plays::drafts(std::path::Path::new(&path), &app.lock().cfg)
 }
 
 pub fn play_throw(app: &Shared, path: String) -> Res<()> {
-    let mut a = app.lock().unwrap();
+    let mut a = app.lock();
     let moved = plays::throw(std::path::Path::new(&path), &mut a.cfg)?;
     a.thrown = Some(moved);
     Ok(())
@@ -670,7 +672,7 @@ pub fn play_throw(app: &Shared, path: String) -> Res<()> {
 
 /// Brings back the play last thrown away: where it is.
 pub fn play_restore(app: &Shared) -> Res<String> {
-    let mut a = app.lock().unwrap();
+    let mut a = app.lock();
     let moved = a.thrown.take().ok_or("nothing thrown away")?;
     plays::restore(&moved, &mut a.cfg)?;
     Ok(moved[0].from.display().to_string())
@@ -689,7 +691,7 @@ pub struct PlaySettings {
 }
 
 pub fn play_settings(app: &Shared) -> Res<PlaySettings> {
-    let default_wpm = app.lock().unwrap().cfg.wpm;
+    let default_wpm = app.lock().cfg.wpm;
     let side = sidecar(app)?.1;
     Ok(PlaySettings {
         wpm: side.wpm,
@@ -714,7 +716,7 @@ pub fn play_unlearn(app: &Shared, word: String) -> Res<()> {
     let (path, mut side) = sidecar(app)?;
     side.words.retain(|w| *w != word);
     side.save(&path).map_err(err)?;
-    app.lock().unwrap().known.set_words(&side.words);
+    app.lock().known.set_words(&side.words);
     Ok(())
 }
 
@@ -746,7 +748,7 @@ pub fn sync_edit(app: &Shared, pdf: String, page: usize, x: f32, y: f32) -> Res<
 }
 
 fn open_path(app: &Shared) -> Res<PathBuf> {
-    let a = app.lock().unwrap();
+    let a = app.lock();
     Ok(a.open.as_ref().ok_or("no play open")?.path.clone())
 }
 

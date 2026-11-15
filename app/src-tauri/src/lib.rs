@@ -34,7 +34,7 @@ async fn import_read(
     ocr: bool,
 ) -> Res<importing::Shown> {
     use tauri::Emitter;
-    let lang = play::lang_of(&app.lock().unwrap().cfg);
+    let lang = play::lang_of(&app.lock().cfg);
     let file = PathBuf::from(path);
     let from = file.clone();
     let draft = tauri::async_runtime::spawn_blocking(move || {
@@ -45,14 +45,14 @@ async fn import_read(
     .await
     .map_err(|e| e.to_string())??;
     let shown = importing::shown(&file, &draft);
-    app.lock().unwrap().importing = Some((file, draft));
+    app.lock().importing = Some((file, draft));
     Ok(shown)
 }
 
 /// The play named on the command line (`dactile oyun.tex`), once.
 #[tauri::command]
 fn startup(app: Shared) -> Option<String> {
-    let mut a = app.lock().unwrap();
+    let mut a = app.lock();
     if a.started {
         return None;
     }
@@ -155,8 +155,9 @@ fn open_url(url: String) -> Res<()> {
 }
 
 /// In a debug build with `DACTILE_DEV_EVAL=file`: JavaScript written to that
-/// file runs in the window, and the file goes. For trying the app out from
-/// a script, with no hands on it.
+/// file runs in the window, and the file goes; `!close` alone closes the
+/// window as its own button would. For trying the app out from a script,
+/// with no hands on it.
 fn dev_eval(app: tauri::AppHandle) {
     let Some(path) = std::env::var_os("DACTILE_DEV_EVAL").filter(|_| cfg!(debug_assertions)) else {
         return;
@@ -169,7 +170,10 @@ fn dev_eval(app: tauri::AppHandle) {
             };
             let _ = std::fs::remove_file(&path);
             if let Some(w) = app.get_webview_window("main") {
-                let _ = w.eval(js);
+                let _ = match js.trim() {
+                    "!close" => w.close(),
+                    _ => w.eval(js),
+                };
             }
         }
     });

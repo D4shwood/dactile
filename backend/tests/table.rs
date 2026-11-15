@@ -55,3 +55,17 @@ fn arguments_come_in_the_windows_camel_case() {
     assert!(dispatch(&ctx, "cast", json!({ "text": text })).is_err());
     assert!(dispatch(&ctx, "nothing", json!({})).is_err());
 }
+
+#[test]
+fn a_command_that_panicked_does_not_stop_the_next() {
+    let ctx = std::sync::Arc::new(Ctx::default());
+    let held = ctx.clone();
+    let _ = std::thread::spawn(move || {
+        let _a = held.lock();
+        panic!("a command went wrong");
+    })
+    .join();
+    assert!(ctx.app.is_poisoned());
+    let e = dispatch(&ctx, "save", json!({ "text": "", "force": false })).unwrap_err();
+    assert_eq!(e, "no play open");
+}

@@ -5,7 +5,7 @@
   import { EditorView } from "@codemirror/view";
   import { redo, selectAll, undo } from "@codemirror/commands";
   import { openSearchPanel } from "@codemirror/search";
-  import { type Head, api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Files, type Look, type Made, type Memo, type Summary, type NoteCard, type Opened, type PlaySettings, type Preview, type Settings } from "./api";
+  import { beforeClose, type Head, api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Files, type Look, type Made, type Memo, type Summary, type NoteCard, type Opened, type PlaySettings, type Preview, type Settings } from "./api";
   import { focus, setCards, setDim, setFocus } from "./focus";
   import { blockAt, currentView, extensions, insertSnippet, typeBackslash, coverClicked, openCover, pickNote, wrapSelection, unwrapSelection, setNotes, setNumbers, setSource, setView } from "./editor";
   import { BACKSTAGE, type Act } from "./ribbon";
@@ -176,6 +176,7 @@
 
   let viewTimer: ReturnType<typeof setTimeout> | undefined;
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
+  let unclose: (() => void) | undefined;
 
   function refresh(now = false) {
     clearTimeout(viewTimer);
@@ -937,11 +938,16 @@
     }
   }
 
+  /// What is still unsaved gets saved; false if it couldn't be and the
+  /// writer would rather stay.
+  async function settled(): Promise<boolean> {
+    if (!dirty || opened.read_only || (await save())) return true;
+    return confirm(l("Kaydedilemedi. Yine de kapatayım mı?", "Couldn't save. Close anyway?"));
+  }
+
   /// Back to the start, or on to the play `next`.
   async function leave(next?: string) {
-    if (dirty && !(await save())) {
-      if (!confirm(l("Kaydedilemedi. Yine de kapatayım mı?", "Couldn't save. Close anyway?"))) return;
-    }
+    if (!(await settled())) return;
     await api.close();
     close(next);
   }
@@ -1109,6 +1115,8 @@
     if (!numbers) view.dispatch({ effects: setNumbers.of(false) });
     refresh(true);
     void getVersion().then((v) => (version = v));
+    // The window closed within the few seconds before the save of its own.
+    void beforeClose(settled).then((off) => (unclose = off));
     // For trying the app out from a script (DACTILE_DEV_EVAL).
     if (import.meta.env.DEV) (window as any).__dactile = { view, key, run, move, openBoard, build, setZoom };
     // To the first line of dialogue, past the cover.
@@ -1120,6 +1128,7 @@
   });
 
   onDestroy(() => {
+    unclose?.();
     if (view) kept.set(opened, view.state.doc.toString());
     closeMenu();
     clearTimeout(viewTimer);

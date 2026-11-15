@@ -3,6 +3,7 @@
 // own (src-tauri/src/lib.rs) are called by name.
 import { invoke as tauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 const DESKTOP = new Set([
   "import_read",
@@ -574,3 +575,11 @@ export type Checked =
   | { kind: "loading" }
   | { kind: "missing"; why: string }
   | { kind: "words"; ranges: [number, number][] };
+
+/// Before the window closes, `ready` runs to its end (a save still waiting):
+/// the window stays if it answers false. The answer undoes the asking.
+export function beforeClose(ready: () => Promise<boolean>): Promise<() => void> {
+  return getCurrentWindow().onCloseRequested(async (e) => {
+    if (!(await ready())) e.preventDefault();
+  });
+}
