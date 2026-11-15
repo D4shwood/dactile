@@ -22,7 +22,7 @@ npm run dev:web        # app/ içinde; http://localhost:1421
 
 1. **Yazarken tarayıcı, dosyada sunucu.** Yalnızca metin okuyan komutlar (görünüm, tamamlama, yazım denetimi, kadro, özetler) tarayıcıda WebAssembly olarak çalışır; yazarken ağ beklenmez. Kayıt, PDF, içe aktarma ve OCR sunucudadır. Vekil katman (`shim/core.ts`) komutu adına göre birine yollar; arayüz bunu bilmez. Arka ucun tamamı `wasm32`'ye derleniyor; dosyaya dokunan komutlar orada çağrılmaz.
 2. **Bir süreç bir kişi.** Çekirdek ayarların, önbelleğin ve çöpün yerini süreç genelinde bulur; kilit de süreç numarasına bakar. Bunları sökmek yerine her kişiye kendi süreci ve klasörü verilir (systemd şablon birimi); önde bir giriş kapısı isteği doğru sürece yollar. Yalıtımı işletim sistemi verir. Boşta kalan süreç kapanır, istek gelince açılır.
-3. **PDF sunucuda, kutu içinde.** Herkes aynı yazı tipleriyle aynı sayfaları görsün diye PDF tek yerde derlenir. XeLaTeX ağsız, yalnızca oyunun klasörünü ve sınıfı gören bir `bwrap` kutusunda çalışır. Başka biri sunucuya girmeden önce şarttır.
+3. **PDF sunucuda, kutu içinde.** Herkes aynı yazı tipleriyle aynı sayfaları görsün diye PDF tek yerde derlenir. `DACTILE_SANDBOX=bwrap` ile XeLaTeX ağsız, yalnızca oyunun klasörünü ve sınıfı gören bir `bwrap` kutusunda çalışır (`core/src/build.rs`, `tex`; testi `core/tests/sandbox.rs`). Kurulum betiği kutu çalışıyorsa açar, çalışmıyorsa bağırır. Başka biri sunucuya girmeden önce şarttır. Kutuya henüz girmeyenler: içe aktarmada çalışan `pdftotext`, `pdftoppm` ve `tesseract`.
 4. **Giriş Google ile**, site sahibinin izin listesiyle. Parola ve e-posta servisi yok. Google hesabı olmayana süreli, iptal edilebilir, yalnızca okuyan davet bağlantısı.
 5. **Yedek iki yere.** Oyunlar düz metin olarak saatte bir özel bir git deposuna, günde bir tarihli bir Drive klasörüne (son beşi kalır). Oyunların oralarda da durduğu ekibe söylenir. Yedek anahtarları Dactile'ı çalıştıran kullanıcıdan ayrı durur.
 
@@ -42,7 +42,7 @@ Canlı yazmanın sunucu tarafı ile "bir süreç bir kişi" kararının nasıl b
 ## Sıra
 
 1. **Tek kişilik kurulum.** Bugünkü haliyle bir sunucuya; kurulum betikleri gerçek makinede sınanır.
-2. **Güvenlik ve yedek.** XeLaTeX kutusu; yedek anahtarlarının ayrılması; son başarılı yedeğin zamanı ana ekranda; yüklenen belgelerin temizliği ve disk sınırı; oturumların diskte tutulması ve süresi; bir kez gerçek geri yükleme.
+2. **Güvenlik ve yedek.** XeLaTeX kutusu (yapıldı; Ubuntu'da sınanacak); yedek anahtarlarının ayrılması; son başarılı yedeğin zamanı ana ekranda; yüklenen belgelerin temizliği ve disk sınırı; oturumların diskte tutulması ve süresi; bir kez gerçek geri yükleme.
 3. **Yazarken tarayıcı.** Metin komutları WebAssembly'ye; sözlük siteyle gelir.
 4. **Çok kişi.** Kişi başına süreç, giriş kapısı, Google girişi ve izin listesi. Üst çubukta kim olduğu ve çıkış. Herkes aynı sayfa: özgür bir yazı tipi iki tarafta varsayılan, sunucuda sabit TeX Live.
 5. **Ekip.** Projeler ve roller, birlikte ve sırayla yazma, notlar, oyuncu görünümü, sürüm geçmişi ekranı.

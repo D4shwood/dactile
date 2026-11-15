@@ -56,6 +56,22 @@ else
   echo "netfilter-persistent is missing: the ports close again on a restart"
 fi
 
+# XeLaTeX runs boxed in with bwrap, which needs a user namespace. Ubuntu
+# 24.04 and later keep those from programs AppArmor has no profile for.
+if [ "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)" = 1 ] &&
+  [ ! -e /etc/apparmor.d/bwrap ] && [ ! -e /etc/apparmor.d/bwrap-userns-restrict ]; then
+  cat > /etc/apparmor.d/bwrap <<'PROFILE'
+abi <abi/4.0>,
+include <tunables/global>
+
+profile bwrap /usr/bin/bwrap flags=(unconfined) {
+  userns,
+  include if exists <local/bwrap>
+}
+PROFILE
+  apparmor_parser -r /etc/apparmor.d/bwrap || echo "the bwrap profile didn't load: XeLaTeX will run unboxed"
+fi
+
 # Caddy: HTTPS with its own Let's Encrypt certificate, renewed by itself, in
 # front of Dactile, which listens on this machine alone.
 cat > /etc/caddy/Caddyfile <<EOF

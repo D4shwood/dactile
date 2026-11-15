@@ -147,7 +147,7 @@ pub fn build(play: &Path) -> Result<Built, Failed> {
     let mut runs = 0;
     loop {
         runs += 1;
-        let log = xelatex(dir, name.as_ref(), &path, &log_path)?;
+        let log = xelatex(dir, &[&classes], name.as_ref(), &path, &log_path)?;
         let again = log.contains("Rerun to get") || (toc && runs == 1);
         if !again || runs >= MAX_RUNS {
             let pdf = pdf_path(play);
@@ -172,8 +172,14 @@ pub fn build(play: &Path) -> Result<Built, Failed> {
 
 /// One XeLaTeX run of `name` in `dir`, with TEXINPUTS `path`: its log, or
 /// what stopped it.
-fn xelatex(dir: &Path, name: &Path, path: &str, log_path: &Path) -> Result<String, Failed> {
-    let mut child = outside("xelatex")
+fn xelatex(
+    dir: &Path,
+    reads: &[&Path],
+    name: &Path,
+    path: &str,
+    log_path: &Path,
+) -> Result<String, Failed> {
+    let mut child = tex(dir, reads)
         .args([
             "-interaction=nonstopmode",
             "-halt-on-error",
@@ -273,7 +279,7 @@ pub fn build_aside(play: &Path, tex: &str, aux: &str, out: &Path) -> Result<Buil
         let mut runs = 0;
         loop {
             runs += 1;
-            let log = xelatex(&work, name, &path, &log_path)?;
+            let log = xelatex(&work, &[&home, &classes], name, &path, &log_path)?;
             if !(log.contains("Rerun") && runs < MAX_RUNS) {
                 if let Some(d) = out.parent() {
                     fs::create_dir_all(d).map_err(|e| failed(format!("{}: {e}", d.display())))?;
@@ -521,6 +527,87 @@ fn show_items(uri: &str) -> bool {
         .stderr(Stdio::null())
         .status()
         .is_ok_and(|s| s.success())
+}
+
+/// Whether XeLaTeX runs boxed in: `DACTILE_SANDBOX=bwrap`, as the web server
+/// sets it. A play is someone's text and TeX is a programming language.
+pub fn boxed() -> bool {
+    std::env::var("DACTILE_SANDBOX").is_ok_and(|v| v == "bwrap")
+}
+
+/// XeLaTeX to run in `work`. Boxed in, `work` is all it can write and, with
+/// `reads` and the system's TeX and fonts, all it can read: no network, no
+/// other process, no home folder, nothing of the machine's own. This is the
+/// only wall against reading (`openin_any` does nothing in a new TeX Live,
+/// and XeTeX's `\font` never asked it), so nothing secret may be in `reads`.
+pub fn tex(work: &Path, reads: &[&Path]) -> Command {
+    if boxed() {
+        boxed_tex(work, reads)
+    } else {
+        outside("xelatex")
+    }
+}
+
+/// `tex`, boxed in whatever the setting says.
+pub fn boxed_tex(work: &Path, reads: &[&Path]) -> Command {
+    let real = |p: &Path| fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+    let work = real(work);
+    let mut c = Command::new("bwrap");
+    // Nothing of the server's own goes in: its password is in its environment.
+    c.env_clear();
+    c.args([
+        "--unshare-all",
+        "--unshare-user",
+        "--disable-userns",
+        "--die-with-parent",
+        "--new-session",
+    ]);
+    c.args(["--cap-drop", "ALL", "--hostname", "sahne"]);
+    c.args(["--ro-bind", "/usr", "/usr"]);
+    // Links on a merged /usr, folders elsewhere.
+    for d in ["/bin", "/sbin", "/lib", "/lib64"] {
+        c.args(["--ro-bind-try", d, d]);
+    }
+    // What TeX and the fonts read, and no more of /etc than that.
+    for d in [
+        "/etc/texmf",
+        "/etc/fonts",
+        "/etc/ld.so.cache",
+        "/etc/alternatives",
+        // Without these xdvipdfmx knows no "a4", and no PDF comes out.
+        "/etc/papersize",
+        "/etc/paperspecs",
+        "/var/lib/texmf",
+        "/var/cache/fontconfig",
+    ] {
+        c.args(["--ro-bind-try", d, d]);
+    }
+    c.args(["--dev", "/dev", "--size", "100000000", "--tmpfs", "/tmp"]);
+    for r in reads {
+        let r = real(r);
+        c.arg("--ro-bind").arg(&r).arg(&r);
+    }
+    // Last, so it stays writable inside something bound to read.
+    c.arg("--bind").arg(&work).arg(&work);
+    c.arg("--chdir").arg(&work);
+    c.env("PATH", "/usr/bin:/bin")
+        .env("HOME", "/tmp")
+        .env("LANG", "C.UTF-8")
+        .env("XDG_CACHE_HOME", "/tmp/cache")
+        .env("TEXMFVAR", "/tmp/texmf-var")
+        .env("TEXMFCONFIG", "/tmp/texmf-config")
+        .env("MKTEXPK", "0")
+        .env("MKTEXMF", "0")
+        // Still honoured by an older TeX Live.
+        .env("openin_any", "p")
+        .env("openout_any", "p");
+    // Limits from inside: outside, the process count would be the user's.
+    c.args(["--", "prlimit"]);
+    c.arg(format!("--as={}", 2048u64 << 20));
+    c.arg(format!("--cpu={}", TIMEOUT.as_secs()));
+    c.arg(format!("--fsize={}", 512u64 << 20));
+    c.args(["--nproc=64", "--core=0", "--", "xelatex"]);
+    c
 }
 
 /// What the AppImage runtime says about Dactile itself: where its file is,

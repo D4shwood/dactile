@@ -3,7 +3,7 @@
 //! drafts are. Its PDF is one document: a cover, the contents, the parts.
 
 use crate::buffer::escape_pasted;
-use crate::build::{self, outside};
+use crate::build;
 use crate::import::{plain, shape};
 use crate::lang::{self, Lang};
 use crate::library;
@@ -172,7 +172,7 @@ pub fn pdf(book: &Path, setting: &str) -> Result<PathBuf> {
             )?;
             let mut log = String::new();
             for _ in 0..2 {
-                let run = outside("xelatex")
+                let run = build::tex(&work, &[])
                     .args(["-interaction=nonstopmode", "-halt-on-error", "book.tex"])
                     .current_dir(&work)
                     .output()
