@@ -1,5 +1,6 @@
-// The page's start: signed in, the interface comes; signed out, a password
-// first. Signed out later (the server restarted), the page asks again.
+// The page's start: signed in, the interface comes; signed out, the door:
+// the gate's sign-in page (web/door/), or a password where one server runs
+// for one person. Signed out later, the page asks again.
 
 import { post } from "./core";
 
@@ -30,31 +31,21 @@ function askPassword(wrong = false) {
   });
 }
 
-/// Where one comes in with a link the owner sends, there is nothing to type;
-/// with Google too, where the site has it.
-function askForLink(google: boolean) {
-  const withGoogle = google
-    ? `<p style="margin:0 0 1.5rem"><a href="/giris/google"
-         style="display:inline-block;padding:.6rem 1.2rem;border:1px solid #999;border-radius:4px;color:inherit;text-decoration:none">Google ile gir</a></p>
-       <p style="color:#666;margin:0">Ya da sana gönderilen bağlantıyı aç.</p>`
-    : `<p style="font-size:1.1rem;margin:0 0 1rem">Girmek için sana gönderilen bağlantıyı aç.</p>
-       <p style="color:#666;margin:0">Bağlantın yoksa ya da süresi dolduysa site sahibinden yenisini iste.</p>`;
-  document.body.innerHTML = `
-    <div style="max-width:22rem;margin:20vh auto;padding:0 1rem;font-family:system-ui,sans-serif">
-      <h1 style="font-family:serif;letter-spacing:.3em;margin:0 0 1.5rem">DACTILE</h1>
-      ${withGoogle}
-    </div>`;
-}
+/// The links mail brings: an invitation, a new password, an address. They
+/// open the door's page whether or not this browser is signed in.
+const DOOR = /^\/(davet|parola|giris|dogrula)(\/[0-9a-f]+)?$/;
 
 async function ask() {
   const door = await fetch("/api/door")
     .then((r) => r.json())
     .catch(() => null);
-  if (door?.kind === "link") askForLink(door.google === true);
-  else askPassword();
+  if (door?.kind === "accounts") {
+    const { open } = await import("../door/main");
+    open({ google: door.google === true, mail: door.mail === true });
+  } else askPassword();
 }
 
 window.addEventListener("dactile-signed-out", () => void ask());
 
-if (await signedIn()) await import("../../src/main");
+if (!DOOR.test(location.pathname) && (await signedIn())) await import("../../src/main");
 else await ask();

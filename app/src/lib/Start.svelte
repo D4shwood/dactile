@@ -9,6 +9,7 @@
   import Import from "./Import.svelte";
   import LookForm from "./LookForm.svelte";
   import People from "./People.svelte";
+  import AccountForm from "./AccountForm.svelte";
   import { applyLook, pickLook } from "./look";
   import Temporary from "./Temporary.svelte";
   import { getVersion } from "@tauri-apps/api/app";
@@ -387,7 +388,8 @@
   </nav>
 
   <main>
-    {#if home.folder.temporary && section !== "settings" && section !== "keys"}
+    <!-- In the browser the folder is the server's: nothing to change. -->
+    {#if home.folder.temporary && !door && section !== "settings" && section !== "keys"}
       <Temporary {tr} shown={home.folder.shown} label={l("Oyunlar klasörünü değiştir", "Change the plays folder")} act={() => (section = "settings")} />
     {/if}
     {#if section === "home" || section === "new"}
@@ -634,6 +636,10 @@
       <h2 class="lookhead">{l("Görünüş", "Appearance")}</h2>
       <LookForm {tr} {look} set={setLook} />
       {#if lookError}<p class="error">{lookError}</p>{/if}
+      {#if door}
+        <h2 class="lookhead">{l("Hesabım", "My account")}</h2>
+        <AccountForm {tr} renamed={(name) => door && (door = { ...door, name })} />
+      {/if}
       {#if door?.owner}
         <h2 class="lookhead">{l("Kişiler", "People")}</h2>
         <People {tr} />

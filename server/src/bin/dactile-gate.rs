@@ -12,12 +12,19 @@
 //! - `DACTILE_SERVER`: the `dactile-server` program, beside this one unless
 //!   said. `DACTILE_SANDBOX` and the rest go on to it as they are.
 //!
+//! - `DACTILE_MAIL_URL`, `DACTILE_MAIL_USER`, `DACTILE_MAIL_PASS`,
+//!   `DACTILE_MAIL_FROM`: the mail service invitations and new passwords go
+//!   by (`smtps://…`), or `file:///a/folder` to write them there instead.
+//!
 //! The owner's commands, on the same `DACTILE_HOME`, while it serves or not:
 //!
 //!     dactile-gate add ada "Ada Yıldız" [--owner] [--mail ada@example.com]
-//!                                         --mail: their Google account, to
-//!                                         sign in with it
-//!     dactile-gate invite ada [days]      a link good once, 7 days unless said
+//!                                         an account made straight away
+//!     dactile-gate reset ada [days]       a link to set a new password, good
+//!                                         once (7 days unless said); `invite
+//!                                         ada` says the same
+//!     dactile-gate invite-mail ada@example.com ["Ada Yıldız"]
+//!                                         a link to make an account
 //!     dactile-gate people
 //!     dactile-gate remove ada             off the list; their plays stay
 
@@ -30,6 +37,14 @@ fn home() -> anyhow::Result<PathBuf> {
         std::env::var("DACTILE_HOME").map_err(|_| anyhow::anyhow!("DACTILE_HOME is not set"))?;
     std::fs::create_dir_all(&home)?;
     Ok(PathBuf::from(home).canonicalize()?)
+}
+
+/// The site as browsers reach it, for the links it prints.
+fn site() -> String {
+    std::env::var("DACTILE_SITE")
+        .unwrap_or_default()
+        .trim_end_matches('/')
+        .to_string()
 }
 
 fn main() -> anyhow::Result<()> {
@@ -51,20 +66,34 @@ fn main() -> anyhow::Result<()> {
                 .map(|(_, w)| *w)
                 .collect();
             said(people::add(&home()?, id, &name.join(" "), owner, mail))?;
-            println!("{id} is on the list. A link for them: dactile-gate invite {id}");
+            println!("{id} is on the list. A link to set their password: dactile-gate reset {id}");
             Ok(())
         }
-        ["invite", id] | ["invite", id, _] => {
+        ["reset" | "invite", id] | ["reset" | "invite", id, _] => {
             let days = words.get(2).and_then(|d| d.parse().ok()).unwrap_or(7);
-            let token = people::invite(&home()?, id, days).map_err(|e| anyhow::anyhow!(e))?;
-            let site = std::env::var("DACTILE_SITE").unwrap_or_default();
-            println!("{}/giris/{token}", site.trim_end_matches('/'));
-            eprintln!("Good once, for {days} days. Whoever opens it comes in as {id}.");
+            let code =
+                people::reset(&home()?, id, days * people::DAYS).map_err(|e| anyhow::anyhow!(e))?;
+            println!("{}/parola/{code}", site());
+            eprintln!(
+                "Good once, for {days} days: whoever opens it sets {id}'s password and comes in."
+            );
+            Ok(())
+        }
+        ["invite-mail", mail, name @ ..] => {
+            let code = people::invite(&home()?, mail, &name.join(" "), "")
+                .map_err(|e| anyhow::anyhow!(e))?;
+            println!("{}/davet/{code}", site());
+            eprintln!("Good once, for 7 days: whoever opens it makes an account.");
             Ok(())
         }
         ["people"] => {
             for p in people::list(&home()?) {
-                println!("{}\t{}\t{}\t{}", p.id, p.role, p.name, p.mail);
+                let how = if people::has_password(&home()?, &p.id) {
+                    "password"
+                } else {
+                    "no password"
+                };
+                println!("{}\t{}\t{}\t{}\t{how}", p.id, p.role, p.name, p.mail);
             }
             Ok(())
         }
@@ -74,7 +103,7 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         _ => anyhow::bail!(
-            "dactile-gate [add <id> <name> [--owner] [--mail <address>] | invite <id> [days] | people | remove <id>]"
+            "dactile-gate [add <id> <name> [--owner] [--mail <address>] | reset <id> [days] | invite-mail <address> [name] | people | remove <id>]"
         ),
     }
 }
@@ -93,6 +122,20 @@ fn serve() -> anyhow::Result<()> {
     gate.google = dactile_server::google::Google::from_env();
     if gate.google.is_some() {
         eprintln!("signing in with Google is on");
+    }
+    gate.mail = dactile_server::mail::Mail::from_env();
+    match &gate.mail {
+        Some(m) if m.url.starts_with("file://") => eprintln!("mail is written to {}", m.url),
+        Some(_) => eprintln!("mail is sent"),
+        None => eprintln!(
+            "no mail is sent: invitations and new passwords are links the owner passes on"
+        ),
+    }
+    let site = site();
+    if !site.is_empty() {
+        gate.site = site;
+    } else {
+        gate.site = format!("http://{addr}");
     }
     let gate = Arc::new(gate);
     tokio::runtime::Runtime::new()?.block_on(async {

@@ -9,6 +9,7 @@ pub mod confine;
 pub mod door;
 pub mod gate;
 pub mod google;
+pub mod mail;
 pub mod people;
 
 use axum::body::Bytes;

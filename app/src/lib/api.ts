@@ -20,11 +20,17 @@ const DESKTOP = new Set([
   "open_url",
   "door",
   "sign_out",
-  // The browser's alone: the desktop has no list of people.
+  // The browser's alone: the desktop has no accounts and no list of people.
   "people",
-  "person_add",
   "person_invite",
+  "person_uninvite",
+  "person_reset",
   "person_remove",
+  "account",
+  "account_name",
+  "account_password",
+  "account_mail",
+  "account_out",
 ]);
 
 function invoke<T>(name: string, args?: Record<string, unknown>): Promise<T> {
@@ -301,24 +307,54 @@ export interface Door {
   owner: boolean;
 }
 
-/// Someone who may come in to the site.
+/// Someone with an account on the site.
 export interface Person {
   id: string;
   name: string;
   role: string;
-  /// Their Google account's address, if they sign in with it.
+  /// Their address: for mail, signing in, and their Google account.
   mail: string;
+  /// Whether the address is known to be theirs.
+  checked: boolean;
+  /// Whether they have a password (or come in with Google alone).
+  password: boolean;
+}
+
+/// The site's people, for its owner: accounts, invitations not taken up,
+/// and whether the site sends mail.
+export interface People {
+  people: Person[];
+  invited: { mail: string; name: string; ends: number }[];
+  sends: boolean;
+}
+
+/// The signed-in person's own account.
+export interface Account extends Person {
+  /// Whether the site has Google sign-in, and sends mail.
+  google: boolean;
+  sends: boolean;
 }
 
 export const api = {
   /// Null on the desktop, where nobody signs in.
   door: () => invoke<Door | null>("door"),
   signOut: () => invoke<void>("sign_out"),
-  people: () => invoke<Person[]>("people"),
-  personAdd: (id: string, name: string, mail: string) => invoke<void>("person_add", { id, name, mail }),
-  /// A link good once for them: its path on the site.
-  personInvite: (id: string) => invoke<{ path: string; days: number }>("person_invite", { id }),
+  people: () => invoke<People>("people"),
+  /// An invitation by mail; its link either way (a path on the site), and
+  /// whether it was sent.
+  personInvite: (mail: string, name: string) =>
+    invoke<{ path: string; sent: boolean }>("person_invite", { mail, name }),
+  personUninvite: (mail: string) => invoke<void>("person_uninvite", { mail }),
+  /// A link for them to set a new password: its path on the site.
+  personReset: (id: string) => invoke<{ path: string; days: number }>("person_reset", { id }),
   personRemove: (id: string) => invoke<void>("person_remove", { id }),
+  account: () => invoke<Account>("account"),
+  accountName: (name: string) => invoke<{ name: string }>("account_name", { name }),
+  accountPassword: (old: string, fresh: string) => invoke<void>("account_password", { old, new: fresh }),
+  /// A link to the new address; it is theirs once they open it.
+  accountMail: (mail: string) => invoke<void>("account_mail", { mail }),
+  /// Out on every device, this one too.
+  accountOut: () => invoke<void>("account_out"),
   playImported: (path: string, on: boolean) => invoke<void>("play_imported", { path, on }),
   keys: () => invoke<KeysView>("keys_view"),
   guide: () => invoke<GuideGroup[]>("guide_view"),

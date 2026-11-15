@@ -1,14 +1,17 @@
 #!/bin/bash
-# Who may come in, and their links, on the machine Dactile is put up on:
+# Accounts on the machine Dactile is put up on. The owner does the same
+# from the site's settings (People); these are for the first one, and for
+# when the site can't be reached:
 #
-#   bash deploy/people.sh add ada "Ada Yıldız" --owner
-#   bash deploy/people.sh add ada "Ada Yıldız" --mail ada@example.com
-#                                           their Google account, to sign in with it
-#   bash deploy/people.sh invite ada        a link good once, for 7 days
+#   bash deploy/people.sh add ada "Ada Yıldız" --owner --mail ada@example.com
+#   bash deploy/people.sh reset ada         a link to set ada's password, good once, 7 days
+#   bash deploy/people.sh invite-mail baran@example.com "Baran Deniz"
+#                                           a link to make an account
 #   bash deploy/people.sh people
 #   bash deploy/people.sh remove ada        off the list; their plays stay
 #
-# A link lets whoever opens it in as that person: send it to them alone.
+# A password link lets whoever opens it in as that person: send it to them
+# alone.
 
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)

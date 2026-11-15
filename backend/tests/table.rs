@@ -20,9 +20,15 @@ const DESKTOP: &[&str] = &[
     "door",
     "sign_out",
     "people",
-    "person_add",
     "person_invite",
+    "person_uninvite",
+    "person_reset",
     "person_remove",
+    "account",
+    "account_name",
+    "account_password",
+    "account_mail",
+    "account_out",
 ];
 
 #[test]

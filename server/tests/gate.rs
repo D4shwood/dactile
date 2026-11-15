@@ -1,5 +1,6 @@
-//! The gate as browsers meet it: two people sign in with their links, each
-//! gets a Dactile of their own, and neither reaches the other's.
+//! The gate as browsers meet it: two people sign in with their passwords,
+//! each gets a Dactile of their own, and neither reaches the other's; the
+//! owner invites a third by mail.
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
@@ -40,16 +41,26 @@ fn json(b: &[u8]) -> Value {
     serde_json::from_slice(b).unwrap_or_else(|_| panic!("{}", String::from_utf8_lossy(b)))
 }
 
-/// Opens a link and presses its button: the cookie it gives.
-async fn come_in(app: &axum::Router, token: &str) -> Option<String> {
-    let page = format!("/giris/{token}");
-    let (s, _, _) = send(app, get(&page, "")).await;
-    if s != StatusCode::OK {
-        return None;
-    }
-    let pressed = Request::post(&page).body(Body::empty()).unwrap();
-    let (s, _, cookie) = send(app, pressed).await;
-    (s == StatusCode::SEE_OTHER).then_some(cookie).flatten()
+/// Signs in with a name and a password: the cookie it gives.
+async fn sign_in(app: &axum::Router, who: &str, password: &str) -> Option<String> {
+    let r = Request::post("/api/giris")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("sec-fetch-site", "same-origin")
+        .body(Body::from(
+            json!({ "who": who, "password": password }).to_string(),
+        ))
+        .unwrap();
+    let (s, _, cookie) = send(app, r).await;
+    (s == StatusCode::OK).then_some(cookie).flatten()
+}
+
+/// A request a page of this site sends, outside the app: the door's.
+fn from_page(uri: &str, body: Value) -> Request<Body> {
+    Request::post(uri)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("sec-fetch-site", "same-origin")
+        .body(Body::from(body.to_string()))
+        .unwrap()
 }
 
 #[tokio::test]
@@ -61,7 +72,15 @@ async fn each_person_has_a_dactile_of_their_own() {
     people::add(&home, "ada", "Ada Yıldız", true, None).unwrap();
     people::add(&home, "baran", "Baran Deniz", false, None).unwrap();
     let server = env!("CARGO_BIN_EXE_dactile-server").into();
-    let gate = Arc::new(gate::Gate::new(home.clone(), server, false));
+    let outbox = dir.join("outbox");
+    let mut gate = gate::Gate::new(home.clone(), server, false);
+    gate.mail = Some(dactile_server::mail::Mail {
+        url: format!("file://{}", outbox.display()),
+        user: String::new(),
+        pass: String::new(),
+        from: "Dactile <d@example.com>".into(),
+    });
+    let gate = Arc::new(gate);
     let app = gate::router(gate.clone(), None);
 
     // Signed out: nothing of anyone's, and no password to try.
@@ -70,40 +89,26 @@ async fn each_person_has_a_dactile_of_their_own() {
     let (s, _, _) = send(&app, post("/api/login", "", json!({"password": "x"}))).await;
     assert_eq!(s, StatusCode::NOT_FOUND);
     let (_, b, _) = send(&app, get("/api/door", "")).await;
-    assert_eq!(json(&b)["kind"], "link");
-    assert!(come_in(&app, "not-a-link").await.is_none());
+    assert_eq!(json(&b)["kind"], "accounts");
 
-    // A link lets its person in, once; and only from its own page's button,
-    // not from a form on someone else's site.
-    let link = people::invite(&home, "ada", 7).unwrap();
-    let elsewhere = Request::post(format!("/giris/{link}"))
-        .header(header::HOST, "dactile.example")
-        .header(header::ORIGIN, "https://another.example")
-        .body(Body::empty())
+    // Each comes in with their own password, and only with it; and only
+    // from a page of this site, not from a form on someone else's.
+    people::set_password(&home, "ada", "ada'nın parolası").unwrap();
+    people::set_password(&home, "baran", "baran'ın parolası").unwrap();
+    assert!(sign_in(&app, "ada", "baran'ın parolası").await.is_none());
+    let elsewhere = Request::post("/api/giris")
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("sec-fetch-site", "cross-site")
+        .body(Body::from(
+            json!({ "who": "ada", "password": "ada'nın parolası" }).to_string(),
+        ))
         .unwrap();
     let (s, _, cookie) = send(&app, elsewhere).await;
     assert_eq!((s, cookie), (StatusCode::FORBIDDEN, None));
-    let foreign = |site: &str, origin: &str| {
-        Request::post(format!("/giris/{link}"))
-            .header(header::HOST, "dactile.example")
-            .header(header::ORIGIN, origin)
-            .header("sec-fetch-site", site)
-            .body(Body::empty())
-            .unwrap()
-    };
-    let (s, _, _) = send(&app, foreign("cross-site", "https://another.example")).await;
-    assert_eq!(s, StatusCode::FORBIDDEN);
-    let (s, _, _) = send(&app, foreign("cross-site", "null")).await;
-    assert_eq!(s, StatusCode::FORBIDDEN);
-    // Firefox behind no-referrer: Origin "null", but it says it is our page.
-    let ours = foreign("same-origin", "null");
-    let (s, _, cookie) = send(&app, ours).await;
-    assert_eq!(s, StatusCode::SEE_OTHER, "own page with Origin null");
-    assert!(cookie.is_some());
-    let link = people::invite(&home, "ada", 7).unwrap();
-    let ada = come_in(&app, &link).await.expect("ada's cookie");
-    assert!(come_in(&app, &link).await.is_none());
-    let baran = come_in(&app, &people::invite(&home, "baran", 7).unwrap())
+    let ada = sign_in(&app, "ada", "ada'nın parolası")
+        .await
+        .expect("ada's cookie");
+    let baran = sign_in(&app, "baran", "baran'ın parolası")
         .await
         .expect("baran's cookie");
     let (_, b, _) = send(&app, get("/api/me", &ada)).await;
@@ -154,45 +159,49 @@ async fn each_person_has_a_dactile_of_their_own() {
     // The list is the owner's: Ada sees and changes it, Baran doesn't.
     let (s, b, _) = send(&app, get("/api/people", &ada)).await;
     assert_eq!(s, StatusCode::OK);
-    assert_eq!(json(&b).as_array().unwrap().len(), 2);
+    assert_eq!(json(&b)["people"].as_array().unwrap().len(), 2);
     let (s, _, _) = send(&app, get("/api/people", &baran)).await;
     assert_eq!(s, StatusCode::FORBIDDEN);
-    let new = json!({ "id": "ceren", "name": "Ceren Ak", "mail": "ceren@example.com" });
-    let (s, _, _) = send(&app, post("/api/people", &baran, new.clone())).await;
+    // Ada invites Ceren by her address; the mail goes to a folder here.
+    let new = json!({ "mail": "Ceren@Example.com", "name": "Ceren Ak" });
+    let (s, _, _) = send(&app, post("/api/people/davet", &baran, new.clone())).await;
     assert_eq!(s, StatusCode::FORBIDDEN);
-    let (s, _, _) = send(&app, post("/api/people", &ada, new)).await;
+    let (s, b, _) = send(&app, post("/api/people/davet", &ada, new)).await;
     assert_eq!(s, StatusCode::OK);
-    assert_eq!(
-        people::find(&home, "ceren").unwrap().mail,
-        "ceren@example.com"
-    );
-    let (s, _, _) = send(&app, post("/api/people", &ada, json!({ "id": "No Good" }))).await;
-    assert_eq!(s, StatusCode::BAD_REQUEST);
-    // A link made on the site lets its person in.
-    let (s, _, _) = send(&app, post("/api/people/ceren/invite", &baran, json!({}))).await;
-    assert_eq!(s, StatusCode::FORBIDDEN);
-    let (s, b, _) = send(&app, post("/api/people/ceren/invite", &ada, json!({}))).await;
-    assert_eq!(s, StatusCode::OK);
+    assert_eq!(json(&b)["sent"], true);
     let path = json(&b)["path"].as_str().unwrap().to_string();
-    let ceren = come_in(&app, path.trim_start_matches("/giris/"))
-        .await
-        .expect("ceren's cookie");
+    let mailed = std::fs::read_dir(&outbox)
+        .unwrap()
+        .map(|f| std::fs::read_to_string(f.unwrap().path()).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(mailed.len(), 1);
+    assert!(mailed[0].contains("To: ceren@example.com") && mailed[0].contains(&path));
+    let (_, b, _) = send(&app, get("/api/people", &ada)).await;
+    assert_eq!(json(&b)["invited"][0]["mail"], "ceren@example.com");
+    // She opens it, sees who called her, and makes her account.
+    let (s, b, _) = send(&app, get(&format!("/api{path}"), "")).await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(json(&b)["by"], "Ada Yıldız");
+    let taken = json!({ "id": "baran", "name": "Ceren Ak", "mail": "ceren@example.com", "password": "ceren'in parolası" });
+    let (s, _, _) = send(&app, from_page(&format!("/api{path}"), taken)).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST, "a user name someone has");
+    let mine = json!({ "id": "ceren", "name": "Ceren Ak", "mail": "ceren@example.com", "password": "ceren'in parolası" });
+    let (s, _, ceren) = send(&app, from_page(&format!("/api{path}"), mine.clone())).await;
+    assert_eq!(s, StatusCode::OK);
+    let ceren = ceren.expect("ceren's cookie");
+    let (s, _, _) = send(&app, from_page(&format!("/api{path}"), mine)).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST, "an invitation works once");
     let (_, b, _) = send(&app, get("/api/me", &ceren)).await;
     assert_eq!(json(&b)["name"], "Ceren Ak");
-    // The owner stays the owner and on the list, whatever they send.
+    let (_, b, _) = send(&app, get("/api/hesap", &ceren)).await;
+    assert_eq!(
+        (json(&b)["checked"].clone(), json(&b)["password"].clone()),
+        (json!(true), json!(true))
+    );
+    // The owner stays the owner and on the list.
     let (s, _, _) = send(&app, post("/api/people/ada/remove", &ada, json!({}))).await;
     assert_eq!(s, StatusCode::BAD_REQUEST);
-    let (s, _, _) = send(
-        &app,
-        post(
-            "/api/people",
-            &ada,
-            json!({ "id": "ada", "name": "Ada Yıldız" }),
-        ),
-    )
-    .await;
-    assert_eq!(s, StatusCode::OK);
-    assert_eq!(people::find(&home, "ada").unwrap().role, "owner");
+    assert!(people::find(&home, "ada").unwrap().owner());
     // Taken off on the site, Ceren is out at once.
     let (s, _, _) = send(&app, post("/api/people/ceren/remove", &ada, json!({}))).await;
     assert_eq!(s, StatusCode::OK);

@@ -40,7 +40,17 @@ Bu, `setup.sh`'ı makineye gönderip `sudo` ile bir kez çalıştırır: paketle
 ## 4. Sonrası (Claude)
 
 - `bash deploy/deploy.sh`: arayüzü burada, sunucuyu orada derler, servisi yeniden başlatır. Commit'lenmemiş değişiklik varsa durur; önceki sürüm `~/bin/*.before` olarak yanında kalır.
-- **Kişiler:** Parola yok. `bash deploy/people.sh add ada "Ada Yıldız" --owner` kişiyi listeye ekler, `bash deploy/people.sh invite ada` bir giriş bağlantısı yazar: bir kez çalışır, yedi gün geçerlidir, açan kişi o kişi olarak girer. Bağlantı yalnızca o kişiye gönderilir. `people` listeyi gösterir, `remove ada` kişiyi çıkarır (oyunları kalır).
+- **Kişiler:** Herkesin kendi hesabı var: kullanıcı adı ve parola, ya da adresinin Google hesabı. İlk hesap (sahip) buradan açılır: `bash deploy/people.sh add ada "Ada Yıldız" --owner --mail ada@example.com`, sonra `bash deploy/people.sh reset ada` parola belirleme bağlantısını yazar (bir kez çalışır, yedi gün geçerli). Sonrası sitede: sahip Ayarlar → Kişiler'den e-postayla davet eder, davet edilen kullanıcı adını ve parolasını kendisi seçer. `people` listeyi gösterir, `remove ada` kişiyi çıkarır (oyunları kalır).
+- **Posta:** Davet, "parolamı unuttum" ve adres doğrulama postaları bir posta servisiyle gider (ör. Brevo, ücretsiz). Servisin SMTP bilgileri `deploy/site.env`'e yazılır (git'e girmez), sonra `bash deploy/deploy.sh`:
+
+```
+MAIL_URL=smtps://smtp-relay.brevo.com:465
+MAIL_USER=...
+MAIL_PASS=...
+MAIL_FROM=Dactile <dactile@ALAN-ADI>
+```
+
+  Posta yokken de site çalışır: davet ve parola bağlantılarını sahip üretir ve kendisi iletir.
 - Yedek: saatte bir `~/data` git'e commit'lenir. Özel GitHub deposu ve Google Drive (`rclone`, `drive.file`) bağlanınca oraya da gider; Drive'da son 5 gün kalır. Geri yükleme bir kez denenir.
 
 ## Google ile giriş (istenirse)
@@ -56,9 +66,9 @@ GOOGLE_ID=...apps.googleusercontent.com
 GOOGLE_SECRET=...
 ```
 
-4. `bash deploy/deploy.sh`, sonra her kişinin Google adresi: `bash deploy/people.sh add ada "Ada Yıldız" --mail ada@example.com`.
+4. `bash deploy/deploy.sh`. Sonra hesabının adresi bir Google hesabı olan herkes "Google ile gir" ile girer; davet edilen de hesabını Google ile açabilir.
 
-Yalnızca adresi listede olan girer; Google'ın doğrulamadığı adres kabul edilmez.
+Yalnızca adresi bir hesabın doğrulanmış adresi olan girer; Google'ın doğrulamadığı adres kabul edilmez.
 
 ## Bilinenler
 

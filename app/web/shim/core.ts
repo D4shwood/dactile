@@ -198,13 +198,26 @@ export async function invoke<T>(cmd: string, args: Args = {}): Promise<T> {
     }
     case "people":
       return fetch("/api/people").then(answer<T>);
-    case "person_add":
-      // No address typed leaves the one they had.
-      return post<T>("/api/people", { id: args.id, name: args.name, mail: args.mail || undefined });
     case "person_invite":
-      return post<T>(`/api/people/${encodeURIComponent(args.id)}/invite`, {});
+      return post<T>("/api/people/davet", { mail: args.mail, name: args.name });
+    case "person_uninvite":
+      return post<T>("/api/people/davet/geri", { mail: args.mail });
+    case "person_reset":
+      return post<T>(`/api/people/${encodeURIComponent(args.id)}/reset`, {});
     case "person_remove":
       return post<T>(`/api/people/${encodeURIComponent(args.id)}/remove`, {});
+    case "account":
+      return fetch("/api/hesap").then(answer<T>);
+    case "account_name":
+      return post<T>("/api/hesap", { name: args.name });
+    case "account_password":
+      return post<T>("/api/hesap/parola", { old: args.old, new: args.new });
+    case "account_mail":
+      return post<T>("/api/hesap/eposta", { mail: args.mail });
+    case "account_out":
+      await post("/api/hesap/cik", {});
+      location.href = "/";
+      return done();
     case "sign_out":
       await post("/api/logout", {});
       location.reload();

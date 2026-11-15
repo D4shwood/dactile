@@ -161,5 +161,46 @@ async fn the_address_on_the_list_comes_in_and_no_other() {
     let (s, _, _) = send(&app, get(&back("someone-elses-state"), &trip)).await;
     assert_eq!(s, StatusCode::BAD_REQUEST);
 
+    // An invitation taken up with Google: the user name is chosen first,
+    // the account made with Google's address when it comes back.
+    let code = people::invite(&home, "ece@example.com", "Ece", "Ada").unwrap();
+    let r = Request::post(format!("/api/davet/{code}/google"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("sec-fetch-site", "same-origin")
+        .body(Body::from(
+            json!({ "id": "ece", "name": "Ece Su" }).to_string(),
+        ))
+        .unwrap();
+    let r = app.clone().oneshot(r).await.unwrap();
+    assert_eq!(r.status(), StatusCode::OK);
+    let trip = r.headers()[header::SET_COOKIE]
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string();
+    let to: Value =
+        serde_json::from_slice(&r.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let to = to["to"].as_str().unwrap();
+    *claims.lock().unwrap() = good(&param(to, "nonce"), "Ece@Gmail.com");
+    let (s, cookies, where_to) = send(&app, get(&back(&param(to, "state")), &trip)).await;
+    assert_eq!((s, where_to.as_str()), (StatusCode::SEE_OTHER, "/"));
+    assert!(cookies.iter().any(|c| c.starts_with("dactile=")));
+    let ece = people::find(&home, "ece").unwrap();
+    assert_eq!(
+        (ece.mail.as_str(), ece.checked, ece.name.as_str()),
+        ("ece@gmail.com", true, "Ece Su")
+    );
+    assert!(
+        people::peek(&home, &code).is_none(),
+        "the invitation is used up"
+    );
+    // Next time Google alone lets her in.
+    let (trip, state, nonce) = set_out().await;
+    *claims.lock().unwrap() = good(&nonce, "ece@gmail.com");
+    let (s, _, _) = send(&app, get(&back(&state), &trip)).await;
+    assert_eq!(s, StatusCode::SEE_OTHER);
+
     std::fs::remove_dir_all(&dir).unwrap();
 }

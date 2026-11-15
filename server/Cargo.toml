@@ -11,6 +11,7 @@ default-run = "dactile-server"
 dactile = { path = "../core" }
 dactile-backend = { path = "../backend" }
 anyhow = "1"
+argon2 = "0.5"
 axum = "0.8"
 hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
 percent-encoding = "2"

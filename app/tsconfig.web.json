@@ -8,5 +8,5 @@
       "@tauri-apps/api/window": ["./web/shim/window.ts"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.svelte", "web/shim/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.svelte", "web/shim/**/*.ts", "web/door/**/*.ts", "web/door/**/*.svelte"]
 }
