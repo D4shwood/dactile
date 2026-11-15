@@ -210,13 +210,79 @@ async fn call(
     if let Err(e) = confine::check(&s.root, &name, &args) {
         return fail(StatusCode::FORBIDDEN, e);
     }
+    let home = name == "home";
+    let root = s.root.clone();
     let done =
         tokio::task::spawn_blocking(move || dactile_backend::dispatch(&s.ctx, &name, args)).await;
     match done {
-        Ok(Ok(v)) => Json(v).into_response(),
+        Ok(Ok(mut v)) => {
+            // The start screen's one line of warning, if it has none of its
+            // own: the backup's.
+            if home
+                && v.get("notice").is_some_and(Value::is_null)
+                && let Some(n) = backup_notice(&root, std::time::SystemTime::now())
+            {
+                v["notice"] = Value::String(n);
+            }
+            Json(v).into_response()
+        }
         Ok(Err(e)) => fail(StatusCode::BAD_REQUEST, e),
         Err(e) => fail(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
     }
+}
+
+/// A backup is late after this: it runs every hour.
+const BACKUP_LATE: u64 = 26 * 3600;
+
+/// What is wrong with the backup, from what `deploy/backup.sh` last wrote
+/// in `cache/backup` (`ok=` the second it last went well, `away=1` if it
+/// leaves this machine, `error=` what stopped it). Nothing if all is well,
+/// or if no backup has ever run here.
+pub fn backup_notice(root: &Path, now: std::time::SystemTime) -> Option<String> {
+    let said = std::fs::read_to_string(root.join("cache/backup")).ok()?;
+    let get = |key: &str| {
+        said.lines()
+            .find_map(|l| l.strip_prefix(key)?.strip_prefix('='))
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+    };
+    let ok: Option<u64> = get("ok").and_then(|v| v.parse().ok());
+    let now = now
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let ago = |then: u64| {
+        let hours = now.saturating_sub(then) / 3600;
+        if hours < 48 {
+            dactile::lang::f("{} saat önce", "{} hours ago", &[&hours.to_string()])
+        } else {
+            dactile::lang::f("{} gün önce", "{} days ago", &[&(hours / 24).to_string()])
+        }
+    };
+    let last = ok.map_or_else(|| dactile::lang::l("hiç", "never").to_string(), ago);
+    if let Some(why) = get("error") {
+        return Some(dactile::lang::f(
+            "Yedek alınamıyor ({}). Son başarılı yedek: {}.",
+            "The backup is failing ({}). The last one that went well: {}.",
+            &[&why, &last],
+        ));
+    }
+    if ok.is_none_or(|then| now.saturating_sub(then) > BACKUP_LATE) {
+        return Some(dactile::lang::f(
+            "Yedek gecikti. Son başarılı yedek: {}.",
+            "The backup is late. The last one that went well: {}.",
+            &[&last],
+        ));
+    }
+    if get("away") != Some("1") {
+        return Some(
+            dactile::lang::l(
+                "Yedek yalnızca bu makinede duruyor: dışarıda bir yere (git ya da Drive) henüz bağlanmadı.",
+                "The backup stays on this machine only: it isn't connected to anywhere outside (git or Drive) yet.",
+            )
+            .to_string(),
+        );
+    }
+    None
 }
 
 #[derive(Deserialize)]
@@ -444,6 +510,31 @@ async fn version() -> Json<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_backup_speaks_only_when_something_is_wrong() {
+        let root = std::env::temp_dir().join(format!("dactile-backup-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("cache")).unwrap();
+        let now = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_800_000_000);
+        let said = |text: &str| {
+            std::fs::write(root.join("cache/backup"), text).unwrap();
+            backup_notice(&root, now)
+        };
+        // No backup has run here: nothing to say.
+        assert_eq!(backup_notice(&root, now), None);
+        // An hour ago, off the machine: all is well.
+        assert_eq!(said("ok=1799996400\naway=1\nerror=\n"), None);
+        // Well, but on this machine alone.
+        assert!(said("ok=1799996400\naway=0\n").is_some());
+        // Three days ago.
+        let late = said("ok=1799740800\naway=1\n").unwrap();
+        assert!(late.contains('3'), "{late}");
+        // Stopped by something.
+        let failing = said("ok=1799996400\naway=1\nerror=git push\n").unwrap();
+        assert!(failing.contains("git push"), "{failing}");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn old_uploads_go_and_the_oldest_when_there_is_no_room() {
