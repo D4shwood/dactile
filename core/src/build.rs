@@ -519,27 +519,49 @@ fn show_items(uri: &str) -> bool {
         .is_ok_and(|s| s.success())
 }
 
+/// What the AppImage runtime says about Dactile itself: where its file is,
+/// where it is mounted, how it was called. A program started from Dactile is
+/// not Dactile. An AppImage that updates itself (a PDF viewer) replaces the
+/// file `APPIMAGE` names: left set, that file would be Dactile's.
+const APPIMAGE_OWN: [&str; 4] = ["APPIMAGE", "APPDIR", "ARGV0", "OWD"];
+
 /// A program of the system's. An AppImage's start script points the
 /// libraries, Perl, Python and GTK at what is inside it, for the app alone:
 /// XeLaTeX or a PDF viewer would load those instead of their own. So a child
-/// gets the environment as it was.
+/// gets the environment as it was, without Dactile's name for itself.
 pub fn outside(program: &str) -> Command {
     let mut c = Command::new(program);
-    if let Some(dir) = std::env::var("APPDIR").ok().filter(|d| !d.is_empty()) {
-        c.env_remove("GTK_THEME");
-        for (name, value) in std::env::vars_os() {
-            match without(&value.to_string_lossy(), &dir) {
-                None => {}
-                Some(v) if v.is_empty() => {
-                    c.env_remove(name);
-                }
-                Some(v) => {
-                    c.env(name, v);
-                }
-            }
-        }
+    let dir = std::env::var("APPDIR").ok().filter(|d| !d.is_empty());
+    for (name, value) in child_env(std::env::vars_os(), dir.as_deref()) {
+        match value {
+            Some(v) => c.env(name, v),
+            None => c.env_remove(name),
+        };
     }
     c
+}
+
+/// The variables a child gets otherwise than Dactile has them: a new value,
+/// or none at all.
+fn child_env(
+    vars: impl Iterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
+    appdir: Option<&str>,
+) -> Vec<(std::ffi::OsString, Option<String>)> {
+    let mut out = Vec::new();
+    for (name, value) in vars {
+        let own = name.to_str().is_some_and(|n| APPIMAGE_OWN.contains(&n));
+        if own || (appdir.is_some() && name == "GTK_THEME") {
+            out.push((name, None));
+            continue;
+        }
+        let Some(dir) = appdir else { continue };
+        match without(&value.to_string_lossy(), dir) {
+            None => {}
+            Some(v) if v.is_empty() => out.push((name, None)),
+            Some(v) => out.push((name, Some(v))),
+        }
+    }
+    out
 }
 
 /// A variable's value with the paths inside `dir` gone, if it had any.
@@ -569,6 +591,45 @@ mod tests {
             Some("")
         );
         assert_eq!(without("/usr/bin", d), None);
+    }
+
+    #[test]
+    fn a_child_is_never_told_it_is_dactile() {
+        let vars = [
+            ("APPIMAGE", "/home/ada/.local/bin/dactile"),
+            ("APPDIR", "/tmp/.mount_DactilX"),
+            ("ARGV0", "dactile"),
+            ("OWD", "/home/ada"),
+            ("PATH", "/tmp/.mount_DactilX/usr/bin:/usr/bin"),
+            ("GTK_THEME", "Adwaita"),
+            ("HOME", "/home/ada"),
+        ]
+        .map(|(k, v)| (k.into(), v.into()));
+        let changed = |appdir| {
+            child_env(vars.clone().into_iter(), appdir)
+                .into_iter()
+                .map(|(k, v)| (k.to_string_lossy().into_owned(), v))
+                .collect::<Vec<_>>()
+        };
+        let gone = |k: &str| (k.to_string(), None);
+        // Run from the AppImage: its own names go, its paths go, the rest stays.
+        assert_eq!(
+            changed(Some("/tmp/.mount_DactilX")),
+            vec![
+                gone("APPIMAGE"),
+                gone("APPDIR"),
+                gone("ARGV0"),
+                gone("OWD"),
+                ("PATH".into(), Some("/usr/bin".into())),
+                gone("GTK_THEME"),
+            ]
+        );
+        // An APPIMAGE left over with no APPDIR (Dactile started by another
+        // AppImage's program) still goes.
+        assert_eq!(
+            changed(None),
+            vec![gone("APPIMAGE"), gone("APPDIR"), gone("ARGV0"), gone("OWD")]
+        );
     }
 
     #[test]
