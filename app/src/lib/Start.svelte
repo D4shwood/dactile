@@ -451,7 +451,8 @@
       {/if}
     {/if}
 
-    {#if section === "home"}
+    <!-- In the browser the folder is the server's, nothing to show. -->
+    {#if section === "home" && !door}
       <p class="folder">
         <span>{l("Oyunlar klasörü", "Plays folder")}:</span>
         {#if home.folder.exists}
@@ -506,7 +507,9 @@
             </p>
           {:else if !plays.length}
             <p class="muted">
-              {l(`${home.settings.plays_dir} içinde oyun yok. Yukarıdan yeni bir tane başlat.`, `No plays in ${home.settings.plays_dir}. Start one above.`)}
+              {door
+                ? l("Henüz oyun yok. Yukarıdan yeni bir tane başlat.", "No plays yet. Start one above.")
+                : l(`${home.settings.plays_dir} içinde oyun yok. Yukarıdan yeni bir tane başlat.`, `No plays in ${home.settings.plays_dir}. Start one above.`)}
             </p>
           {/if}
           {#if picks.length > 1}
