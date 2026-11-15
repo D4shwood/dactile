@@ -1,10 +1,12 @@
 # Dactile
 
-Stage play writer for the tiyatro XeLaTeX class. Rust workspace: `core` (crate `dactile`), `tui` (Dactile Light), `backend` (the desktop's commands without Tauri, also served by dactile-web), `app/src-tauri` + `app/src` (Dactile, the desktop app: Tauri 2, Svelte 5, CodeMirror 6; the window calls the backend through one `call` command). The class is in `tex/`.
+Stage play writer for the tiyatro XeLaTeX class. Rust workspace: `core` (crate `dactile`), `tui` (Dactile Light), `backend` (the desktop's commands without Tauri), `app/src-tauri` + `app/src` (Dactile, the desktop app: Tauri 2, Svelte 5, CodeMirror 6; the window calls the backend through one `call` command). The class is in `tex/`.
 
-`core` and `tex/` are also used by dactile-web, pinned to a commit: this team owns them, the web team asks. Keep `core` compiling for `wasm32-unknown-unknown`.
+Dactile Web is here too, and its plan is `docs/web.md`. `server/` (`dactile-server`): the backend's commands over HTTP for one person behind a password, paths kept inside their folder (`confine.rs`). `app/web/`: the browser's way in to the same interface (`app/src`), where `app/web/shim/` stands in for `@tauri-apps/api`; anything `app/src` takes from Tauri needs its shim. `web-wasm/` (`dactile-wasm`): the backend's text-only commands for the browser, so `core` and `backend` must keep compiling for `wasm32-unknown-unknown`. `deploy/`: putting the server up.
 
-Checks: `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all --check`, `npm run check` in `app/`, `tex/test/run.sh`.
+Checks: `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --all --check`, `cargo build -p dactile-wasm --target wasm32-unknown-unknown`, `npm run check` and `npm run check:web` in `app/`, `tex/test/run.sh`. Ports: desktop dev 1420, web dev 1421 (passes `/api` on), server 1430.
+
+Run the web locally: `DACTILE_DATA=<scratch> DACTILE_PASSWORD=<12+ chars> cargo run -p dactile-server`, and `npm run dev:web` in `app/`.
 
 ## Working
 
@@ -19,7 +21,7 @@ One session does the work, directly on `main`. Agents in `.claude/agents/` are t
 - This repository is public: fictional names only in code, tests, comments and commits. Book text never enters it. Check the diff before each commit.
 - Never take screenshots of the user's screen. Test in headless Weston or a browser pane.
 - Kill test processes by explicit PID after listing them. No `pkill`.
-- Don't push, tag or release without the user's yes for that action.
+- Don't push, tag, release or put the server up without the user's yes for that action.
 - Commit with `git -c user.email=D4shwood@users.noreply.github.com commit` and end with the `Co-Authored-By` line.
 - The cursor always blinks.
 - The user runs sudo themselves. Reply to the user in Turkish, using they/them.

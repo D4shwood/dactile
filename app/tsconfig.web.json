@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@tauri-apps/api/core": ["./web/shim/core.ts"],
+      "@tauri-apps/api/event": ["./web/shim/event.ts"],
+      "@tauri-apps/api/app": ["./web/shim/app.ts"],
+      "@tauri-apps/api/window": ["./web/shim/window.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.svelte", "web/shim/**/*.ts"]
+}

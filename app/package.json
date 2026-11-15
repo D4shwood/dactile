@@ -7,6 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json",
+    "dev:web": "vite -c vite.web.config.ts",
+    "build:web": "vite build -c vite.web.config.ts",
+    "check:web": "svelte-check --tsconfig ./tsconfig.web.json",
     "tauri": "tauri"
   },
   "dependencies": {

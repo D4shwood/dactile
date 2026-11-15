@@ -1,0 +1,48 @@
+# Oracle'a kurulum
+
+Sahip yalnızca Oracle panelinde makineyi açar ve bir kez `bash deploy/first.sh` çalıştırır. Sonrasında Claude, `sudo`suz `dactile` kullanıcısıyla `bash deploy/deploy.sh` ile kurar ve günceller; her kurulum sahibin onayıyla.
+
+## 1. Oracle panelinde
+
+1. **Hesap:** Kullandıkça öde (PAYG) hesabına geçiş ve bir bütçe uyarısı (ör. 1 $). Boşta makine geri alma kuralını kaldırır; Always Free kaynaklar ücretsiz kalır. Geçmeden önce Oracle'ın "Always Free Resources" sayfasından doğrulanır.
+2. **Makine:** Compute → Instances → Create instance.
+   - Image: Canonical Ubuntu 24.04 (varsa daha yenisi de olur).
+   - Shape: Ampere, `VM.Standard.A1.Flex`, 2 OCPU, 12 GB.
+   - Ağ: hesaptaki başka bir makineyle aynı VCN ve public subnet olabilir; "Assign a public IPv4 address" açık.
+   - SSH: kendi açık anahtarın ya da Oracle'ın ürettiği anahtar çifti (özel anahtarı indir, sakla).
+   - Hesaptaki öteki makinelere dokunulmaz.
+3. **Sabit IP:** Networking → IP Management → Reserved Public IPs → Reserve. Sonra makine → Attached VNICs → IPv4 Addresses → Edit: önce "No public IP", kaydet; tekrar Edit → "Reserved public IP" ve az önceki IP.
+4. **Kapılar:** Makinenin subnet'i → Security List → Add Ingress Rules: kaynak `0.0.0.0/0`, TCP, hedef port `80`; aynısı `443`.
+
+## 2. Alan adı
+
+[duckdns.org](https://www.duckdns.org)'da bir ad al (ör. `ornek.duckdns.org`) ve sabit IP'yi yaz. IP değişmeyeceği için güncelleyici gerekmez.
+
+## 3. Bu bilgisayarda, bir kez
+
+Claude `deploy/site.env` dosyasını doldurur (git'e girmez):
+
+```
+IP=...
+DOMAIN=ornek.duckdns.org
+OWNER_KEY=~/indirilenler/ssh-key.key
+OWNER=ubuntu
+```
+
+Sonra sahip:
+
+```bash
+bash deploy/first.sh
+```
+
+Bu, `setup.sh`'ı makineye gönderip `sudo` ile bir kez çalıştırır: paketler (Caddy, XeLaTeX, yazı tipleri, Tesseract, rclone), `dactile` kullanıcısı, iptables'ta 80/443, Caddy'nin HTTPS ayarı.
+
+## 4. Sonrası (Claude)
+
+- `bash deploy/deploy.sh`: arayüzü burada, sunucuyu orada derler, servisi yeniden başlatır. Parola bu bilgisayarda `~/.config/dactile-web/password`.
+- Yedek: saatte bir `~/data` git'e commit'lenir. Özel GitHub deposu ve Google Drive (`rclone`, `drive.file`) bağlanınca oraya da gider; Drive'da son 5 gün kalır. Geri yükleme bir kez denenir.
+
+## Bilinenler
+
+- Sunucuda Times New Roman yok; sayfalar TeX Gyre Termes ile çıkar. Masaüstündekiyle aynı görünüm istenirse `ttf-mscorefonts-installer` lisans onayıyla kurulur.
+- XeLaTeX şimdilik yalıtımsız çalışır: tek kullanıcı varken sorun değil. Başka biri girmeden önce derleme `bwrap` içine alınır; ayrıntısı `docs/web.md`'de.

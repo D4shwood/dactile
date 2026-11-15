@@ -1,0 +1,6 @@
+[Unit]
+Description=Dactile's plays, backed up
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash %h/bin/backup.sh

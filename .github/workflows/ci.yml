@@ -14,11 +14,15 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
-      # The core and Dactile Light; the app has a job of its own.
+      # The core, Dactile Light, the backend and the web server; the app has
+      # a job of its own.
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test
       # The core alone, as the desktop app uses it.
       - run: cargo test -p dactile
+      # What the browser runs: the core and the backend must build for it.
+      - run: rustup target add wasm32-unknown-unknown
+      - run: cargo build -p dactile-wasm --target wasm32-unknown-unknown
 
   # The desktop app: its front end built, then its Rust side checked and
   # tested against it.
@@ -43,6 +47,11 @@ jobs:
       - run: npm run check
         working-directory: app
       - run: npm run build
+        working-directory: app
+      # The same interface for the browser, over its stand-ins for Tauri.
+      - run: npm run check:web
+        working-directory: app
+      - run: npm run build:web
         working-directory: app
       - run: cargo clippy -p dactile-app --all-targets -- -D warnings
       - run: cargo test -p dactile-app

@@ -945,6 +945,12 @@
     return confirm(l("Kaydedilemedi. Yine de kapatayım mı?", "Couldn't save. Close anyway?"));
   }
 
+  /// Out of sight (minimized, another tab, a tab about to close): what is
+  /// unsaved is saved now, not in a few seconds.
+  function saveHidden() {
+    if (document.hidden && dirty && !opened.read_only) void save();
+  }
+
   /// Back to the start, or on to the play `next`.
   async function leave(next?: string) {
     if (!(await settled())) return;
@@ -1117,6 +1123,7 @@
     void getVersion().then((v) => (version = v));
     // The window closed within the few seconds before the save of its own.
     void beforeClose(settled).then((off) => (unclose = off));
+    document.addEventListener("visibilitychange", saveHidden);
     // For trying the app out from a script (DACTILE_DEV_EVAL).
     if (import.meta.env.DEV) (window as any).__dactile = { view, key, run, move, openBoard, build, setZoom };
     // To the first line of dialogue, past the cover.
@@ -1129,6 +1136,7 @@
 
   onDestroy(() => {
     unclose?.();
+    document.removeEventListener("visibilitychange", saveHidden);
     if (view) kept.set(opened, view.state.doc.toString());
     closeMenu();
     clearTimeout(viewTimer);
