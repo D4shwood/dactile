@@ -30,13 +30,19 @@ function askPassword(wrong = false) {
   });
 }
 
-/// Where one comes in with a link the owner sends, there is nothing to type.
-function askForLink() {
+/// Where one comes in with a link the owner sends, there is nothing to type;
+/// with Google too, where the site has it.
+function askForLink(google: boolean) {
+  const withGoogle = google
+    ? `<p style="margin:0 0 1.5rem"><a href="/giris/google"
+         style="display:inline-block;padding:.6rem 1.2rem;border:1px solid #999;border-radius:4px;color:inherit;text-decoration:none">Google ile gir</a></p>
+       <p style="color:#666;margin:0">Ya da sana gönderilen bağlantıyı aç.</p>`
+    : `<p style="font-size:1.1rem;margin:0 0 1rem">Girmek için sana gönderilen bağlantıyı aç.</p>
+       <p style="color:#666;margin:0">Bağlantın yoksa ya da süresi dolduysa site sahibinden yenisini iste.</p>`;
   document.body.innerHTML = `
     <div style="max-width:22rem;margin:20vh auto;padding:0 1rem;font-family:system-ui,sans-serif">
       <h1 style="font-family:serif;letter-spacing:.3em;margin:0 0 1.5rem">DACTILE</h1>
-      <p style="font-size:1.1rem;margin:0 0 1rem">Girmek için sana gönderilen bağlantıyı aç.</p>
-      <p style="color:#666;margin:0">Bağlantın yoksa ya da süresi dolduysa site sahibinden yenisini iste.</p>
+      ${withGoogle}
     </div>`;
 }
 
@@ -44,7 +50,7 @@ async function ask() {
   const door = await fetch("/api/door")
     .then((r) => r.json())
     .catch(() => null);
-  if (door?.kind === "link") askForLink();
+  if (door?.kind === "link") askForLink(door.google === true);
   else askPassword();
 }
 

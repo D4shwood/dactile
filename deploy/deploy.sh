@@ -8,8 +8,10 @@
 # changes not committed yet it stops. The server put up before stays beside
 # the new one as ~/bin/dactile-server.before (and dactile-gate.before), to
 # go back to.
-# Reads deploy/site.env (IP, DOMAIN). Nobody has a password: people come in
-# by links, made with deploy/people.sh.
+# Reads deploy/site.env (IP, DOMAIN; GOOGLE_ID and GOOGLE_SECRET if people
+# are to sign in with Google). Nobody has a password: people come in by
+# links made with deploy/people.sh, or with the Google account whose address
+# it put on the list.
 
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -71,7 +73,12 @@ if run 'bwrap --unshare-all --unshare-user --ro-bind /usr /usr --ro-bind-try /li
 else
   echo "!! bwrap doesn't start for the dactile user: XeLaTeX will run UNBOXED. Run setup.sh again, or see docs/web.md."
 fi
-printf "$box"'DACTILE_HOME=/home/dactile/data\nDACTILE_WEB=/home/dactile/web\nDACTILE_ADDR=127.0.0.1:1430\nDACTILE_SECURE=1\nDACTILE_DICT=/home/dactile/dict\nDACTILE_BACKUP=/home/dactile/data/cache/backup\nDACTILE_QUOTA_MB=2048\n' |
+# Signing in with Google, once site.env has the OAuth client's id and secret.
+google=
+if [ -n "${GOOGLE_ID:-}" ] && [ -n "${GOOGLE_SECRET:-}" ]; then
+  google="DACTILE_GOOGLE_ID=$GOOGLE_ID\nDACTILE_GOOGLE_SECRET=$GOOGLE_SECRET\n"
+fi
+printf "$box$google"'DACTILE_SITE=https://'"$DOMAIN"'\nDACTILE_HOME=/home/dactile/data\nDACTILE_WEB=/home/dactile/web\nDACTILE_ADDR=127.0.0.1:1430\nDACTILE_SECURE=1\nDACTILE_DICT=/home/dactile/dict\nDACTILE_BACKUP=/home/dactile/data/cache/backup\nDACTILE_QUOTA_MB=2048\n' |
   run 'umask 077 && mkdir -p ~/.config/dactile-server && cat > ~/.config/dactile-server/env'
 
 run 'systemctl --user daemon-reload && systemctl --user enable --now -q dactile.service backup.timer && systemctl --user restart dactile.service'

@@ -4,7 +4,8 @@
 //! commands (`dactile-gate add`, `invite`, `remove`) and read by the gate
 //! as it runs: nothing is kept in its memory, so a change counts at once.
 //!
-//! - `gate/people`: a line each, `id<TAB>role<TAB>name`. Backed up.
+//! - `gate/people`: a line each, `id<TAB>role<TAB>name<TAB>mail`, the last
+//!   one their Google account's address if they sign in with it. Backed up.
 //! - `gate/secret/invites`: a line each, `token ends id`. A link works
 //!   once, and only until it ends. Not backed up.
 
@@ -21,6 +22,9 @@ pub struct Person {
     pub role: String,
     /// As they are shown: "Ada Yıldız".
     pub name: String,
+    /// Their Google account's address, in small letters; empty, they come in
+    /// by links alone.
+    pub mail: String,
 }
 
 fn people_file(home: &Path) -> PathBuf {
@@ -66,14 +70,16 @@ pub fn list(home: &Path) -> Vec<Person> {
         .unwrap_or_default()
         .lines()
         .filter_map(|l| {
-            let mut parts = l.splitn(3, '\t');
+            let mut parts = l.split('\t');
             let id = parts.next().filter(|id| valid_id(id))?;
             let role = parts.next()?;
             let name = parts.next().unwrap_or(id).trim();
+            let mail = parts.next().unwrap_or("").trim();
             Some(Person {
                 id: id.to_string(),
                 role: role.to_string(),
                 name: if name.is_empty() { id } else { name }.to_string(),
+                mail: mail.to_lowercase(),
             })
         })
         .collect()
@@ -86,19 +92,51 @@ pub fn find(home: &Path, id: &str) -> Option<Person> {
 fn keep(home: &Path, people: &[Person]) -> std::io::Result<()> {
     let text: String = people
         .iter()
-        .map(|p| format!("{}\t{}\t{}\n", p.id, p.role, p.name))
+        .map(|p| format!("{}\t{}\t{}\t{}\n", p.id, p.role, p.name, p.mail))
         .collect();
     write(&people_file(home), &text, false)
 }
 
-/// A new person, or a new name or role for one who is there.
-pub fn add(home: &Path, id: &str, name: &str, owner: bool) -> Result<(), String> {
+/// Whose Google account `mail` is.
+pub fn find_by_mail(home: &Path, mail: &str) -> Option<Person> {
+    let mail = mail.trim().to_lowercase();
+    list(home)
+        .into_iter()
+        .find(|p| !p.mail.is_empty() && p.mail == mail)
+}
+
+/// A new person, or a new name or role for one who is there. `mail`, if
+/// given, is their Google account's address ("" takes it away); not given,
+/// the one they had stays.
+pub fn add(
+    home: &Path,
+    id: &str,
+    name: &str,
+    owner: bool,
+    mail: Option<&str>,
+) -> Result<(), String> {
     if !valid_id(id) {
         return Err(format!(
             "{id}: small letters, digits and hyphens only, 32 at the most"
         ));
     }
     let name = name.replace(['\t', '\n', '\r'], " ");
+    let mut people = list(home);
+    let mail = match mail.map(|m| m.trim().to_lowercase()) {
+        Some(m) if m.is_empty() => m,
+        Some(m) if !m.contains('@') || m.contains(char::is_whitespace) => {
+            return Err(format!("{m} is not an e-mail address"));
+        }
+        Some(m) => match people.iter().find(|p| p.mail == m && p.id != id) {
+            Some(other) => return Err(format!("{m} is {}'s already", other.id)),
+            None => m,
+        },
+        None => people
+            .iter()
+            .find(|p| p.id == id)
+            .map(|p| p.mail.clone())
+            .unwrap_or_default(),
+    };
     let person = Person {
         id: id.to_string(),
         role: if owner { "owner" } else { "writer" }.to_string(),
@@ -108,8 +146,8 @@ pub fn add(home: &Path, id: &str, name: &str, owner: bool) -> Result<(), String>
             name.trim()
         }
         .to_string(),
+        mail,
     };
-    let mut people = list(home);
     match people.iter_mut().find(|p| p.id == id) {
         Some(p) => *p = person,
         None => people.push(person),
@@ -222,13 +260,21 @@ mod tests {
     fn people_are_added_renamed_and_removed() {
         let h = home("list");
         assert!(list(&h).is_empty());
-        add(&h, "ada", "Ada Yıldız", true).unwrap();
-        add(&h, "baran", "", false).unwrap();
-        assert!(add(&h, "../x", "X", false).is_err());
+        add(&h, "ada", "Ada Yıldız", true, Some("Ada@Example.com")).unwrap();
+        add(&h, "baran", "", false, None).unwrap();
+        assert!(add(&h, "../x", "X", false, None).is_err());
+        // An address is one person's, in small letters; a new name keeps it.
+        assert_eq!(find_by_mail(&h, "ADA@example.com").unwrap().id, "ada");
+        assert!(add(&h, "baran", "", false, Some("ada@example.com")).is_err());
+        assert!(add(&h, "baran", "", false, Some("not an address")).is_err());
+        add(&h, "ada", "Ada Yıldız", true, None).unwrap();
+        assert_eq!(find(&h, "ada").unwrap().mail, "ada@example.com");
+        // No address is no one's.
+        assert!(find_by_mail(&h, "").is_none());
         assert_eq!(find(&h, "ada").unwrap().role, "owner");
         assert_eq!(find(&h, "baran").unwrap().name, "baran");
         // Again: a new name, not a second line. A tab can't break the file.
-        add(&h, "baran", "Baran\tDeniz", false).unwrap();
+        add(&h, "baran", "Baran\tDeniz", false, None).unwrap();
         assert_eq!(list(&h).len(), 2);
         assert_eq!(find(&h, "baran").unwrap().name, "Baran Deniz");
         remove(&h, "ada").unwrap();
@@ -241,8 +287,8 @@ mod tests {
     fn a_link_lets_its_person_in_once() {
         let h = home("links");
         assert!(invite(&h, "ada", 7).is_err());
-        add(&h, "ada", "Ada", false).unwrap();
-        add(&h, "baran", "Baran", false).unwrap();
+        add(&h, "ada", "Ada", false, None).unwrap();
+        add(&h, "baran", "Baran", false, None).unwrap();
         let a = invite(&h, "ada", 7).unwrap();
         let b = invite(&h, "baran", 7).unwrap();
         // Looked at, it is still good.

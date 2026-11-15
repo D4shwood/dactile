@@ -9,9 +9,11 @@
 //! have been away a while.
 //!
 //! Signing in is by a link the owner makes (`dactile-gate invite ada`),
-//! good once. No passwords are kept.
+//! good once, or with the Google account whose address the owner put on
+//! the list (`google.rs`). No passwords are kept.
 
 use crate::door::{self, Door};
+use crate::google::Google;
 use crate::people::{self, Person};
 use crate::{COOKIE, GATE, address, fail, session};
 use axum::body::Body;
@@ -66,6 +68,8 @@ pub struct Gate {
     pub server: PathBuf,
     /// A server nobody has asked anything this long is stopped.
     pub idle: Duration,
+    /// Signing in with Google, where it is set up.
+    pub google: Option<Google>,
     door: Door,
     running: tokio::sync::Mutex<HashMap<String, Arc<Theirs>>>,
     client: Client<HttpConnector, Body>,
@@ -81,6 +85,7 @@ impl Gate {
             secure,
             server,
             idle: Duration::from_secs(20 * 60),
+            google: None,
             running: tokio::sync::Mutex::new(HashMap::new()),
             client: Client::builder(TokioExecutor::new()).build(HttpConnector::new()),
         }
@@ -111,6 +116,9 @@ impl Gate {
             // The gate serves the pages itself, and has no password to give.
             .env_remove("DACTILE_WEB")
             .env_remove("DACTILE_PASSWORD")
+            // What is the gate's alone stays with the gate.
+            .env_remove("DACTILE_GOOGLE_SECRET")
+            .env_remove("DACTILE_GOOGLE_ID")
             // Held open for as long as the gate lives: the server leaves
             // when it closes, however the gate went.
             .stdin(std::process::Stdio::piped());
@@ -175,6 +183,8 @@ pub fn router(gate: Shared, web: Option<PathBuf>) -> Router {
         .merge(inside);
     let app = Router::new()
         .nest("/api", api)
+        .route("/giris/google", get(to_google))
+        .route("/giris/google/donus", get(from_google))
         .route("/giris/{token}", get(link).post(come_in))
         .with_state(gate);
     match web {
@@ -203,9 +213,10 @@ async fn guard(State(g): State<Shared>, mut req: Request, next: Next) -> Respons
     next.run(req).await
 }
 
-/// How one signs in here, for the page that asks: with a link.
-async fn door_kind() -> Json<Value> {
-    Json(json!({ "kind": "link" }))
+/// How one signs in here, for the page that asks: with a link, and with
+/// Google where that is set up.
+async fn door_kind(State(g): State<Shared>) -> Json<Value> {
+    Json(json!({ "kind": "link", "google": g.google.is_some() }))
 }
 
 async fn no_password() -> Response {
@@ -310,6 +321,15 @@ async fn come_in(State(g): State<Shared>, headers: HeaderMap, Url(token): Url<St
         return no_such_link();
     };
     g.door.right(&from);
+    let_in(&g, &person)
+}
+
+/// The cookie that remembers, for the few minutes of a trip to Google, what
+/// must come back with the browser.
+const TRIP: &str = "dactile-giris";
+
+/// Signs the browser in as `person` and sends it to the start.
+fn let_in(g: &Gate, person: &Person) -> Response {
     let Ok(t) = g.door.sign_in(&person.id) else {
         return fail(StatusCode::INTERNAL_SERVER_ERROR, "no randomness");
     };
@@ -318,6 +338,106 @@ async fn come_in(State(g): State<Shared>, headers: HeaderMap, Url(token): Url<St
     // Lax, not Strict: the first page after this answer must carry it.
     let cookie = format!("{COOKIE}={t}; Path=/; HttpOnly; SameSite=Lax; Max-Age={life}{secure}");
     ([(header::SET_COOKIE, cookie)], Redirect::to("/")).into_response()
+}
+
+/// To Google, to choose an account; what must come back is kept in a cookie
+/// of this browser's.
+async fn to_google(State(g): State<Shared>) -> Response {
+    let Some(google) = &g.google else {
+        return no_such_link();
+    };
+    let (Ok(state), Ok(nonce)) = (door::random(), door::random()) else {
+        return fail(StatusCode::INTERNAL_SERVER_ERROR, "no randomness");
+    };
+    let secure = if g.secure { "; Secure" } else { "" };
+    let cookie =
+        format!("{TRIP}={state}.{nonce}; Path=/giris; HttpOnly; SameSite=Lax; Max-Age=600{secure}");
+    (
+        [(header::SET_COOKIE, cookie)],
+        Redirect::to(&google.start(&state, &nonce)),
+    )
+        .into_response()
+}
+
+#[derive(serde::Deserialize)]
+struct Back {
+    #[serde(default)]
+    code: String,
+    #[serde(default)]
+    state: String,
+}
+
+fn not_on_the_list() -> Response {
+    (
+        StatusCode::FORBIDDEN,
+        page(
+            "Bu Google hesabı listede yok.",
+            r#"<p>Site sahibinden hesabının adresini listeye eklemesini iste, sonra <a href="/giris/google">yeniden dene</a>.</p>"#,
+        ),
+    )
+        .into_response()
+}
+
+fn google_failed() -> Response {
+    (
+        StatusCode::BAD_REQUEST,
+        page(
+            "Google ile giriş tamamlanamadı.",
+            r#"<p><a href="/giris/google">Yeniden dene</a>.</p>"#,
+        ),
+    )
+        .into_response()
+}
+
+/// Back from Google with a code: whose it is, Google says; whether they may
+/// come in, the list says.
+async fn from_google(
+    State(g): State<Shared>,
+    headers: HeaderMap,
+    axum::extract::Query(back): axum::extract::Query<Back>,
+) -> Response {
+    let Some(google) = g.google.clone() else {
+        return no_such_link();
+    };
+    let from = address(&headers);
+    if g.door.waiting(&from) {
+        return too_many();
+    }
+    // The trip this browser set out on, and no other.
+    let trip = headers
+        .get_all(header::COOKIE)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(';'))
+        .filter_map(|c| c.trim().split_once('='))
+        .find(|(k, _)| *k == TRIP)
+        .and_then(|(_, v)| v.split_once('.'))
+        .map(|(state, nonce)| (state.to_string(), nonce.to_string()));
+    let Some((state, nonce)) = trip.filter(|(state, _)| door::same(state, &back.state)) else {
+        return google_failed();
+    };
+    let _ = state;
+    let asked = tokio::task::spawn_blocking(move || google.whose(&back.code, &nonce)).await;
+    let mail = match asked {
+        Ok(Ok(mail)) => mail,
+        Ok(Err(why)) => {
+            eprintln!("google: {why}");
+            g.door.wrong(&from);
+            return google_failed();
+        }
+        Err(_) => return google_failed(),
+    };
+    let Some(person) = people::find_by_mail(&g.home, &mail) else {
+        g.door.wrong(&from);
+        return not_on_the_list();
+    };
+    g.door.right(&from);
+    let mut answer = let_in(&g, &person);
+    // The trip is over.
+    if let Ok(over) = HeaderValue::from_str(&format!("{TRIP}=; Path=/giris; Max-Age=0")) {
+        answer.headers_mut().append(header::SET_COOKIE, over);
+    }
+    answer
 }
 
 /// A request of the person's, passed on to their server as it came, less

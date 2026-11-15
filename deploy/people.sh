@@ -2,6 +2,8 @@
 # Who may come in, and their links, on the machine Dactile is put up on:
 #
 #   bash deploy/people.sh add ada "Ada Yıldız" --owner
+#   bash deploy/people.sh add ada "Ada Yıldız" --mail ada@example.com
+#                                           their Google account, to sign in with it
 #   bash deploy/people.sh invite ada        a link good once, for 7 days
 #   bash deploy/people.sh people
 #   bash deploy/people.sh remove ada        off the list; their plays stay

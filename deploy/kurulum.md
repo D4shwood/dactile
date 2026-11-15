@@ -43,6 +43,23 @@ Bu, `setup.sh`'ı makineye gönderip `sudo` ile bir kez çalıştırır: paketle
 - **Kişiler:** Parola yok. `bash deploy/people.sh add ada "Ada Yıldız" --owner` kişiyi listeye ekler, `bash deploy/people.sh invite ada` bir giriş bağlantısı yazar: bir kez çalışır, yedi gün geçerlidir, açan kişi o kişi olarak girer. Bağlantı yalnızca o kişiye gönderilir. `people` listeyi gösterir, `remove ada` kişiyi çıkarır (oyunları kalır).
 - Yedek: saatte bir `~/data` git'e commit'lenir. Özel GitHub deposu ve Google Drive (`rclone`, `drive.file`) bağlanınca oraya da gider; Drive'da son 5 gün kalır. Geri yükleme bir kez denenir.
 
+## Google ile giriş (istenirse)
+
+Bağlantıyla giriş her zaman çalışır. Google ile giriş için bir kez:
+
+1. [console.cloud.google.com](https://console.cloud.google.com) → yeni proje → APIs & Services → OAuth consent screen: "External", uygulama adı, destek e-postası. Kapsam olarak yalnızca `openid` ve `email`. Yayın durumu "Testing" kalırsa giriş yapacak adresler "Test users"a eklenir; "In production" yapılırsa gerekmez.
+2. Credentials → Create credentials → OAuth client ID → "Web application". Authorized redirect URI: `https://ALAN-ADI/giris/google/donus`.
+3. Çıkan Client ID ve Client secret `deploy/site.env`'e yazılır (git'e girmez):
+
+```
+GOOGLE_ID=...apps.googleusercontent.com
+GOOGLE_SECRET=...
+```
+
+4. `bash deploy/deploy.sh`, sonra her kişinin Google adresi: `bash deploy/people.sh add ada "Ada Yıldız" --mail ada@example.com`.
+
+Yalnızca adresi listede olan girer; Google'ın doğrulamadığı adres kabul edilmez.
+
 ## Bilinenler
 
 - Sunucuda Times New Roman yok; sayfalar TeX Gyre Termes ile çıkar. Masaüstündekiyle aynı görünüm istenirse `ttf-mscorefonts-installer` lisans onayıyla kurulur.

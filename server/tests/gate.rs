@@ -58,8 +58,8 @@ async fn each_person_has_a_dactile_of_their_own() {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let home = dir.canonicalize().unwrap();
-    people::add(&home, "ada", "Ada Yıldız", true).unwrap();
-    people::add(&home, "baran", "Baran Deniz", false).unwrap();
+    people::add(&home, "ada", "Ada Yıldız", true, None).unwrap();
+    people::add(&home, "baran", "Baran Deniz", false, None).unwrap();
     let server = env!("CARGO_BIN_EXE_dactile-server").into();
     let gate = Arc::new(gate::Gate::new(home.clone(), server, false));
     let app = gate::router(gate.clone(), None);
