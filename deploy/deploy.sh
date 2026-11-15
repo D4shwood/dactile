@@ -36,7 +36,8 @@ git -C "$repo" archive HEAD Cargo.lock core backend server tex examples | tar -x
   printf '[workspace]\nresolver = "3"\nmembers = ["core", "backend", "server"]\n\n'
   git -C "$repo" show HEAD:Cargo.toml | sed -n '/^\[workspace.package\]/,$p'
 } > "$src/Cargo.toml"
-put "$src/" "$to:src/"
+# What was built there before stays, or every deploy builds it all again.
+put --exclude /target "$src/" "$to:src/"
 case $src in /tmp/dactile-deploy.*) rm -r -- "$src" ;; esac
 
 echo "== build (the first one fetches Rust and takes a while)"
