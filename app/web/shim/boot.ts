@@ -40,16 +40,17 @@ const door = fetch("/api/door")
   .catch(() => null);
 
 /// The trial site says so on every page, the door's and the app's. Kept
-/// outside <body>, which the door and the password page write over.
+/// outside <body>, which the door and the password page write over; low on
+/// the page, clear of the title and the ribbon, above the status bar.
 void door.then((d) => {
   if (d?.stage !== "pbe") return;
   const mark = document.createElement("div");
   mark.textContent = "DENEME SİTESİ · yazdıkların silinebilir";
   mark.setAttribute("role", "note");
   mark.style.cssText =
-    "position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:99999;pointer-events:none;" +
+    "position:fixed;bottom:30px;left:50%;transform:translateX(-50%);z-index:99999;pointer-events:none;" +
     "background:#8a2a2a;color:#fff;font:600 11px/1 system-ui,sans-serif;letter-spacing:.08em;" +
-    "padding:4px 12px;border-radius:0 0 6px 6px;opacity:.9";
+    "padding:4px 12px;border-radius:6px;opacity:.85";
   document.documentElement.appendChild(mark);
 });
 

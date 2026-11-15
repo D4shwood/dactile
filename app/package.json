@@ -20,7 +20,11 @@
     "@codemirror/state": "^6.5.2",
     "@codemirror/view": "^6.36.4",
     "@tauri-apps/api": "^2.5.0",
-    "pdfjs-dist": "^4.10.38"
+    "lib0": "^0.2.120",
+    "pdfjs-dist": "^4.10.38",
+    "y-codemirror.next": "^0.3.6",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.33"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.3",

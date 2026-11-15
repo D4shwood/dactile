@@ -12,6 +12,7 @@ pub mod google;
 pub mod mail;
 pub mod people;
 pub mod projects;
+pub mod room;
 
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Path as Url, Query, Request, State};
@@ -90,7 +91,9 @@ impl Server {
             r.dir = dir.clone();
             let writes = r.role.writes();
             self.roots.shared.push((dir.clone(), writes));
-            if !writes {
+            if writes {
+                self.ctx.lock().live.push(dir);
+            } else {
                 self.ctx.lock().reads_only.push(dir);
             }
             self.projects.push(r);

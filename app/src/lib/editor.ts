@@ -517,6 +517,9 @@ export interface Hooks {
   /// The text changed: a new view is wanted.
   changed: (state: EditorState) => void;
   save: () => void;
+  /// A play written live with others (`live.ts`): Yjs's binding, which
+  /// brings its own undo, of one's own changes alone.
+  shared?: Extension;
 }
 
 export function extensions(hooks: Hooks): Extension {
@@ -528,7 +531,7 @@ export function extensions(hooks: Hooks): Extension {
     noteMarks,
     // Our own caret: WebKit's blinks only if the desktop says so.
     drawSelection({ cursorBlinkRate: 1100 }),
-    history(),
+    hooks.shared ?? history(),
     search({ top: true, createPanel: findPanel }),
     highlightSelectionMatches(),
     typing,
@@ -543,7 +546,7 @@ export function extensions(hooks: Hooks): Extension {
       // F3 is the typewriter here, not CodeMirror's find-next (which opens
       // the search panel when there is nothing to find).
       ...searchKeymap.filter((b) => b.key !== "F3"),
-      ...historyKeymap,
+      ...(hooks.shared ? [] : historyKeymap),
       ...defaultKeymap,
       indentWithTab,
     ]),

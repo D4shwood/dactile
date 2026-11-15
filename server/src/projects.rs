@@ -71,6 +71,21 @@ pub fn folder(home: &Path, id: &str) -> PathBuf {
     home.join("projects").join(id).join("plays")
 }
 
+/// Makes the project's folder, marked as shared: its plays' history is
+/// kept in it (`dactile::file::history_dir`), not by whoever saved them.
+pub fn prepare(home: &Path, id: &str) -> std::io::Result<PathBuf> {
+    let plays = folder(home, id);
+    std::fs::create_dir_all(&plays)?;
+    let mark = home
+        .join("projects")
+        .join(id)
+        .join(dactile::file::SHARED_MARK);
+    if !mark.exists() {
+        std::fs::write(mark, "")?;
+    }
+    Ok(plays)
+}
+
 fn lang(tr: &str, en: &str) -> String {
     dactile::lang::f(tr, en, &[])
 }
@@ -110,7 +125,7 @@ pub fn reach(home: &Path, who: &str) -> Vec<Reach> {
     of(home, who)
         .into_iter()
         .map(|(p, role)| Reach {
-            dir: folder(home, &p.id),
+            dir: prepare(home, &p.id).unwrap_or_else(|_| folder(home, &p.id)),
             id: p.id,
             name: p.name,
             role,
@@ -165,7 +180,7 @@ pub fn create(home: &Path, name: &str, by: &str) -> Result<Project, String> {
         id = format!("{base}-{n}");
         n += 1;
     }
-    std::fs::create_dir_all(folder(home, &id)).map_err(|e| e.to_string())?;
+    prepare(home, &id).map_err(|e| e.to_string())?;
     let p = Project {
         id,
         name,

@@ -19,6 +19,7 @@ use crate::google::Google;
 use crate::mail::{self, Mail};
 use crate::people::{self, Account, Errand, Person};
 use crate::projects::{self, Mode, Role};
+use crate::room::{self, Rooms};
 use crate::{COOKIE, GATE, address, fail, session};
 use axum::body::Body;
 use axum::extract::{Path as Url, Request, State};
@@ -87,6 +88,8 @@ pub struct Gate {
     trips: std::sync::Mutex<HashMap<String, (u64, Joining)>>,
     running: tokio::sync::Mutex<HashMap<String, Arc<Theirs>>>,
     client: Client<HttpConnector, Body>,
+    /// The projects' plays open now, written live (`room.rs`).
+    pub rooms: Arc<Rooms>,
 }
 
 type Shared = Arc<Gate>;
@@ -95,7 +98,7 @@ impl Gate {
     pub fn new(home: PathBuf, server: PathBuf, secure: bool) -> Gate {
         Gate {
             door: Door::open(home.join("gate/secret/sessions")),
-            home,
+            home: home.clone(),
             secure,
             server,
             idle: Duration::from_secs(20 * 60),
@@ -106,6 +109,7 @@ impl Gate {
             trips: std::sync::Mutex::new(HashMap::new()),
             running: tokio::sync::Mutex::new(HashMap::new()),
             client: Client::builder(TokioExecutor::new()).build(HttpConnector::new()),
+            rooms: Rooms::new(home.clone()),
         }
     }
 
@@ -221,6 +225,7 @@ pub fn router(gate: Shared, web: Option<PathBuf>) -> Router {
         .route("/projects/{id}/mode", post(project_mode))
         .route("/projects/{id}/name", post(project_rename))
         .route("/projects/{id}/leave", post(project_leave))
+        .route("/oda", get(room_join))
         // What isn't the gate's own is the person's server's.
         .route("/{*rest}", any(pass))
         .route_layer(middleware::from_fn_with_state(gate.clone(), guard));
@@ -941,6 +946,7 @@ async fn person_remove(
             // Out at once, wherever they are signed in.
             g.door.sign_out_all(&id);
             g.rest().await;
+            g.rooms.people_changed();
             Json(json!(true)).into_response()
         }
         Err(e) => fail(StatusCode::BAD_REQUEST, e),
@@ -1155,8 +1161,20 @@ async fn pass(
         Ok(word) => h.insert(GATE, word),
         Err(_) => return fail(StatusCode::INTERNAL_SERVER_ERROR, "no word"),
     };
+    // Their server reads the plays from the disk: what the rooms have goes
+    // there first.
+    let call = rest.starts_with("/call/");
+    if call {
+        g.rooms.save_for(&person.id);
+    }
     match g.client.request(req).await {
-        Ok(answer) => answer.map(Body::new).into_response(),
+        Ok(answer) => {
+            if call {
+                // A play deleted or moved: its room closes.
+                g.rooms.check_gone();
+            }
+            answer.map(Body::new).into_response()
+        }
         Err(e) => {
             eprintln!("{}: {e}", person.id);
             fail(
@@ -1168,6 +1186,33 @@ async fn pass(
             )
         }
     }
+}
+
+// ---------------------------------------------------------------- rooms
+
+#[derive(serde::Deserialize)]
+struct Play {
+    path: String,
+}
+
+/// A project's play, written live: the page talks with its room.
+async fn room_join(
+    State(g): State<Shared>,
+    Extension(me): Extension<Person>,
+    headers: HeaderMap,
+    axum::extract::Query(play): axum::extract::Query<Play>,
+    ws: axum::extract::WebSocketUpgrade,
+) -> Response {
+    // A page of another site can open a WebSocket here with our cookie.
+    if !own_page(&headers) {
+        return fail(StatusCode::FORBIDDEN, "not from this site");
+    }
+    let who = room::Who {
+        id: me.id,
+        name: me.name,
+    };
+    let rooms = g.rooms.clone();
+    ws.on_upgrade(move |socket| async move { rooms.join(&play.path, who, socket).await })
 }
 
 // ------------------------------------------------------------- projects
@@ -1249,6 +1294,7 @@ async fn project_member(
     if done.is_ok() {
         // What they reach changed: their server starts again with it.
         g.restart(std::slice::from_ref(&m.who)).await;
+        g.rooms.project_changed(&id, Some(&me.id));
     }
     project_answer(&g, done, &me.id)
 }
@@ -1265,6 +1311,9 @@ async fn project_mode(
     Json(w): Json<Writing>,
 ) -> Response {
     let done = projects::set_mode(&g.home, &id, &me.id, w.mode);
+    if done.is_ok() {
+        g.rooms.project_changed(&id, Some(&me.id));
+    }
     project_answer(&g, done, &me.id)
 }
 
@@ -1290,6 +1339,7 @@ async fn project_leave(
     match projects::leave(&g.home, &id, &me.id) {
         Ok(_) => {
             g.restart(std::slice::from_ref(&me.id)).await;
+            g.rooms.project_changed(&id, None);
             Json(json!(true)).into_response()
         }
         Err(why) => fail(StatusCode::BAD_REQUEST, why),

@@ -1,8 +1,11 @@
 <script lang="ts">
   import { onDestroy, onMount, tick, untrack } from "svelte";
   import { getVersion } from "@tauri-apps/api/app";
-  import { EditorState } from "@codemirror/state";
-  import { EditorView } from "@codemirror/view";
+  import { Compartment, EditorState } from "@codemirror/state";
+  import { EditorView, keymap } from "@codemirror/view";
+  import * as Y from "yjs";
+  import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
+  import { Live, type Link, type RoomInfo } from "./live";
   import { redo, selectAll, undo } from "@codemirror/commands";
   import { openSearchPanel } from "@codemirror/search";
   import { beforeClose, type Head, api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Files, type Look, type Made, type Memo, type Summary, type NoteCard, type Opened, type PlaySettings, type Preview, type Settings } from "./api";
@@ -48,6 +51,17 @@
   let ribbon: Ribbon | undefined = $state();
   let version = $state("");
   let dirty = $state(false);
+  /// A project's play, written live with the others: its room (`live.ts`).
+  let live: Live | null = null;
+  let undoLive: Y.UndoManager | null = null;
+  let room = $state<RoomInfo | null>(null);
+  let link = $state<Link>("connecting");
+  /// Written here while cut off, when the play started anew without it.
+  let lost = $state("");
+  const ro = new Compartment();
+  const sharing = new Compartment();
+  /// Nothing may be written here now.
+  const locked = $derived(opened.live ? !room?.writes : opened.read_only);
   // Taken once: from here on the writer keeps them, and saves them.
   const first = untrack(() => settings);
   let folded = $state(first.ribbon_folded);
@@ -167,6 +181,16 @@
   /// Why the play is read only: a reader of its project, or someone else
   /// writes it.
   function held() {
+    if (opened.live) {
+      if (link !== "live") return link === "offline" ? l("Bağlantı koptu; yeniden bağlanıyor…", "Cut off; connecting again…") : l("Bağlanıyor…", "Connecting…");
+      if (room?.gone) return l("Oyun silinmiş.", "The play was deleted.");
+      if (room?.role === "reader") return l("Salt okunur: bu projede okursun; yazılanı canlı izliyorsun.", "Read only: you are a reader in this project, watching it live.");
+      if (room?.alone && !room.alone_mine) return l(`${room.alone} sahneleri düzenliyor; bir an.`, `${room.alone} is rearranging scenes; a moment.`);
+      if (room?.mode === "turns")
+        return room.pen
+          ? l(`Sırayla yazılıyor: şimdi ${room.pen} yazıyor.`, `Written in turns: ${room.pen} writes now.`)
+          : l("Sırayla yazılıyor: kalem boşta.", "Written in turns: the pen is free.");
+    }
     if (opened.reader) return l("Salt okunur: bu projede okursun.", "Read only: you are a reader in this project.");
     if (opened.writer)
       return l(`Salt okunur: ${opened.writer} yazıyor; o kapatınca yazabilirsin.`, `Read only: ${opened.writer} is writing it; you can once they close it.`);
@@ -187,10 +211,18 @@
   let saveTimer: ReturnType<typeof setTimeout> | undefined;
   let unclose: (() => void) | undefined;
 
+  /// Since when the view has waited: others typing on shouldn't keep the
+  /// page from ever catching up.
+  let waiting = 0;
+
   function refresh(now = false) {
     clearTimeout(viewTimer);
+    const t = performance.now();
+    waiting ||= t;
+    if (t - waiting > 500) now = true;
     viewTimer = setTimeout(
       async () => {
+        waiting = 0;
         const doc = view.state.doc;
         const v = await api.view(doc.toString());
         // Typed on meanwhile: the next one is on its way.
@@ -245,11 +277,17 @@
   // ------------------------------------------------------------ saving
 
   async function save(force = false): Promise<boolean> {
-    if (opened.read_only) {
+    if (locked) {
       say(held(), true);
       return false;
     }
     clearTimeout(saveTimer);
+    if (live) {
+      const r = await live.save();
+      if (!r.ok)
+        say(r.error === "offline" ? l("Bağlantı yok: bağlanınca yazılanlar gider.", "Cut off: what you wrote goes once connected.") : String(r.error), true);
+      return r.ok;
+    }
     const text = view.state.doc.toString();
     try {
       const r = await api.save(text, force);
@@ -274,7 +312,7 @@
 
   async function build() {
     if (building) return;
-    if (!(await save()) && !opened.read_only) return;
+    if (!(await save()) && !locked) return;
     side = "pdf";
     showNotes();
     keepCursor();
@@ -349,7 +387,7 @@
 
   /// Alt+E: the summary of the cursor's scene.
   async function summaryHere() {
-    if (opened.read_only) return;
+    if (locked) return;
     try {
       summaryForm = await api.summaryHere(view.state.doc.toString(), view.state.selection.main.head);
     } catch (e) {
@@ -405,16 +443,30 @@
   }
 
   async function castCall(f: () => Promise<Made | null>) {
+    const before = view.state.doc;
+    if (!(await alone())) return;
     try {
       const m = await f();
-      if (m) applyMade(m);
+      if (m && view.state.doc !== before) say(l("Oyun bu arada değişti; yeniden dene.", "The play changed meanwhile; try again."), true);
+      else if (m) applyMade(m);
     } catch (e) {
       say(String(e), true);
+    } finally {
+      live?.done();
     }
   }
 
+  /// Written live, together: a change to the play's shape (scenes moved,
+  /// a character renamed) is made with the others waiting a moment, or
+  /// their typing meanwhile lands in the wrong place.
+  async function alone() {
+    if (!live || (await live.alone())) return true;
+    say(l("Şu an başkası sahneleri düzenliyor; birazdan yeniden dene.", "Someone else is rearranging scenes; try again in a moment."), true);
+    return false;
+  }
+
   function newCharacter(at: number | null = null) {
-    if (opened.read_only) return;
+    if (locked) return;
     characterForm = {
       old: null,
       at,
@@ -424,7 +476,7 @@
   }
 
   function editCharacter(r: CastEntry) {
-    if (opened.read_only) return;
+    if (locked) return;
     characterForm = {
       old: r.alias,
       at: null,
@@ -604,8 +656,11 @@
   }
 
   async function move(card: number, to: number) {
-    const c = await api.relocate(view.state.doc.toString(), card, to);
+    if (!(await alone())) return;
+    const before = view.state.doc;
+    const c = await api.relocate(before.toString(), card, to).finally(() => live?.done());
     if (!c) return;
+    if (view.state.doc !== before) return say(l("Oyun bu arada değişti; yeniden dene.", "The play changed meanwhile; try again."), true);
     // One change, so one undo puts it back.
     view.dispatch({ changes: { from: c.from, to: c.to, insert: c.insert }, userEvent: "move" });
     refresh(true);
@@ -624,7 +679,7 @@
   const shownLook = () => ({ ...look, page_font: playFont || look.page_font, theme, page_zoom: zoom });
 
   function setPlayFont(f: string) {
-    if (opened.read_only) return;
+    if (locked) return;
     void castCall(() => api.playFontWrite(view.state.doc.toString(), f));
   }
 
@@ -635,7 +690,7 @@
   }
 
   function setPlaySize(s: string) {
-    if (opened.read_only) return;
+    if (locked) return;
     void castCall(() => api.playFontSizeWrite(view.state.doc.toString(), s));
   }
 
@@ -683,10 +738,12 @@
         build();
         break;
       case "undo":
-        undo(view);
+        if (undoLive) undoLive.undo();
+        else undo(view);
         break;
       case "redo":
-        redo(view);
+        if (undoLive) undoLive.redo();
+        else redo(view);
         break;
       case "select-all":
         selectAll(view);
@@ -704,7 +761,7 @@
         break;
       case "search":
         view.focus();
-        if (!opened.read_only) openMenu(view, typeBackslash);
+        if (!locked) openMenu(view, typeBackslash);
         break;
       case "commands":
         ribbon?.focusSearch();
@@ -728,7 +785,7 @@
           .catch((e) => say(String(e), true));
         break;
       case "scene-align":
-        if (!opened.read_only) void castCall(() => api.sceneAlignNext(view.state.doc.toString()));
+        if (!locked) void castCall(() => api.sceneAlignNext(view.state.doc.toString()));
         break;
       case "pdf-show":
         void showInPdf();
@@ -767,7 +824,7 @@
         break;
       case "split":
       case "join":
-        if (!opened.read_only) {
+        if (!locked) {
           const text = view.state.doc.toString();
           const at = view.state.selection.main.head;
           void castCall(() => (id === "split" ? api.sceneSplit(text, at) : api.sceneJoin(text, at)));
@@ -950,14 +1007,18 @@
   /// What is still unsaved gets saved; false if it couldn't be and the
   /// writer would rather stay.
   async function settled(): Promise<boolean> {
-    if (!dirty || opened.read_only || (await save())) return true;
+    if (live) {
+      if (!live.unsent) return (await live.save(), true);
+      return confirm(l("Bağlantı kopuk; kopukken yazdıkların henüz gitmedi. Yine de kapatayım mı?", "Cut off: what you wrote meanwhile hasn't gone yet. Close anyway?"));
+    }
+    if (!dirty || locked || (await save())) return true;
     return confirm(l("Kaydedilemedi. Yine de kapatayım mı?", "Couldn't save. Close anyway?"));
   }
 
   /// Out of sight (minimized, another tab, a tab about to close): what is
   /// unsaved is saved now, not in a few seconds.
   function saveHidden() {
-    if (document.hidden && dirty && !opened.read_only) void save();
+    if (document.hidden && dirty && !locked && !live) void save();
   }
 
   /// Back to the start, or on to the play `next`.
@@ -1066,23 +1127,67 @@
 
   // ------------------------------------------------------------ life
 
+  /// Written live: the room's play comes into the editor, and the editor
+  /// is bound to it.
+  async function joinRoom() {
+    live = new Live(opened.path, {
+      info: (i) => (room = i),
+      link: (k) => (link = k),
+      bye: (why) => {
+        say(why, true);
+        setTimeout(() => close(), 2500);
+      },
+      lost: (text) => {
+        if (text) lost = text;
+        else close(opened.path);
+      },
+    });
+    // Its name and colour are the gate's; the room fills them in.
+    live.awareness.setLocalStateField("user", { name: "", color: "#888888", colorLight: "#88888833" });
+    await live.synced;
+    if (!view) return;
+    undoLive = new Y.UndoManager(live.text);
+    const theirs = live.text.toString();
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: theirs },
+      effects: sharing.reconfigure([keymap.of(yUndoManagerKeymap), yCollab(live.text, live.awareness, { undoManager: undoLive })]),
+    });
+  }
+
+  $effect(() => {
+    const no = locked;
+    view?.dispatch({ effects: ro.reconfigure(EditorState.readOnly.of(no)) });
+  });
+
+  $effect(() => {
+    if (opened.live) dirty = !(room?.saved ?? true);
+  });
+
+  /// A page closing with writing that never got to the room.
+  function unsentWarning(e: BeforeUnloadEvent) {
+    if (live?.unsent) e.preventDefault();
+  }
+
   onMount(() => {
     applyLook(shownLook());
     void loadFiles();
     view = new EditorView({
       parent: host,
       state: EditorState.create({
-        doc: kept.get(opened) ?? opened.text,
+        doc: opened.live ? opened.text : (kept.get(opened) ?? opened.text),
         extensions: [
           extensions({
             changed: () => {
-              dirty = true;
               refresh();
+              // Written live, the room saves it.
+              if (opened.live) return;
+              dirty = true;
               clearTimeout(saveTimer);
               // Saved on its own a few seconds after the last keystroke.
               saveTimer = setTimeout(() => dirty && save(), 4000);
             },
             save: () => key("save"),
+            shared: opened.live ? sharing.of([]) : undefined,
           }),
           completion({
             tr: () => tr,
@@ -1096,7 +1201,7 @@
             on: () => true,
             missing: (why) => say(why, true),
           }),
-          EditorState.readOnly.of(opened.read_only),
+          ro.of(EditorState.readOnly.of(untrack(() => locked))),
           // Ctrl+click: the place in the PDF.
           EditorView.domEventHandlers({
             mousedown(e, v) {
@@ -1128,6 +1233,8 @@
       }),
     });
     if (!numbers) view.dispatch({ effects: setNumbers.of(false) });
+    if (opened.live) void joinRoom();
+    window.addEventListener("beforeunload", unsentWarning);
     refresh(true);
     void getVersion().then((v) => (version = v));
     // The window closed within the few seconds before the save of its own.
@@ -1146,7 +1253,9 @@
   onDestroy(() => {
     unclose?.();
     document.removeEventListener("visibilitychange", saveHidden);
-    if (view) kept.set(opened, view.state.doc.toString());
+    window.removeEventListener("beforeunload", unsentWarning);
+    live?.destroy();
+    if (view && !live) kept.set(opened, view.state.doc.toString());
     closeMenu();
     clearTimeout(viewTimer);
     clearTimeout(saveTimer);
@@ -1168,7 +1277,7 @@
     {tr}
     {folded}
     {dirty}
-    title={`${opened.name}${opened.read_only ? l(" (salt okunur)", " (read only)") : ""} — Dactile`}
+    title={`${opened.name}${locked ? l(" (salt okunur)", " (read only)") : ""} — Dactile`}
     {run}
     file={() => openBackstage("info")}
     height={ribbonHeight}
@@ -1215,7 +1324,7 @@
         <Casting
           {tr}
           text={() => view.state.doc.toString()}
-          readOnly={opened.read_only}
+          readOnly={locked}
           go={at}
           memorize={(alias) => openMemo(alias)}
           {say}
@@ -1298,11 +1407,39 @@
     {/if}
   </main>
 
+  {#if lost}
+    <div class="lost" role="alertdialog">
+      <p>
+        {l(
+          "Oyun sen yokken baştan kuruldu; bağlantı kopukken yazdıkların ona giremedi. Hepsi aşağıda: gerekeni kopyala, sonra oyunu yeniden aç.",
+          "The play was set up anew while you were away; what you wrote while cut off couldn't go into it. It is all below: copy what you need, then open the play again.",
+        )}
+      </p>
+      <textarea readonly value={lost}></textarea>
+      <button class="primary" onclick={() => close(opened.path)}>{l("Oyunu yeniden aç", "Open the play again")}</button>
+    </div>
+  {/if}
+
   <footer class="status">
     <span>{where}</span>
     <span class="grow"></span>
     {#if message}<span class:warn={message.warn}>{message.text}</span>{/if}
-    {#if opened.read_only}
+    {#if opened.live}
+      {#if locked}<span class="warn">{held()}</span>{/if}
+      {#if room?.take}
+        <button class="zoom" onclick={() => live?.takePen()}>{l("Kalemi al", "Take the pen")}</button>
+      {/if}
+      {#if room?.mine && room.mode === "turns" && room.people.length > 1}
+        <button class="zoom" onclick={() => live?.dropPen()}>{l("Kalemi bırak", "Give up the pen")}</button>
+      {/if}
+      <span class="muted">
+        {link === "live"
+          ? `${l("canlı", "live")} · ${room?.people.join(", ") ?? ""}`
+          : link === "offline"
+            ? l("bağlantı koptu · yazdıkların bekliyor", "cut off · your writing waits")
+            : l("bağlanıyor", "connecting")}
+      </span>
+    {:else if locked}
       <span class="warn">{held()}</span>
       {#if !opened.reader}
         <!-- Opened again: theirs, once they have closed it. -->
@@ -1432,7 +1569,7 @@
       text={view.state.doc.toString()}
       last={coverLast}
       tab={coverForm}
-      readOnly={opened.read_only}
+      readOnly={locked}
       done={writeCover}
       source={() => {
         coverForm = null;
@@ -1471,6 +1608,26 @@
 </div>
 
 <style>
+  .lost {
+    position: fixed;
+    inset: 15% 20%;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 18px;
+    background: var(--paper, #fff);
+    color: inherit;
+    border: 1px solid var(--accent, #8a2a2a);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+  }
+  .lost textarea {
+    flex: 1;
+    font: inherit;
+  }
+  .lost button {
+    align-self: flex-end;
+  }
   .writer {
     display: flex;
     flex-direction: column;

@@ -24,7 +24,7 @@ export default defineConfig({
     port: 1421,
     strictPort: true,
     fs: { allow: [here(".")] },
-    proxy: { "/api": "http://127.0.0.1:1430", "/giris/google": "http://127.0.0.1:1430" },
+    proxy: { "/api": { target: "http://127.0.0.1:1430", ws: true }, "/giris/google": "http://127.0.0.1:1430" },
   },
   build: { target: "es2022", outDir: here("./dist-web"), emptyOutDir: true, chunkSizeWarningLimit: 2000 },
 });

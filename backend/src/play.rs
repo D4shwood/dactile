@@ -291,6 +291,8 @@ pub struct Open {
     lock: Option<Lock>,
     history: PathBuf,
     disk_time: Option<SystemTime>,
+    /// Written by its room, not from here.
+    pub live: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -305,12 +307,25 @@ pub struct Opened {
     pub writer: Option<String>,
     /// Opened to read only, as the person may only read here.
     pub reader: bool,
+    /// A shared project's play: written live, through its room, by
+    /// everyone who has it open; never saved from here.
+    pub live: bool,
 }
 
-/// Opens a play; `reader`: to read only, taking no lock, as in a shared
-/// folder the person may only read.
-pub fn open(cfg: &mut Config, path: &Path, reader: bool) -> anyhow::Result<(Open, Opened)> {
-    let opened = open_at(path, &cfg.lang, file::history_dir(path), reader)?;
+/// How a play is opened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Opening {
+    /// Under its lock: one Dactile writes it at a time.
+    Own,
+    /// To read only, taking no lock: a shared project's, for its reader.
+    Read,
+    /// A shared project's, for one who writes it: its room writes it.
+    Live,
+}
+
+/// Opens a play, as `how` says.
+pub fn open(cfg: &mut Config, path: &Path, how: Opening) -> anyhow::Result<(Open, Opened)> {
+    let opened = open_at(path, &cfg.lang, file::history_dir(path), how)?;
     cfg.opened(path);
     let _ = cfg.save_recent();
     Ok(opened)
@@ -321,17 +336,16 @@ fn open_at(
     path: &Path,
     lang_setting: &str,
     history: PathBuf,
-    reader: bool,
+    how: Opening,
 ) -> anyhow::Result<(Open, Opened)> {
     let text = file::read(path)?;
     lang::set(lang::resolve(lang_setting, Some(&text)));
-    let (lock, holder) = if reader {
-        (None, file::holder(path))
-    } else {
-        match file::lock(path)? {
+    let (lock, holder) = match how {
+        Opening::Own => match file::lock(path)? {
             LockState::Ours(l) => (Some(l), None),
             LockState::Taken(who) => (None, Some(who)),
-        }
+        },
+        Opening::Read | Opening::Live => (None, None),
     };
     let writer = holder.as_ref().and_then(|_| file::holder_name(path));
     let _ = file::snapshot(&history, &text, true);
@@ -341,14 +355,16 @@ fn open_at(
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .unwrap_or_default(),
-        read_only: lock.is_none(),
+        read_only: how == Opening::Read || (how == Opening::Own && lock.is_none()),
         holder,
         writer,
-        reader,
+        reader: how == Opening::Read,
+        live: how != Opening::Own,
         text,
     };
     let open = Open {
         path: path.to_path_buf(),
+        live: how != Opening::Own,
         lock,
         history,
         disk_time: file::modified(path),
@@ -661,7 +677,7 @@ mod tests {
         let path = dir.join("oyun.tex");
         std::fs::write(&path, PLAY).unwrap();
         let history = dir.join("history");
-        let (mut open, opened) = open_at(&path, "tr", history.clone(), false).unwrap();
+        let (mut open, opened) = open_at(&path, "tr", history.clone(), Opening::Own).unwrap();
         assert!(!opened.read_only);
         assert_eq!(opened.text, PLAY);
         let edited = PLAY.replacen("\\begin{document}", "\\begin{document}\n% bir not", 1);
@@ -680,7 +696,7 @@ mod tests {
         assert!(!file::lock_path(&path).exists());
         // Open on another machine (a shared folder): this one only reads.
         std::fs::write(file::lock_path(&path), "1 elsewhere 2026-01-01T00:00 0\n").unwrap();
-        let (mut second, opened) = open_at(&path, "tr", history.clone(), false).unwrap();
+        let (mut second, opened) = open_at(&path, "tr", history.clone(), Opening::Own).unwrap();
         assert!(opened.read_only && opened.holder.is_some());
         assert!(matches!(second.save(PLAY, true).unwrap(), Saved::ReadOnly));
         let _ = std::fs::remove_dir_all(&dir);

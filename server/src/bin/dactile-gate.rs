@@ -150,7 +150,20 @@ fn serve() -> anyhow::Result<()> {
                 resting.rest().await;
             }
         });
-        axum::serve(listener, gate::router(gate, web)).await?;
+        let rooms = gate.rooms.clone();
+        axum::serve(listener, gate::router(gate, web))
+            .with_graceful_shutdown(async move {
+                let mut term =
+                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                        .expect("SIGTERM");
+                tokio::select! {
+                    _ = term.recv() => {}
+                    _ = tokio::signal::ctrl_c() => {}
+                }
+                // What the rooms have goes to the disk before the gate goes.
+                rooms.save_all();
+            })
+            .await?;
         Ok(())
     })
 }

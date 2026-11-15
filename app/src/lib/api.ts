@@ -221,6 +221,8 @@ export interface Opened {
   writer: string | null;
   /// Opened to read only: the person is a reader of its project.
   reader: boolean;
+  /// A shared project's play, written live through its room (`live.ts`).
+  live?: boolean;
 }
 
 export type Saved =

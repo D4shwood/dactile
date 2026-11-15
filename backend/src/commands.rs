@@ -60,6 +60,9 @@ pub struct App {
     /// Folders whose plays open to read only, taking no lock: on the web,
     /// a shared project's, where the person is a reader. None on a desktop.
     pub reads_only: Vec<PathBuf>,
+    /// Folders whose plays their rooms write, live: on the web, a shared
+    /// project's, where the person writes. None on a desktop.
+    pub live: Vec<PathBuf>,
 }
 
 impl App {
@@ -170,8 +173,14 @@ pub fn open(app: &Shared, path: String) -> Res<Opened> {
     // The play open before goes first, and its lock with it.
     a.open = None;
     let path = PathBuf::from(path);
-    let reader = a.reads_only.iter().any(|d| path.starts_with(d));
-    let (open, opened) = play::open(&mut a.cfg, &path, reader).map_err(err)?;
+    let how = if a.reads_only.iter().any(|d| path.starts_with(d)) {
+        play::Opening::Read
+    } else if a.live.iter().any(|d| path.starts_with(d)) {
+        play::Opening::Live
+    } else {
+        play::Opening::Own
+    };
+    let (open, opened) = play::open(&mut a.cfg, &path, how).map_err(err)?;
     a.kept = None;
     let words = dactile::sidecar::Sidecar::load(&open.path)
         .map(|s| s.words)
@@ -189,6 +198,13 @@ pub fn close(app: &Shared) {
 pub fn save(app: &Shared, text: String, force: bool) -> Res<Saved> {
     let mut a = app.lock();
     let open = a.open.as_mut().ok_or("no play open")?;
+    if open.live {
+        return Err(dactile::lang::l(
+            "Ortak oyun canlı yazılır; kaydı odası yapar.",
+            "A shared play is written live; its room saves it.",
+        )
+        .into());
+    }
     open.save(&text, force).map_err(err)
 }
 

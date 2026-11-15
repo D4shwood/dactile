@@ -228,7 +228,12 @@ impl Drop for Lock {
 
 // ------------------------------------------------------------------ history
 
-/// Earlier versions of a play: `~/.local/share/dactile/history/<name>-<hash>/`.
+/// Beside a folder of plays several people share (`<project>/plays/`), in
+/// `<project>/`: their history is the project's, whoever saved them.
+pub const SHARED_MARK: &str = ".dactile-project";
+
+/// Earlier versions of a play: `~/.local/share/dactile/history/<name>-<hash>/`,
+/// or `<project>/history/<name>-<hash>/` for a play of a shared project.
 pub fn history_dir(play: &Path) -> PathBuf {
     let full = play.canonicalize().unwrap_or_else(|_| play.to_path_buf());
     let stem = play
@@ -242,10 +247,20 @@ pub fn history_dir(play: &Path) -> PathBuf {
         .fold(0xcbf29ce484222325u64, |h, b| {
             (h ^ b as u64).wrapping_mul(0x100000001b3)
         });
+    let name = format!("{stem}-{:08x}", hash as u32);
+    // A play sits in a folder of its own, or a few deep, under the plays.
+    if let Some(project) = full
+        .ancestors()
+        .skip(1)
+        .take(5)
+        .find(|d| d.join(SHARED_MARK).exists())
+    {
+        return project.join("history").join(name);
+    }
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("dactile/history")
-        .join(format!("{stem}-{:08x}", hash as u32))
+        .join(name)
 }
 
 /// The versions kept, oldest first.
@@ -404,6 +419,19 @@ mod tests {
         drop(l3);
         assert!(!lock_path(&p).exists());
         fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn a_shared_project_keeps_its_plays_history() {
+        let dir = std::env::temp_dir().join(format!("dactile-shared-{}", std::process::id()));
+        let play = dir.join("plays/kar-masali/kar-masali.tex");
+        fs::create_dir_all(play.parent().unwrap()).unwrap();
+        fs::write(&play, "x").unwrap();
+        assert!(!history_dir(&play).starts_with(&dir));
+        fs::write(dir.join(SHARED_MARK), "").unwrap();
+        let canon = dir.canonicalize().unwrap();
+        assert!(history_dir(&play).starts_with(canon.join("history")));
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

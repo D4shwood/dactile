@@ -1,6 +1,6 @@
-//! A project shared through the gate: its admin puts people in it, a
-//! writer writes its plays, a reader only reads them, and whoever opens a
-//! play the other is writing reads it and sees who writes.
+//! A project shared through the gate: its admin puts people in it, its
+//! writers write its plays (live, through their rooms), a reader only reads
+//! them.
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
@@ -157,29 +157,37 @@ async fn a_project_is_written_by_its_writers_and_read_by_its_readers() {
     let (_, l, _) = send(&app, get("/api/projects", &deniz)).await;
     assert_eq!(l.as_array().unwrap().len(), 0);
 
-    // Baran writes it.
+    // Baran writes it, live: his server takes no lock and never saves it;
+    // its room does (`tests/rooms.rs`), as here.
     let (s, o, _) = send(&app, post("/api/call/open", &baran, json!({"path": play}))).await;
     assert_eq!(s, StatusCode::OK, "{o}");
     assert_eq!(
-        (o["read_only"].clone(), o["reader"].clone()),
-        (json!(false), json!(false))
+        (
+            o["read_only"].clone(),
+            o["reader"].clone(),
+            o["live"].clone()
+        ),
+        (json!(false), json!(false), json!(true))
     );
     let text = o["text"].as_str().unwrap().to_string() + "\n% Baran'dan\n";
-    let (s, r, _) = send(
+    let (s, _, _) = send(
         &app,
         post(
             "/api/call/save",
             &baran,
-            json!({"text": text, "force": false}),
+            json!({"text": text.clone(), "force": false}),
         ),
     )
     .await;
-    assert_eq!((s, r["kind"].clone()), (StatusCode::OK, json!("saved")));
+    assert_ne!(s, StatusCode::OK);
+    std::fs::write(&play, &text).unwrap();
 
-    // Ada opens it meanwhile: she reads, and sees Baran writes.
+    // Ada opens it meanwhile: she writes it too, with him.
     let (_, o, _) = send(&app, post("/api/call/open", &ada, json!({"path": play}))).await;
-    assert_eq!(o["read_only"], true);
-    assert_eq!(o["writer"], "Baran Deniz");
+    assert_eq!(
+        (o["read_only"].clone(), o["live"].clone()),
+        (json!(false), json!(true))
+    );
 
     // Cem reads it, takes no lock, and can't write there.
     let (s, o, _) = send(&app, post("/api/call/open", &cem, json!({"path": play}))).await;
@@ -203,11 +211,6 @@ async fn a_project_is_written_by_its_writers_and_read_by_its_readers() {
     let file = format!("/api/file?path={}", play.replace(' ', "%20"));
     let (s, _, _) = send(&app, get(&file, &cem)).await;
     assert_eq!(s, StatusCode::OK);
-
-    // Baran closes it: Ada, opening it again, writes.
-    send(&app, post("/api/call/close", &baran, json!({}))).await;
-    let (_, o, _) = send(&app, post("/api/call/open", &ada, json!({"path": play}))).await;
-    assert_eq!(o["read_only"], false);
 
     // Made a writer, Cem writes; taken out, he reaches it no more.
     let (s, _, _) = send(
