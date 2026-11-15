@@ -3,7 +3,7 @@
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
-use dactile_server::room::{ASK, BYE, INFO, TEXT};
+use dactile_server::room::{ASK, BYE, INFO, REFUSED, TEXT};
 use dactile_server::{gate, people, projects};
 use futures_util::{SinkExt, StreamExt};
 use http_body_util::BodyExt;
@@ -63,6 +63,7 @@ struct Page {
     /// Names on the others' cursors, as they came.
     names: Vec<String>,
     bye: Option<String>,
+    refused: bool,
 }
 
 impl Page {
@@ -82,6 +83,7 @@ impl Page {
             info: Value::Null,
             names: vec![],
             bye: None,
+            refused: false,
         };
         let sv = page.doc.transact().state_vector();
         page.send(Message::Sync(SyncMessage::SyncStep1(sv))).await;
@@ -126,6 +128,7 @@ impl Page {
                         }
                     }
                 }
+                Message::Custom(REFUSED, _) => self.refused = true,
                 Message::Custom(INFO, d) => self.info = serde_json::from_slice(&d).unwrap(),
                 Message::Custom(BYE, d) => {
                     let v: Value = serde_json::from_slice(&d).unwrap();
@@ -233,10 +236,14 @@ async fn a_play_is_written_live_by_those_who_may() {
     );
     assert_eq!((b.now(), c.now()), (both.clone(), both.clone()));
 
-    // What Cem sends goes nowhere.
+    // What Cem sends goes nowhere, and his page hears it must start again;
+    // having only read, it never did.
+    assert!(!c.refused);
     c.write(0, "Okur yazdı. ").await;
     a.listen(SHORT).await;
+    c.listen(SHORT).await;
     assert!(!a.now().contains("Okur"));
+    assert!(c.refused);
 
     // The name on a cursor is the gate's, whatever the page says.
     let fake = AwarenessUpdate {

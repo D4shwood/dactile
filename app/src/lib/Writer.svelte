@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onDestroy, onMount, tick, untrack } from "svelte";
   import { getVersion } from "@tauri-apps/api/app";
-  import { Compartment, EditorState } from "@codemirror/state";
+  import { Annotation, Compartment, EditorState, type Extension } from "@codemirror/state";
   import { EditorView, keymap } from "@codemirror/view";
   import * as Y from "yjs";
-  import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
+  import { yCollab, ySyncAnnotation, yUndoManagerKeymap } from "y-codemirror.next";
   import { Live, type Link, type RoomInfo } from "./live";
   import { redo, selectAll, undo } from "@codemirror/commands";
   import { openSearchPanel } from "@codemirror/search";
@@ -59,6 +59,21 @@
   /// Written here while cut off, when the play started anew without it.
   let lost = $state("");
   const ro = new Compartment();
+  /// A change from the room, not the person: it comes in even when they
+  /// can't write.
+  const fromRoom = Annotation.define<boolean>();
+
+  /// Read only, for real: the editor's own handlers (typing, pasting) go
+  /// past `readOnly`, so a change the person makes is dropped here.
+  function guard(no: boolean): Extension {
+    if (!no) return [];
+    return [
+      EditorState.readOnly.of(true),
+      EditorState.transactionFilter.of((t) =>
+        t.docChanged && !t.annotation(ySyncAnnotation) && !t.annotation(fromRoom) ? [] : t,
+      ),
+    ];
+  }
   const sharing = new Compartment();
   /// Nothing may be written here now.
   const locked = $derived(opened.live ? !room?.writes : opened.read_only);
@@ -1151,12 +1166,13 @@
     view.dispatch({
       changes: { from: 0, to: view.state.doc.length, insert: theirs },
       effects: sharing.reconfigure([keymap.of(yUndoManagerKeymap), yCollab(live.text, live.awareness, { undoManager: undoLive })]),
+      annotations: fromRoom.of(true),
     });
   }
 
   $effect(() => {
     const no = locked;
-    view?.dispatch({ effects: ro.reconfigure(EditorState.readOnly.of(no)) });
+    view?.dispatch({ effects: ro.reconfigure(guard(no)) });
   });
 
   $effect(() => {
@@ -1201,7 +1217,7 @@
             on: () => true,
             missing: (why) => say(why, true),
           }),
-          ro.of(EditorState.readOnly.of(untrack(() => locked))),
+          ro.of(guard(untrack(() => locked))),
           // Ctrl+click: the place in the PDF.
           EditorView.domEventHandlers({
             mousedown(e, v) {

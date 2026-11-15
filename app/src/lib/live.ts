@@ -16,6 +16,7 @@ const ASK = 100;
 const INFO = 101;
 const SAVED = 102;
 const BYE = 103;
+const REFUSED = 104;
 
 /// What the room says to this page.
 export interface RoomInfo {
@@ -171,6 +172,13 @@ export class Live {
       case SAVED: {
         const r = JSON.parse(new TextDecoder().decode(decoding.readVarUint8Array(d)));
         this.saving.shift()?.(r);
+        break;
+      }
+      case REFUSED: {
+        // This copy has what the room didn't take: the play again, as the
+        // room has it.
+        this.destroy();
+        this.hooks.lost("");
         break;
       }
       case BYE: {

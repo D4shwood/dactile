@@ -44,6 +44,9 @@ pub const INFO: u8 = 101;
 pub const SAVED: u8 = 102;
 /// The room is closing on this page: `{"why": "..."}`.
 pub const BYE: u8 = 103;
+/// What the page wrote was not taken: its copy is no longer the room's,
+/// and it loads the play again.
+pub const REFUSED: u8 = 104;
 
 /// The play is written this long after the writing stops.
 const QUIET: Duration = Duration::from_secs(2);
@@ -340,9 +343,14 @@ impl Room {
             }
             Message::Sync(SyncMessage::SyncStep2(u) | SyncMessage::Update(u)) => {
                 if !i.writes(conn) {
-                    // Nothing goes on from them; they hear again that they
-                    // only read, in case their page thought otherwise.
-                    return vec![said(INFO, i.info(conn))];
+                    // Nothing goes on from them. A page that wrote anyway
+                    // has a copy of its own now: it starts again.
+                    let empty = Update::decode_v1(&u).is_ok_and(|u| u.is_empty());
+                    let mut back = vec![said(INFO, i.info(conn))];
+                    if !empty {
+                        back.push(said(REFUSED, json!({})));
+                    }
+                    return back;
                 }
                 let Ok(update) = Update::decode_v1(&u) else {
                     return vec![];
