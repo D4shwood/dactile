@@ -355,17 +355,23 @@ impl Room {
                 let Ok(update) = Update::decode_v1(&u) else {
                     return vec![];
                 };
-                let before = i.doc.transact().state_vector();
-                if i.doc.transact_mut().apply_update(update).is_err() {
-                    return vec![];
-                }
-                if i.doc.transact().state_vector() == before {
-                    return vec![];
-                }
+                // What the play took from it: new text, and what was
+                // deleted (a deletion leaves the state vector as it was),
+                // with anything held back earlier that this let in.
+                let took = {
+                    let mut t = i.doc.transact_mut();
+                    if t.apply_update(update).is_err() {
+                        return vec![];
+                    }
+                    if t.insert_set().is_empty() && t.delete_set().is_empty() {
+                        return vec![];
+                    }
+                    t.encode_update_v1()
+                };
                 let was_saved = i.changed.is_none();
                 i.changed = Some(Instant::now());
                 drop(i);
-                let bytes = Arc::new(encode(&Message::Sync(SyncMessage::Update(u))));
+                let bytes = Arc::new(encode(&Message::Sync(SyncMessage::Update(took))));
                 self.tell(Out::Data { from: conn, bytes });
                 if was_saved {
                     self.tell(Out::Info);

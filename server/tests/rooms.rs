@@ -147,6 +147,17 @@ impl Page {
         self.send(Message::Sync(SyncMessage::Update(u))).await;
     }
 
+    /// Deletes `len` characters at `at`, and sends it as Yjs would: a
+    /// deletion alone, with nothing new in it.
+    async fn delete(&mut self, at: u32, len: u32) {
+        let u = {
+            let mut t = self.doc.transact_mut();
+            self.text.remove_range(&mut t, at, len);
+            t.encode_update_v1()
+        };
+        self.send(Message::Sync(SyncMessage::Update(u))).await;
+    }
+
     fn now(&self) -> String {
         self.text.get_string(&self.doc.transact())
     }
@@ -234,6 +245,62 @@ async fn a_play_is_written_live_by_those_who_may() {
         both.contains("Işık söner.") && both.contains("Çığlık: ğüşöç!"),
         "{both}"
     );
+    assert_eq!((b.now(), c.now()), (both.clone(), both.clone()));
+
+    // What is deleted goes too: Ada takes back "Işık söner. ".
+    a.delete(0, "Işık söner. ".len() as u32).await;
+    for p in [&mut a, &mut b, &mut c] {
+        p.listen(SHORT).await;
+    }
+    let both = a.now();
+    assert!(
+        both.starts_with("Kar yağıyor") && !both.contains("Işık"),
+        "{both}"
+    );
+    assert_eq!((b.now(), c.now()), (both.clone(), both.clone()));
+
+    // Both typing and deleting at once, here and there, many times over:
+    // all three pages end up with the same play.
+    let mut seed = 7u32;
+    let mut roll = |n: u32| {
+        seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+        (seed >> 16) % n.max(1)
+    };
+    for round in 0..60 {
+        for p in [&mut a, &mut b] {
+            let now = p.now();
+            // Offsets are in bytes, on a character's edge.
+            let edges: Vec<u32> = now
+                .char_indices()
+                .map(|(i, _)| i as u32)
+                .chain([now.len() as u32])
+                .collect();
+            let from = edges[roll(edges.len() as u32) as usize];
+            if roll(3) == 0 && now.len() > 20 {
+                let to = edges
+                    .iter()
+                    .copied()
+                    .filter(|&e| e > from)
+                    .take(1 + roll(4) as usize)
+                    .last();
+                if let Some(to) = to {
+                    p.delete(from, to - from).await;
+                }
+            } else {
+                p.write(from, ["ş", "Ğ", "a ", "ı.", "\n"][roll(5) as usize])
+                    .await;
+            }
+        }
+        if round % 10 == 9 {
+            for p in [&mut a, &mut b, &mut c] {
+                p.listen(Duration::from_millis(50)).await;
+            }
+        }
+    }
+    for p in [&mut a, &mut b, &mut c] {
+        p.listen(SHORT).await;
+    }
+    let both = a.now();
     assert_eq!((b.now(), c.now()), (both.clone(), both.clone()));
 
     // What Cem sends goes nowhere, and his page hears it must start again;
