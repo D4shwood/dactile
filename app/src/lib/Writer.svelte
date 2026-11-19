@@ -965,10 +965,31 @@
         void openBackstage("settings").then(openPlaySettings);
         break;
       case "close":
+      case "home":
         leave();
+        break;
+      case "back":
+        // What is open on top of the play first, then the play itself.
+        if (!closeTop()) {
+          if (side === "cast") void openCast(false);
+          else if (side === "notes") void openNotes(false);
+          else if (side) side = "";
+          else leave();
+        }
         break;
     }
     if (!["commands", "casting", "memorize", "find", "spelling", "search", "summary", "note-here", "notes-paste", "notes-file"].includes(id)) view.focus();
+  }
+
+  /// Closes what is open over the play, the topmost; false if nothing was.
+  function closeTop(): boolean {
+    if (help) return (help = ""), true;
+    if (backstage) return (backstage = false), true;
+    if (board) return (board = false), true;
+    if (memo) return (memo = null), casting || view.focus(), true;
+    if (casting) return (casting = false), view.focus(), true;
+    if (draft !== null || pasting !== null) return (draft = null), (pasting = null), true;
+    return false;
   }
 
   function run(a: Act) {
@@ -1085,14 +1106,7 @@
     if (e.altKey && !mod && (e.key === "e" || e.key === "E")) id = "summary";
     if (e.altKey && !mod && (e.key === "b" || e.key === "B")) id = "split";
     if (e.altKey && !mod && (e.key === "j" || e.key === "J")) id = "join";
-    if (e.key === "Escape") {
-      if (help) return void (help = "");
-      if (backstage) return void (backstage = false);
-      if (board) return void (board = false);
-      if (memo) return void ((memo = null), casting || view.focus());
-      if (casting) return void ((casting = false), view.focus());
-      if (draft !== null || pasting !== null) return void ((draft = null), (pasting = null));
-    }
+    if (e.key === "Escape" && closeTop()) return;
     if (id) {
       e.preventDefault();
       key(id);

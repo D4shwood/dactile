@@ -159,7 +159,8 @@
 <header class="ribbon" class:folded>
   <div class="bar">
     <div class="quick">
-      <button title={tr ? "Kaydet (Ctrl+S)" : "Save (Ctrl+S)"} onclick={() => run({ do: "key", id: "save" })}>▣</button>
+      <button title={tr ? "Ana menü" : "Home"} onclick={() => run({ do: "key", id: "home" })}>⌂</button>
+      <button title={tr ? "Geri" : "Back"} onclick={() => run({ do: "key", id: "back" })}>←</button>
       <button title={tr ? "Geri al" : "Undo"} onclick={() => run({ do: "key", id: "undo" })}>↶</button>
       <button title={tr ? "Yinele" : "Redo"} onclick={() => run({ do: "key", id: "redo" })}>↷</button>
     </div>
