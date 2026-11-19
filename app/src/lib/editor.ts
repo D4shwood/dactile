@@ -20,7 +20,7 @@ import {
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/search";
 import { findPanel } from "./find";
-import type { Block, Cover, View } from "./api";
+import type { Block, Cover, CoverForm, View } from "./api";
 
 // ------------------------------------------------------------------ state
 
@@ -32,6 +32,14 @@ export const setSource = StateEffect.define<boolean>();
 export const setNumbers = StateEffect.define<boolean>();
 /// The block at a position, or a range (the cover), opened as its source.
 const openRaw = StateEffect.define<number | { from: number; to: number }>();
+/// The cover's details and looks, to draw it as it prints; and the part
+/// picked in the cover panel, marked.
+export interface CoverLook {
+  form: CoverForm;
+  picked: string | null;
+  tr: boolean;
+}
+export const setCoverLook = StateEffect.define<CoverLook | null>();
 
 interface Page {
   view: View | null;
@@ -41,10 +49,11 @@ interface Page {
   numbers: boolean;
   /// The block open as its source: its range, mapped through edits.
   raw: { from: number; to: number } | null;
+  look: CoverLook | null;
 }
 
 const page = StateField.define<Page>({
-  create: () => ({ view: null, stale: false, source: false, numbers: true, raw: null }),
+  create: () => ({ view: null, stale: false, source: false, numbers: true, raw: null, look: null }),
   update(p, tr) {
     let next = p;
     if (tr.docChanged) {
@@ -61,6 +70,7 @@ const page = StateField.define<Page>({
       if (e.is(setView)) next = { ...next, view: e.value, stale: false };
       if (e.is(setSource)) next = { ...next, source: e.value };
       if (e.is(setNumbers)) next = { ...next, numbers: e.value };
+      if (e.is(setCoverLook)) next = { ...next, look: e.value };
       if (e.is(openRaw)) {
         const v = e.value;
         const b = typeof v === "number" ? blockAt(next.view, v) : v;
@@ -115,24 +125,97 @@ class Chip extends WidgetType {
   }
 }
 
+// The class's cover (tiyatro-theme.sty's \maketitle): A4 at 12pt, each
+// part as \coverstyle sets it, else as the class does.
+const PT: Record<string, number> = { tiny: 6, small: 10.95, normal: 12, large: 14.4, Large: 17.28, LARGE: 20.74, huge: 24.88, Huge: 24.88 };
+const CLASS_LOOK: Record<string, [align: string, size: string, style: string, before: string, after: string]> = {
+  title: ["center", "Huge", "smallcaps", "", "0.5cm"],
+  author: ["center", "Large", "", "", ""],
+  editedby: ["center", "normal", "", "0.3cm", ""],
+  draft: ["center", "small", "", "0.5cm", ""],
+  copyright: ["right", "small", "", "", ""],
+  address: ["right", "small", "", "", ""],
+  telephone: ["right", "small", "", "", ""],
+  email: ["right", "small", "", "", ""],
+};
+/// A4's width in points: lengths on the sheet are parts of it.
+const SHEET_PT = 595.3;
+const UNIT_PT: Record<string, number> = { pt: 1, bp: 1.00375, mm: 2.84528, cm: 28.4528, in: 72.27, em: 12, ex: 5.5 };
+
+/// A TeX length as the sheet's: a share of its width.
+function sheetLength(s: string): string {
+  const m = /^\s*(-?\d*\.?\d+)\s*(pt|bp|mm|cm|in|em|ex)?\s*$/.exec(s);
+  if (!m) return "0";
+  const pt = parseFloat(m[1]) * UNIT_PT[m[2] ?? "pt"];
+  return `calc(100cqw * ${pt / SHEET_PT})`;
+}
+
+function coverPart(look: CoverLook | null, name: string, text: string, picked: string | null): HTMLElement {
+  const [align, size, style, before, after] = CLASS_LOOK[name];
+  const own = look?.form.parts.find((p) => p.command === "coverstyle" && p.part === name)?.look;
+  const el = document.createElement("div");
+  el.className = "cm-cover-part";
+  el.dataset.part = `coverstyle/${name}`;
+  if (picked === el.dataset.part) el.classList.add("picked");
+  el.textContent = text;
+  const st = own?.style || style;
+  el.style.textAlign = own?.align || align;
+  el.style.fontSize = `${(PT[own?.size || size] ?? 12) / 12}em`;
+  el.style.fontWeight = st.includes("bold") ? "700" : "400";
+  el.style.fontStyle = st.includes("italic") ? "italic" : "normal";
+  el.style.fontVariant = st.includes("smallcaps") ? "small-caps" : "normal";
+  el.style.marginTop = sheetLength(own?.before || before);
+  el.style.marginBottom = sheetLength(own?.after || after);
+  return el;
+}
+
 class CoverCard extends WidgetType {
-  constructor(readonly c: Cover) {
+  constructor(
+    readonly c: Cover,
+    readonly look: CoverLook | null,
+  ) {
     super();
   }
   eq(o: CoverCard) {
-    return JSON.stringify(o.c) === JSON.stringify(this.c);
+    return JSON.stringify([o.c, o.look]) === JSON.stringify([this.c, this.look]);
   }
   toDOM() {
     const d = document.createElement("div");
     d.className = "cm-cover";
-    const t = document.createElement("div");
-    t.className = "cm-cover-title";
-    t.textContent = this.c.title || "—";
-    const a = document.createElement("div");
-    a.className = "cm-cover-author";
-    a.textContent = this.c.author;
+    const look = this.look;
+    const f = look?.form.fields ?? {};
+    const picked = look?.picked ?? null;
+    const tr = look?.tr ?? true;
+    const field = (k: string) => (f[k] ?? "").trim();
+
+    // The cover's sheet: what it says in the middle, the rest at its foot.
+    const box = document.createElement("div");
+    box.className = "cm-cover-box";
+    const sheet = document.createElement("div");
+    sheet.className = "cm-cover-sheet";
+    const middle = document.createElement("div");
+    middle.className = "cm-cover-middle";
+    const title = look ? field("title") : this.c.title;
+    const t = coverPart(look, "title", title || (tr ? "Başlık" : "Title"), picked);
+    if (!title) t.classList.add("empty");
+    middle.append(t);
+    const author = look ? field("author") : this.c.author;
+    if (author) middle.append(coverPart(look, "author", author, picked));
+    if (field("editedby")) middle.append(coverPart(look, "editedby", `${tr ? "Düzenleyen" : "Edited by"}: ${field("editedby")}`, picked));
+    if (look && !look.form.final_copy) {
+      middle.append(coverPart(look, "draft", [tr ? "TASLAK" : "DRAFT", field("draft")].filter(Boolean).join(" "), picked));
+    }
+    const foot = document.createElement("div");
+    foot.className = "cm-cover-foot";
+    if (field("copyrightnotice")) foot.append(coverPart(look, "copyright", `© ${field("copyrightnotice")}`, picked));
+    for (const k of ["address", "telephone", "email"]) if (field(k)) foot.append(coverPart(look, k, field(k), picked));
+    sheet.append(middle, foot);
+    box.append(sheet);
+
     const list = document.createElement("ul");
     list.className = "cm-cover-cast";
+    list.dataset.part = "caststyle/names";
+    if (picked?.startsWith("caststyle/")) list.classList.add("picked");
     for (const r of this.c.cast) {
       const li = document.createElement("li");
       if (r.kind === "person") {
@@ -159,17 +242,17 @@ class CoverCard extends WidgetType {
         name.className = "cm-cover-group-name";
         name.textContent = r.name;
         // The brace in a box of no height of its own: it takes the members'.
-        const box = document.createElement("span");
-        box.className = "cm-cover-brace-box";
-        box.append(brace);
-        li.append(members, box, name);
+        const bbox = document.createElement("span");
+        bbox.className = "cm-cover-brace-box";
+        bbox.append(brace);
+        li.append(members, bbox, name);
       }
       list.append(li);
     }
     const hint = document.createElement("div");
     hint.className = "cm-cover-hint";
-    hint.textContent = "kapak ve kişiler · düzenlemek için tıkla";
-    d.append(t, a, list, hint);
+    hint.textContent = tr ? "kapak · düzenlemek için bir yerine tıkla" : "cover · click a part to edit it";
+    d.append(box, list, hint);
     d.dataset.at = "0";
     return d;
   }
@@ -195,7 +278,7 @@ function decorate(state: EditorState): DecorationSet {
     if (!open && v.cover.to > 0) {
       // To the end of the `\begin{document}` line, so no empty line is left.
       const to = doc.lineAt(v.cover.to).to;
-      out.push(Decoration.replace({ widget: new CoverCard(v.cover), block: true }).range(0, Math.min(to, len)));
+      out.push(Decoration.replace({ widget: new CoverCard(v.cover, p.look), block: true }).range(0, Math.min(to, len)));
     }
   }
   if (v.tail && ok(v.tail.end) && v.tail.start < v.tail.end) {
@@ -241,6 +324,7 @@ const decorations = StateField.define<DecorationSet>({
       before.source !== after.source ||
       before.numbers !== after.numbers ||
       before.raw !== after.raw ||
+      before.look !== after.look ||
       (tr.selection && !after.stale && coverOrTailMoved(tr.startState, tr.state));
     if (rebuilt && !after.stale) return decorate(tr.state);
     // Until the new view comes, the old marks move with the text.
@@ -434,8 +518,9 @@ const pasting = EditorView.domEventHandlers({
     const at = Number(t.dataset.at);
     const cover = view.state.field(page).view?.cover;
     if (cover && t.classList.contains("cm-cover")) {
-      // The cover is not a block: its form opens.
-      coverClicked.run();
+      // The cover is not a block: its panel opens, at the part clicked.
+      const part = (e.target as HTMLElement).closest("[data-part]") as HTMLElement | null;
+      coverClicked.run(part?.dataset.part ?? null);
     } else {
       view.dispatch({ effects: openRaw.of(at), selection: { anchor: at } });
     }
@@ -647,7 +732,7 @@ export function insertSnippet(view: EditorView, s: string, block: boolean) {
 
 /// The cover opened as its source, the cursor at its start.
 /// What a click on the cover does: set by the writer.
-export const coverClicked = { run: () => {} };
+export const coverClicked = { run: (_part: string | null) => {} };
 
 export function openCover(view: EditorView) {
   const cover = view.state.field(page).view?.cover;

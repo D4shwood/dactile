@@ -110,6 +110,7 @@ export interface Settings extends Look {
   ribbon_folded: boolean;
   ribbon_height: number;
   scene_list: boolean;
+  scene_list_width: number;
   line_numbers: boolean;
   pdf_width: number;
   cover_last: Record<string, string>;

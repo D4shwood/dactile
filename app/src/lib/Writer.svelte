@@ -10,14 +10,14 @@
   import { openSearchPanel } from "@codemirror/search";
   import { beforeClose, type Head, api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Files, type Look, type Made, type Memo, type Summary, type NoteCard, type Opened, type PlaySettings, type Preview, type Settings } from "./api";
   import { focus, setCards, setDim, setFocus } from "./focus";
-  import { blockAt, currentView, extensions, insertSnippet, typeBackslash, coverClicked, openCover, pickNote, wrapSelection, unwrapSelection, setNotes, setNumbers, setSource, setView } from "./editor";
+  import { blockAt, currentView, extensions, insertSnippet, typeBackslash, coverClicked, openCover, pickNote, setCoverLook, wrapSelection, unwrapSelection, setNotes, setNumbers, setSource, setView } from "./editor";
   import { BACKSTAGE, type Act } from "./ribbon";
   import { closeMenu, nextWord, recheck, showMenu, spelling } from "./spelling";
   import { completion, openMenu } from "./completion";
   import { kept } from "./session";
   import { caretAt, mouse } from "./mouse";
   import HeadingForm from "./HeadingForm.svelte";
-  import CoverForm from "./CoverForm.svelte";
+  import CoverPanel from "./CoverPanel.svelte";
   import { findLang } from "./find";
   import Cast from "./Cast.svelte";
   import Casting from "./Casting.svelte";
@@ -86,12 +86,24 @@
   let pdfDrag = $state(0);
   const pdfShown = $derived(pdfDrag || pdfWidth);
   let coverLast = $state(first.cover_last ?? {});
-  let coverForm = $state<"details" | "look" | null>(null);
-  const openCoverForm = (tab: "details" | "look") => {
+  /// The cover's details and looks, as the play has them, drawn on the page;
+  /// while the panel changes them, as it has them.
+  let coverInfo = $state<import("./api").CoverForm | null>(null);
+  /// The part picked in the cover panel.
+  let coverPart = $state<string | null>(null);
+  /// The cover's text the details were read from.
+  let coverRead = "";
+  /// The panel's changes, not yet in the play.
+  let coverTimer: ReturnType<typeof setTimeout> | undefined;
+  let coverWriting: Promise<void> | null = null;
+  async function openCoverPanel(part: string | null) {
     board = false;
-    coverForm = tab;
-  };
-  coverClicked.run = () => openCoverForm("details");
+    coverPart = part ?? coverPart ?? "coverstyle/title";
+    // Clicked before the play's details were read: read them first.
+    coverInfo ??= await api.coverRead(view.state.doc.toString());
+    side = "cover";
+  }
+  coverClicked.run = (part) => void openCoverPanel(part);
   findLang.tr = untrack(() => tr);
 
   function dragPdf(e: PointerEvent) {
@@ -118,20 +130,66 @@
     e.preventDefault();
   }
 
-  async function writeCover(f: import("./api").CoverForm) {
-    coverForm = null;
+  /// The cover as drawn on the page: the details, and the part picked.
+  function showCover() {
+    view?.dispatch({
+      effects: setCoverLook.of(coverInfo ? { form: $state.snapshot(coverInfo), picked: side === "cover" ? coverPart : null, tr } : null),
+    });
+  }
+  $effect(() => {
+    void [side, coverPart];
+    untrack(showCover);
+  });
+  /// The play's cover changed (or the play came): its details again, unless
+  /// the panel's own are on their way into it.
+  async function readCover(doc: import("@codemirror/state").Text, to: number) {
+    const text = doc.sliceString(0, to);
+    if (text === coverRead || coverTimer || coverWriting) return;
+    const f = await api.coverRead(doc.toString());
+    if (view.state.doc !== doc) return;
+    coverRead = text;
+    if (JSON.stringify(f) === JSON.stringify($state.snapshot(coverInfo))) return;
+    coverInfo = f;
+    showCover();
+  }
+  /// The panel changed something: on the page now, in the play in a moment.
+  function coverChanged() {
+    showCover();
+    if (locked) return;
+    clearTimeout(coverTimer);
+    coverTimer = setTimeout(() => void writeCover(), 600);
+  }
+  async function writeCover() {
+    clearTimeout(coverTimer);
+    coverTimer = undefined;
+    if (!coverInfo || locked) return;
+    const f = $state.snapshot(coverInfo);
     const kept = Object.fromEntries(
       ["editedby", "copyrightnotice", "address", "email", "telephone"]
         .map((k) => [k, (f.fields[k] ?? "").trim()])
         .filter(([, v]) => v),
     );
-    if (Object.keys(kept).length) {
+    if (Object.keys(kept).length && JSON.stringify({ ...coverLast, ...kept }) !== JSON.stringify(coverLast)) {
       coverLast = { ...coverLast, ...kept };
       api.set("cover_last", coverLast);
     }
-    await castCall(() => api.coverWrite(view.state.doc.toString(), f));
-    view.focus();
+    // The cursor stays where it was: the writing goes on in the panel.
+    coverWriting = castCall(async () => {
+      const m = await api.coverWrite(view.state.doc.toString(), f);
+      // Quietly: it is written as it is typed.
+      return m && { ...m, cursor: null, message: "" };
+    });
+    await coverWriting;
+    coverWriting = null;
   }
+  /// What the panel changed goes in before anything else happens to the play.
+  async function coverSettled() {
+    if (coverTimer) await writeCover();
+    else if (coverWriting) await coverWriting;
+  }
+  $effect(() => {
+    if (side !== "cover") untrack(() => void coverSettled());
+  });
   let zoom = $state(Math.min(300, Math.max(50, first.page_zoom || 100)));
   let theme = $state(first.theme || "paper");
   /// The rest of the look; the page's zoom and theme have keys of their own.
@@ -140,6 +198,7 @@
   let playSize = $state("");
   // svelte-ignore state_referenced_locally
   let sceneList = $state(first.scene_list);
+  let sceneListWidth = $state(first.scene_list_width || 0);
   let numbers = $state(first.line_numbers);
   let heads = $state<Head[]>([]);
   let cursorAt = $state(0);
@@ -148,7 +207,7 @@
   let sceneAlign = $state("center");
   let typewriter = $state(false);
   /// What stands beside the page.
-  let side = $state<"" | "pdf" | "notes" | "cast" | "files" | "look" | "guide">("");
+  let side = $state<"" | "pdf" | "notes" | "cast" | "files" | "look" | "guide" | "cover">("");
   let pdf: Pdf | undefined = $state();
   let notesPanel: ReturnType<typeof Notes> | undefined = $state();
   let files = $state<Files | null>(null);
@@ -181,6 +240,8 @@
   let memo = $state<Memo | null>(null);
   let dimmed = $state(false);
   let cards = $state<Card[]>([]);
+  /// The list stands beside the page now (open, or folded to its strip).
+  const listed = $derived(heads.length > 0 && !board && !casting && !memo);
   let backstage = $state(false);
   let page = $state("info");
   let info = $state<Preview | null>(null);
@@ -250,7 +311,8 @@
           requestAnimationFrame(() => view.requestMeasure());
         }
         if (view.state.doc === doc) view.dispatch({ effects: setView.of(v) });
-        if (board && view.state.doc === doc) cards = await api.board(doc.toString());
+        if (view.state.doc === doc) void readCover(doc, v.cover?.to ?? 0);
+        if ((board || sceneList) && view.state.doc === doc) cards = await api.board(doc.toString());
         if (focused && view.state.doc === doc) await refocus();
         if (side === "notes" && view.state.doc === doc) await refreshNotes();
         if (side === "cast" && view.state.doc === doc) await refreshCast();
@@ -910,10 +972,11 @@
         if (!casting) view.focus();
         break;
       case "cover":
-        openCoverForm("details");
+        if (side === "cover") side = "";
+        else void openCoverPanel(null);
         break;
       case "cover-look":
-        openCoverForm("look");
+        void openCoverPanel(coverPart?.startsWith("caststyle/") ? coverPart : "caststyle/names");
         break;
       case "cover-source":
         openCover(view);
@@ -1059,6 +1122,7 @@
 
   /// Back to the start, or on to the play `next`.
   async function leave(next?: string) {
+    await coverSettled();
     if (!(await settled())) return;
     await api.close();
     close(next);
@@ -1329,9 +1393,25 @@
   {/if}
 
   <main class="body" class:split={side !== ""} style={side === "pdf" && pdfShown ? `--pdf-col:${pdfShown}px` : ""}>
-    <div class="left" class:listed={sceneList && heads.length > 0 && !board && !casting && !memo}>
-      {#if sceneList && heads.length > 0 && !board && !casting && !memo}
-        <SceneList {tr} {heads} at={cursorAt} go={goHead} />
+    <div class="left" class:listed={listed && sceneList} class:railed={listed && !sceneList} style:--list-w="{sceneListWidth || 220}px">
+      {#if listed}
+        <SceneList
+          {tr}
+          {heads}
+          {cards}
+          at={cursorAt}
+          open={sceneList}
+          width={sceneListWidth}
+          {locked}
+          go={goHead}
+          {move}
+          toggle={() => key("scene-list")}
+          resized={(w) => {
+            sceneListWidth = w;
+            api.set("scene_list_width", w);
+            requestAnimationFrame(() => view.requestMeasure());
+          }}
+        />
       {/if}
       <div class="desk" class:gone={board || casting || memo} class:plain={!sheet} {onwheel}>
         <div class="page" class:source class:nonums={!numbers} class:typewriter data-scene-align={sceneAlign} style={`--z: ${zoom / 100}`}>
@@ -1412,6 +1492,18 @@
         shift={(a, up) => castCall(() => api.characterShift(view.state.doc.toString(), a, up))}
         find={firstLine}
         close={() => openCast(false)}
+      />
+    {:else if side === "cover" && coverInfo}
+      <CoverPanel
+        {tr}
+        bind:form={coverInfo}
+        bind:part={coverPart}
+        last={coverLast}
+        readOnly={locked}
+        changed={coverChanged}
+        pdf={() => void coverSettled().then(() => key("build"))}
+        source={() => ((side = ""), openCover(view))}
+        close={() => ((side = ""), view.focus())}
       />
     {:else if side === "notes"}
       <Notes
@@ -1593,21 +1685,6 @@
     />
   {/if}
 
-  {#if coverForm}
-    <CoverForm
-      {tr}
-      text={view.state.doc.toString()}
-      last={coverLast}
-      tab={coverForm}
-      readOnly={locked}
-      done={writeCover}
-      source={() => {
-        coverForm = null;
-        openCover(view);
-      }}
-      cancel={() => ((coverForm = null), view.focus())}
-    />
-  {/if}
 
   {#if headingForm}
     <HeadingForm
@@ -1737,13 +1814,18 @@
     container-type: inline-size;
   }
   .left.listed .desk {
-    left: 220px;
+    left: var(--list-w);
+  }
+  .left.railed .desk {
+    left: 18px;
   }
   @container (max-width: 620px) {
-    .left.listed .desk {
+    .left.listed .desk,
+    .left.railed .desk {
       left: 0;
     }
-    .left > :global(.scene-list) {
+    .left > :global(.scene-list),
+    .left > :global(.rail) {
       display: none;
     }
   }
@@ -2136,22 +2218,52 @@
     cursor: pointer;
   }
   .page :global(.cm-cover) {
-    text-align: center;
     padding: 1.5em 0 2em;
     margin-bottom: 1.5em;
     border-bottom: 1px solid var(--faint);
     cursor: pointer;
   }
-  .page :global(.cm-cover-title) {
-    font-size: 2em;
-    font-weight: 600;
-    color: var(--heading);
+  /* The cover's sheet, as the class prints it: A4, a share of the page. */
+  .page :global(.cm-cover-box) {
+    width: min(100%, 26em);
+    margin: 0 auto 1.5em;
+    container-type: inline-size;
   }
-  .page :global(.cm-cover-author) {
-    margin: 0.3em 0 1em;
-    color: var(--muted);
+  .page :global(.cm-cover-sheet) {
+    display: flex;
+    flex-direction: column;
+    aspect-ratio: 210 / 297;
+    padding: calc(100cqw * 0.16) calc(100cqw * 0.15) calc(100cqw * 0.12);
+    font-size: calc(100cqw * 12 / 595.3);
+    line-height: 1.2;
+    background: var(--page);
+    border: 1px solid var(--faint);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+  }
+  /* The class's \vspace*{\fill} and \vfill: the middle stands mid-sheet. */
+  .page :global(.cm-cover-middle) {
+    margin: auto 0;
+  }
+  .page :global(.cm-cover-part) {
+    border-radius: 2px;
+    outline: 1px dashed transparent;
+    outline-offset: 2px;
+  }
+  .page :global(.cm-cover-part:hover),
+  .page :global(.cm-cover-cast:hover) {
+    outline-color: var(--faint);
+  }
+  .page :global(.cm-cover-part.picked),
+  .page :global(.cm-cover-cast.picked) {
+    outline: 1.5px solid var(--accent-ink);
+  }
+  .page :global(.cm-cover-part.empty) {
+    opacity: 0.4;
   }
   .page :global(.cm-cover-cast) {
+    border-radius: 2px;
+    outline: 1px dashed transparent;
+    outline-offset: 4px;
     list-style: none;
     padding: 0 2em;
     text-align: left;
@@ -2189,6 +2301,7 @@
   }
   .page :global(.cm-cover-hint) {
     margin-top: 1em;
+    text-align: center;
     font: 11px var(--sans);
     color: var(--faint);
   }

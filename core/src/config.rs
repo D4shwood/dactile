@@ -58,6 +58,8 @@ pub struct Config {
     pub ribbon_height: u16,
     /// The desktop app: the acts and scenes down the left of the writing.
     pub scene_list: bool,
+    /// Its width in pixels, dragged by hand; 0 is its own.
+    pub scene_list_width: u16,
     /// The desktop app: the PDF's draft line numbers beside the writing.
     pub line_numbers: bool,
     /// The PDF panel's width in pixels, dragged by hand; 0 is its own.
@@ -171,6 +173,7 @@ impl Default for Config {
             ribbon_folded: false,
             ribbon_height: 0,
             scene_list: true,
+            scene_list_width: 0,
             line_numbers: true,
             pdf_width: 0,
             cover_last: Default::default(),
