@@ -267,7 +267,8 @@
     padding: 4px 6px;
     color: var(--chrome-fg);
     font: 13px var(--sans);
-    background: var(--bg);
+    /* The panel's own colours, as the other panels', in every theme. */
+    background: var(--chrome);
     border: 1px solid var(--chrome-line);
     border-radius: 4px;
   }
@@ -297,7 +298,7 @@
   .seg button.on {
     color: var(--accent-ink);
     font-weight: 600;
-    background: var(--chrome-2, var(--bg));
+    background: var(--chrome-2, var(--chrome));
   }
   .link {
     align-self: flex-start;
