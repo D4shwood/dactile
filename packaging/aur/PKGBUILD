@@ -1,7 +1,7 @@
 # Maintainer: D4shwood <D4shwood@users.noreply.github.com>
 # Dactile and Dactile Light, from the release's archives.
 pkgname=dactile-bin
-_tag=v0.3.0-beta.1
+_tag=v0.3.0-beta.2
 pkgver=${_tag#v}
 pkgver=${pkgver//-/_}
 pkgrel=1

@@ -1,5 +1,6 @@
-The first beta of Dactile 0.3, and the first of Dactile with a window of its
-own: a play on a page, in the syntax of the tiyatro XeLaTeX class. Linux x86_64 only for now.
+The second beta of Dactile 0.3, Dactile with a window of its own: a play
+on a page, in the syntax of the tiyatro XeLaTeX class. Linux x86_64 only for
+now.
 
 ```sh
 chmod +x Dactile-*-x86_64.AppImage
@@ -9,11 +10,26 @@ chmod +x Dactile-*-x86_64.AppImage
 On Arch, `dactile-bin` from the AUR. PDFs need XeLaTeX; spell checking needs
 a Turkish Hunspell dictionary.
 
+## New since 0.3.0-beta.1
+
+- Home and back at the top left, where Save was: home goes to the start
+  screen, back closes what is open over the play, then the play. Save stays
+  in the ribbon and on Ctrl+S.
+- The PDF's lens no longer has the pointer in its middle: a faint cross
+  marks the spot instead.
+- Closing the window saves first, and one command that fails stops no other.
+- PDF builds wait their turn, and a play's old versions thin out with time
+  instead of going all at once.
+- A backup that goes badly says so on the start screen.
+- Dactile Web, the same interface in a browser, now lives in this
+  repository: accounts by invitation, and shared projects whose plays are
+  written live, in turns or together. See `docs/web.md`.
+
 ## Two commands now
 
 - `dactile` is Dactile.
 - `dactile-light` is Dactile Light, in a terminal, in its own archive.
-  If you installed an earlier beta, run `dactile uninstall` first, then
+  If you installed a 0.2 beta, run `dactile uninstall` first, then
   `./dactile-light install`. Your plays and settings stay.
 
 ## Dactile
@@ -54,21 +70,6 @@ a Turkish Hunspell dictionary.
   for footnotes; the cast panel and the ribbon write them.
 - New drafts, copies, renaming, the trash with an undo.
 - A play's settings: its pace, its dictionary, the play a draft came from.
-
-## New since 0.3.0-beta.1
-
-- Home and back at the top left, where Save was: home goes to the start
-  screen, back closes what is open over the play, then the play. Save stays
-  in the ribbon and on Ctrl+S.
-- The PDF's lens no longer has the pointer in its middle: a faint cross
-  marks the spot instead.
-- Closing the window saves first, and one command that fails stops no other.
-- PDF builds wait their turn, and a play's old versions thin out with time
-  instead of going all at once.
-- A backup that goes badly says so on the start screen.
-- Dactile Web, the same interface in a browser, now lives in this
-  repository: accounts by invitation, and shared projects whose plays are
-  written live, in turns or together. See `docs/web.md`.
 
 ## Fixed since 0.2.0-beta.6
 

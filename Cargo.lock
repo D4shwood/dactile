@@ -930,7 +930,7 @@ checksum = "914a755b7c2d4af2bdcff7ce1739e2db9a1b81a9b07123d8015786ae03c0980d"
 
 [[package]]
 name = "dactile"
-version = "0.3.0-beta.1"
+version = "0.3.0-beta.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -946,7 +946,7 @@ dependencies = [
 
 [[package]]
 name = "dactile-app"
-version = "0.3.0-beta.1"
+version = "0.3.0-beta.2"
 dependencies = [
  "anyhow",
  "dactile",
@@ -961,7 +961,7 @@ dependencies = [
 
 [[package]]
 name = "dactile-backend"
-version = "0.3.0-beta.1"
+version = "0.3.0-beta.2"
 dependencies = [
  "anyhow",
  "dactile",
@@ -971,7 +971,7 @@ dependencies = [
 
 [[package]]
 name = "dactile-light"
-version = "0.3.0-beta.1"
+version = "0.3.0-beta.2"
 dependencies = [
  "anyhow",
  "arboard",
@@ -987,7 +987,7 @@ dependencies = [
 
 [[package]]
 name = "dactile-server"
-version = "0.3.0-beta.1"
+version = "0.3.0-beta.2"
 dependencies = [
  "anyhow",
  "argon2",
@@ -1009,7 +1009,7 @@ dependencies = [
 
 [[package]]
 name = "dactile-wasm"
-version = "0.3.0-beta.1"
+version = "0.3.0-beta.2"
 dependencies = [
  "dactile-backend",
  "serde_json",
