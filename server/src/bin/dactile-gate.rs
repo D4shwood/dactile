@@ -24,6 +24,9 @@
 //!     dactile-gate reset ada [days]       a link to set a new password, good
 //!                                         once (7 days unless said); `invite
 //!                                         ada` says the same
+//!     dactile-gate key ada                a lasting link in as ada, used again
+//!                                         and again: the trial site's alone
+//!                                         (DACTILE_STAGE=pbe)
 //!     dactile-gate invite-mail ada@example.com ["Ada Yıldız"]
 //!                                         a link to make an account
 //!     dactile-gate people
@@ -80,6 +83,17 @@ fn main() -> anyhow::Result<()> {
             );
             Ok(())
         }
+        ["key", id] => {
+            if std::env::var("DACTILE_STAGE").as_deref() != Ok("pbe") {
+                anyhow::bail!("A lasting way in is for the trial site alone.");
+            }
+            let code = people::key(&home()?, id).map_err(|e| anyhow::anyhow!(e))?;
+            println!("{}/anahtar/{code}", site());
+            eprintln!(
+                "Lasts, and works again and again: whoever has it is {id} on the trial site. `key {id}` again makes a new one, and this one stops."
+            );
+            Ok(())
+        }
         ["invite-mail", mail, name @ ..] => {
             let code = people::invite(&home()?, mail, &name.join(" "), "")
                 .map_err(|e| anyhow::anyhow!(e))?;
@@ -104,7 +118,7 @@ fn main() -> anyhow::Result<()> {
             Ok(())
         }
         _ => anyhow::bail!(
-            "dactile-gate [add <id> <name> [--owner] [--mail <address>] | reset <id> [days] | invite-mail <address> [name] | people | remove <id>]"
+            "dactile-gate [add <id> <name> [--owner] [--mail <address>] | reset <id> [days] | key <id> | invite-mail <address> [name] | people | remove <id>]"
         ),
     }
 }

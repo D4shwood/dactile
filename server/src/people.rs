@@ -65,6 +65,9 @@ pub enum Errand {
     Parola { id: String },
     /// `mail` is `id`'s: they opened what was sent to it.
     Dogrula { id: String, mail: String },
+    /// A way in as `id` that lasts and works again and again: the trial
+    /// site's alone (gate.rs), so as not to type a password there.
+    Anahtar { id: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -308,7 +311,9 @@ pub fn remove(home: &Path, id: &str) -> Result<(), String> {
     let left: Vec<Code> = codes(home)
         .into_iter()
         .filter(|c| match &c.errand {
-            Errand::Parola { id: who } | Errand::Dogrula { id: who, .. } => who != id,
+            Errand::Parola { id: who }
+            | Errand::Dogrula { id: who, .. }
+            | Errand::Anahtar { id: who } => who != id,
             Errand::Davet { .. } => true,
         })
         .collect();
@@ -504,6 +509,26 @@ pub fn reset(home: &Path, id: &str, secs: u64) -> Result<String, String> {
         return Err(format!("{id} is not on the list: add them first"));
     }
     make(home, Errand::Parola { id: id.to_string() }, secs)
+}
+
+/// A lasting way in as `id`, for the trial site; the one made before stops.
+pub fn key(home: &Path, id: &str) -> Result<String, String> {
+    if find(home, id).is_none() {
+        return Err(format!("{id} is not on the list: add them first"));
+    }
+    make(
+        home,
+        Errand::Anahtar { id: id.to_string() },
+        100 * 365 * DAYS,
+    )
+}
+
+/// Who `code` lets in, if it is a lasting way in. Using it leaves it be.
+pub fn by_key(home: &Path, code: &str) -> Option<Person> {
+    match peek(home, code)? {
+        Errand::Anahtar { id } => find(home, &id),
+        _ => None,
+    }
 }
 
 /// The new account an invitation was for.

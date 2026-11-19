@@ -245,6 +245,7 @@ pub fn router(gate: Shared, web: Option<PathBuf>) -> Router {
         .route("/giris/google/donus", get(from_google))
         // A link made before accounts: it sets a password now.
         .route("/giris/{code}", get(old_link))
+        .route("/anahtar/{code}", get(key_in))
         .with_state(gate);
     match web {
         Some(dir) => app.fallback_service(
@@ -699,6 +700,25 @@ async fn check(State(g): State<Shared>, headers: HeaderMap, Url(code): Url<Strin
         Err(why) => {
             g.door.wrong(&from);
             fail(StatusCode::NOT_FOUND, why)
+        }
+    }
+}
+
+/// A lasting way in (`people::key`): on the trial site alone, where it
+/// spares typing a password. Elsewhere there is no such page.
+async fn key_in(State(g): State<Shared>, headers: HeaderMap, Url(code): Url<String>) -> Response {
+    if g.stage != "pbe" {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let from = address(&headers);
+    if g.door.waiting(&from) {
+        return too_many();
+    }
+    match people::by_key(&g.home, &code) {
+        Some(person) => let_in(&g, &person),
+        None => {
+            g.door.wrong(&from);
+            Redirect::to("/").into_response()
         }
     }
 }
