@@ -81,6 +81,7 @@
   const first = untrack(() => settings);
   let folded = $state(first.ribbon_folded);
   let ribbonHeight = $state(first.ribbon_height || 0);
+  let slim = $state(first.toolbar === "slim");
   let pdfWidth = $state(first.pdf_width || 0);
   /// While the PDF's edge is dragged.
   let pdfDrag = $state(0);
@@ -958,6 +959,11 @@
         folded = !folded;
         api.set("ribbon_folded", folded);
         break;
+      case "toolbar":
+        slim = !slim;
+        api.set("toolbar", slim ? "slim" : "ribbon");
+        requestAnimationFrame(() => view.requestMeasure());
+        break;
       case "board":
         memo = null;
         openBoard();
@@ -1370,6 +1376,7 @@
     bind:this={ribbon}
     {tr}
     {folded}
+    {slim}
     {dirty}
     title={`${opened.name}${locked ? l(" (salt okunur)", " (read only)") : ""} — Dactile`}
     {run}

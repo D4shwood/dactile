@@ -289,19 +289,22 @@
   :global(body) {
     margin: 0;
     min-height: 100vh;
-    background: var(--chrome);
+    background:
+      radial-gradient(1200px 500px at 50% -10%, color-mix(in srgb, var(--claret) 14%, transparent), transparent 70%),
+      var(--chrome);
     color: var(--chrome-fg);
     font-family: var(--sans);
   }
   main {
-    max-width: 380px;
+    max-width: 400px;
     margin: 0 auto;
     padding: 9vh 16px 40px;
   }
   .brand {
-    background: #151515;
-    padding: 18px 22px 14px;
+    padding: 18px 24px 14px;
     font-family: var(--mono);
+    background: #151515;
+    border-radius: 14px 14px 0 0;
   }
   .brand .name {
     color: #d8cfc0;
@@ -344,10 +347,12 @@
     }
   }
   .card {
+    padding: 24px 24px 20px;
     background: var(--page);
     border: 1px solid var(--chrome-line);
     border-top: 3px solid var(--claret);
-    padding: 22px 22px 18px;
+    border-radius: 0 0 14px 14px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
   }
   h1 {
     font-family: var(--serif);
@@ -374,15 +379,18 @@
     font: inherit;
     font-size: 15px;
     color: var(--fg);
-    background: #fff;
+    background: color-mix(in srgb, var(--page) 85%, #fff);
     border: 1px solid var(--chrome-line);
-    border-radius: 3px;
-    padding: 8px 10px;
+    border-radius: 8px;
+    padding: 9px 12px;
+    transition:
+      border-color 0.12s,
+      box-shadow 0.12s;
   }
   input:focus {
-    outline: 2px solid var(--claret);
-    outline-offset: -1px;
-    border-color: transparent;
+    outline: none;
+    border-color: var(--accent-ink);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-ink) 18%, transparent);
   }
   small {
     font-size: 12px;
@@ -395,8 +403,8 @@
   .button {
     font: inherit;
     font-size: 15px;
-    padding: 9px 14px;
-    border-radius: 3px;
+    padding: 10px 14px;
+    border-radius: 8px;
     border: 1px solid var(--chrome-line);
     background: var(--chrome-2);
     color: var(--chrome-fg);
@@ -424,10 +432,10 @@
     gap: 10px;
     width: 100%;
     box-sizing: border-box;
-    padding: 9px 14px;
+    padding: 10px 14px;
     border: 1px solid var(--chrome-line);
-    border-radius: 3px;
-    background: #fff;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--page) 85%, #fff);
     color: var(--fg);
     text-decoration: none;
     font-size: 15px;
@@ -469,8 +477,12 @@
   }
   .error {
     margin: 0;
-    color: var(--claret-deep);
+    padding: 8px 12px;
+    color: var(--accent-ink);
     font-size: 14px;
+    background: color-mix(in srgb, var(--claret) 10%, transparent);
+    border-left: 3px solid var(--claret);
+    border-radius: 6px;
   }
   .foot {
     margin: 16px 2px 0;

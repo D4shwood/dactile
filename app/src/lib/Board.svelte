@@ -86,7 +86,8 @@
         : "Drag a scene to another place; an act takes its scenes along. Double-click: go to the scene."}
     </span>
     <span class="grow"></span>
-    <button onclick={close}>{tr ? "Sayfaya dön" : "Back to the page"} ✕</button>
+    <span class="ui-chip">{cards.filter((c) => !c.act).length} {tr ? "sahne" : "scenes"}</span>
+    <button class="ui-btn small" onclick={close}>{tr ? "Sayfaya dön" : "Back to the page"} ✕</button>
   </div>
   <div class="cols">
     {#each columns as col, ci}
@@ -105,6 +106,9 @@
           >
             <div class="label">{a.label}</div>
             {#if a.title}<div class="title">{a.title}</div>{/if}
+            <div class="sum">
+              {col.scenes.length} {tr ? "sahne" : "scenes"} · {col.scenes.reduce((n, i) => n + cards[i].lines, 0)} {tr ? "replik" : "lines"}
+            </div>
           </div>
         {:else}
           <div class="act none">{tr ? "Perdesiz" : "No act"}</div>
@@ -161,13 +165,6 @@
     background: var(--chrome);
     border-bottom: 1px solid var(--chrome-line);
   }
-  .head button {
-    border: 1px solid var(--chrome-line);
-    background: var(--chrome);
-    border-radius: 4px;
-    padding: 3px 10px;
-    cursor: pointer;
-  }
   .muted {
     color: var(--chrome-muted);
     font-size: 12px;
@@ -184,10 +181,10 @@
     align-items: flex-start;
   }
   .col {
-    width: 230px;
+    width: 240px;
     flex: none;
     background: color-mix(in srgb, var(--chrome) 70%, transparent);
-    border-radius: 8px;
+    border-radius: var(--r-lg);
     padding: 10px;
     border: 2px solid transparent;
   }
@@ -195,8 +192,8 @@
     border-color: var(--claret);
   }
   .act {
-    padding: 8px 10px;
-    border-radius: 6px;
+    padding: 9px 12px;
+    border-radius: var(--r-md);
     background: var(--claret);
     color: #f6efe4;
     cursor: grab;
@@ -215,14 +212,28 @@
     font-size: 12px;
     opacity: 0.9;
   }
+  .act .sum {
+    margin-top: 4px;
+    font-size: 11px;
+    opacity: 0.75;
+  }
   .card {
     background: var(--page);
     color: var(--fg);
-    border-radius: 6px;
-    padding: 8px 10px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+    border: 1px solid color-mix(in srgb, var(--fg) 8%, transparent);
+    border-left: 3px solid var(--heading);
+    border-radius: var(--r-md);
+    padding: 9px 12px;
+    box-shadow: var(--sh-1);
     cursor: grab;
     font-family: var(--serif);
+    transition:
+      box-shadow 0.12s,
+      transform 0.12s;
+  }
+  .card:hover {
+    box-shadow: var(--sh-2);
+    transform: translateY(-1px);
   }
   .card.lifted {
     opacity: 0.4;
@@ -259,7 +270,8 @@
     height: 18px;
   }
   .slot.on {
-    background: var(--claret);
-    height: 18px;
+    height: 22px;
+    background: color-mix(in srgb, var(--claret) 18%, transparent);
+    border: 2px dashed var(--claret);
   }
 </style>

@@ -87,7 +87,33 @@
     writer: ["yazar", "writer"],
     reader: ["okur", "reader"],
   };
-  const tiles = $derived(home.templates.filter((t) => t.kind !== "own").slice(0, 3));
+  // ------------------------------------------------------------ the desk
+
+  const today = $derived(new Date().toLocaleDateString(tr ? "tr-TR" : "en-GB", { weekday: "long", day: "numeric", month: "long" }));
+  /// Whom the screen greets: the first name signed in, or the author's.
+  const greet = $derived(((door?.name || home.settings.author || "").trim().split(/\s+/)[0] ?? ""));
+  /// The plays opened lately, then the ones changed lately: four at most.
+  const recentPlays = $derived.by(() => {
+    const byPath = new Map(everyPlay.map((p) => [p.path, p]));
+    const got = (home.settings.recent ?? []).flatMap((r) => byPath.get(r) ?? []);
+    const more = everyPlay.filter((p) => !got.includes(p)).sort((a, b) => (b.modified ?? 0) - (a.modified ?? 0));
+    return [...got, ...more].slice(0, 4);
+  });
+  const projectOf = (p: PlayCard) => projects.find((x) => x.plays.includes(p)) ?? null;
+  const totals = $derived(
+    everyPlay.reduce(
+      (t, p) => ({ plays: t.plays + 1, words: t.words + p.words, minutes: t.minutes + p.minutes, characters: t.characters + p.characters }),
+      { plays: 0, words: 0, minutes: 0, characters: 0 },
+    ),
+  );
+  const hours = (m: number) => (m < 60 ? `${m} ${l("dk", "min")}` : `${Math.floor(m / 60)} ${l("sa", "h")} ${m % 60} ${l("dk", "min")}`);
+  let newMenu = $state(false);
+  let listEl: HTMLElement | undefined = $state();
+  /// A project's plays in the list below, brought into view.
+  function showShelf(id: string) {
+    shelf = id;
+    requestAnimationFrame(() => listEl?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
 
   /// A play and its drafts to the other tab, and the list after it.
   async function moveShelf(p: PlayCard) {
@@ -349,6 +375,12 @@
     if (f) open(f);
   }
 
+  let toolbar = $state(untrack(() => home.settings.toolbar ?? "ribbon"));
+  function setToolbar(v: "ribbon" | "slim") {
+    toolbar = v;
+    api.set("toolbar", v).then(reload, (e) => (lookError = String(e)));
+  }
+
   async function saveSettings() {
     await api.set("author", author);
     await api.set("plays_dir", playsDir);
@@ -408,10 +440,118 @@
     {#if home.folder.temporary && !door && section !== "settings" && section !== "keys"}
       <Temporary {tr} shown={home.folder.shown} label={l("Oyunlar klasörünü değiştir", "Change the plays folder")} act={() => (section = "settings")} />
     {/if}
-    {#if section === "home" || section === "new"}
-      <h1>{section === "home" ? l("İyi yazmalar", "Good writing") : l("Yeni oyun", "New play")}</h1>
-      <div class="tiles" class:all={section === "new"}>
-        {#each section === "new" ? home.templates : tiles as t}
+    {#snippet makeForm()}
+      {#if making}
+        <form
+          class="make"
+          onsubmit={(e) => {
+            e.preventDefault();
+            create();
+          }}
+        >
+          <span>{making.name}{#if into}<em class="into"> → {into.name}</em>{/if}:</span>
+          <!-- svelte-ignore a11y_autofocus -->
+          <input class="ui-field" bind:value={title} placeholder={l("Oyunun adı", "The play's title")} autofocus />
+          <button class="ui-btn primary" disabled={!title.trim()}>{l("Oluştur", "Create")}</button>
+          <button type="button" class="ui-btn small" onclick={() => (making = null)}>{l("Vazgeç", "Cancel")}</button>
+          {#if error}<span class="error">{error}</span>{/if}
+          <div class="details">
+            {#each DETAILS as [k, t, e]}
+              <label>{l(t, e)}<input class="ui-field" value={details[k] ?? ""} oninput={(ev) => (details[k] = ev.currentTarget.value)} /></label>
+            {/each}
+            {#if Object.values(home.settings.cover_last ?? {}).some((v) => v.trim())}
+              <button type="button" class="ui-btn small" onclick={() => (details = { ...home.settings.cover_last, ...Object.fromEntries(Object.entries(details).filter(([, v]) => v.trim())) })}>{l("Son girilenleri kullan", "Use the last ones")}</button>
+            {/if}
+          </div>
+        </form>
+      {/if}
+    {/snippet}
+
+    {#if section === "home"}
+      <header class="hello">
+        <div>
+          <p class="ui-eyebrow">{today}</p>
+          <h1>{l("İyi yazmalar", "Good writing")}{greet ? `, ${greet}` : ""}</h1>
+        </div>
+        <div class="quickacts">
+          <div class="newwrap">
+            <button class="ui-btn primary" aria-haspopup="menu" aria-expanded={newMenu} onclick={() => (newMenu = !newMenu)}>
+              ＋ {l("Yeni oyun", "New play")} <span class="caretdown">▾</span>
+            </button>
+            {#if newMenu}
+              <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+              <div class="scrim" onclick={() => (newMenu = false)}></div>
+              <div class="newmenu" role="menu">
+                {#each home.templates as t}
+                  <button role="menuitem" onclick={() => ((newMenu = false), startNew(t))}>
+                    <strong>{t.name}</strong><small>{t.about}</small>
+                  </button>
+                {/each}
+                <button role="menuitem" class="all" onclick={() => ((newMenu = false), (section = "new"))}>{l("Şablonları büyük gör…", "See the templates large…")}</button>
+              </div>
+            {/if}
+          </div>
+          <button class="ui-btn" onclick={importFile} title=".docx .odt .pdf .md .txt">⇱ {l("İçe aktar", "Import")}</button>
+          <button class="ui-btn" onclick={browse} title={l("bir .tex dosyası", "a .tex file")}>⇲ {l("Dosya aç", "Open a file")}</button>
+          <button class="ui-btn ghost" onclick={example} title={l("bir kopyası, oynamak için", "a copy to play with")}>{l("Örnek oyun", "Example play")}</button>
+        </div>
+      </header>
+      {@render makeForm()}
+
+      {#if recentPlays.length}
+        <section class="block">
+          <h2 class="ui-eyebrow">{l("Kaldığın yerden", "Where you left off")}</h2>
+          <div class="recent">
+            {#each recentPlays as p, i (p.path)}
+              {@const pr = projectOf(p)}
+              <button class="ui-card rcard" class:first={i === 0} onclick={() => open(p.path)} oncontextmenu={(e) => rightClick(p, e)}>
+                <span class="rtitle">{p.title}</span>
+                <span class="rchips">
+                  {#if p.draft}<span class="ui-chip">{p.draft}</span>{/if}
+                  {#if pr}<span class="ui-chip accent">{pr.name}</span>{/if}
+                  {#if p.book}<span class="ui-chip">{l("kitap", "book")}</span>{/if}
+                </span>
+                <span class="rmeta">{p.acts ? `${p.acts} ${l("perde", "acts")}` : l("Tek perde", "One act")} · {p.scenes} {l("sahne", "scenes")} · ~{p.minutes} {l("dk", "min")}</span>
+                <span class="rfoot">
+                  <span class="rwhen">{ago(p.modified)}</span>
+                  <span class="rgo">{pr?.role === "reader" ? l("Oku", "Read") : l("Yazmaya devam", "Keep writing")} →</span>
+                </span>
+              </button>
+            {/each}
+          </div>
+        </section>
+      {/if}
+
+      <section class="stats" aria-label={l("Rakamlar", "Numbers")}>
+        <div><strong>{totals.plays}</strong><span>{l("oyun", "plays")}</span></div>
+        <div><strong>{totals.words.toLocaleString(tr ? "tr-TR" : "en-GB")}</strong><span>{l("söz", "words")}</span></div>
+        <div><strong>{hours(totals.minutes)}</strong><span>{l("sahne süresi", "on stage")}</span></div>
+        <div><strong>{totals.characters}</strong><span>{l("kişi", "characters")}</span></div>
+      </section>
+
+      {#if projects.length}
+        <section class="block">
+          <h2 class="ui-eyebrow">{l("Projeler", "Projects")}</h2>
+          <div class="projcards">
+            {#each projects as pr (pr.id)}
+              <button class="ui-card pcard" onclick={() => showShelf("p:" + pr.id)}>
+                <strong>{pr.name}</strong>
+                <span class="rchips">
+                  <span class="ui-chip accent">{l(...ROLE[pr.role])}</span>
+                  <span class="ui-chip">{pr.mode === "turns" ? l("sırayla", "in turns") : l("birlikte", "together")}</span>
+                </span>
+                <small>{pr.plays.length} {l("oyun", "plays")}</small>
+              </button>
+            {/each}
+          </div>
+        </section>
+      {/if}
+    {/if}
+
+    {#if section === "new"}
+      <h1>{l("Yeni oyun", "New play")}</h1>
+      <div class="tiles">
+        {#each home.templates as t}
           <button class="tile" class:picked={making === t} onclick={() => startNew(t)}>
             <div class="sheet" class:blank={t.kind === "blank"}>
               {#if t.kind === "blank"}
@@ -424,49 +564,9 @@
             <small>{t.about}</small>
           </button>
         {/each}
-        {#if section === "home"}
-          <button class="tile" onclick={browse}>
-            <div class="sheet open"><span class="plus">⇲</span></div>
-            <strong>{l("Aç", "Open")}</strong>
-            <small>{l("bir .tex dosyası", "a .tex file")}</small>
-          </button>
-          <button class="tile" onclick={importFile}>
-            <div class="sheet open"><span class="plus">⇱</span></div>
-            <strong>{l("İçe aktar", "Import")}</strong>
-            <small>.docx .odt .pdf .md .txt</small>
-          </button>
-          <button class="tile" onclick={example}>
-            <div class="sheet example"><span class="ex">Kar<br />Masalı</span></div>
-            <strong>{l("Örnek oyun", "Example play")}</strong>
-            <small>{l("bir kopyası, oynamak için", "a copy to play with")}</small>
-          </button>
-        {/if}
       </div>
 
-      {#if making}
-        <form
-          class="make"
-          onsubmit={(e) => {
-            e.preventDefault();
-            create();
-          }}
-        >
-          <span>{making.name}{#if into}<em class="into"> → {into.name}</em>{/if}:</span>
-          <!-- svelte-ignore a11y_autofocus -->
-          <input bind:value={title} placeholder={l("Oyunun adı", "The play's title")} autofocus />
-          <button class="primary" disabled={!title.trim()}>{l("Oluştur", "Create")}</button>
-          <button type="button" class="plain" onclick={() => (making = null)}>{l("Vazgeç", "Cancel")}</button>
-          {#if error}<span class="error">{error}</span>{/if}
-          <div class="details">
-            {#each DETAILS as [k, t, e]}
-              <label>{l(t, e)}<input value={details[k] ?? ""} oninput={(ev) => (details[k] = ev.currentTarget.value)} /></label>
-            {/each}
-            {#if Object.values(home.settings.cover_last ?? {}).some((v) => v.trim())}
-              <button type="button" class="plain" onclick={() => (details = { ...home.settings.cover_last, ...Object.fromEntries(Object.entries(details).filter(([, v]) => v.trim())) })}>{l("Son girilenleri kullan", "Use the last ones")}</button>
-            {/if}
-          </div>
-        </form>
-      {/if}
+      {@render makeForm()}
     {/if}
 
     <!-- In the browser the folder is the server's, nothing to show. -->
@@ -483,14 +583,14 @@
     {/if}
 
     {#if section === "home" || section === "open"}
-      <div class="plays">
+      <div class="plays" bind:this={listEl}>
         <div class="list">
           <div class="listhead">
             <h2>{section === "open" ? l("Bütün oyunlar", "All plays") : l("Oyunlar", "Plays")}</h2>
-            <input bind:value={filter} placeholder={l("Ara…", "Search…")} />
+            <input class="ui-field" bind:value={filter} placeholder={l("Ara…", "Search…")} />
             {#if section === "open"}
-              <button class="plain" onclick={browse}>{l("Başka bir dosya…", "Another file…")}</button>
-              <button class="plain" onclick={importFile}>{l("İçe aktar…", "Import…")}</button>
+              <button class="ui-btn small" onclick={browse}>{l("Başka bir dosya…", "Another file…")}</button>
+              <button class="ui-btn small" onclick={importFile}>{l("İçe aktar…", "Import…")}</button>
             {/if}
           </div>
           {#if reading}
@@ -508,7 +608,7 @@
           {#if thrown}
             <p class="undo">
               {l(`«${thrown}» çöp kutusunda.`, `«${thrown}» is in the trash.`)}
-              <button class="plain" onclick={restore}>{l("Geri al", "Undo")}</button>
+              <button class="ui-btn small" onclick={restore}>{l("Geri al", "Undo")}</button>
             </p>
           {/if}
           <div class="shelves" role="tablist">
@@ -546,13 +646,13 @@
             <div class="several">
               <span>{l(`${picks.length} oyun seçili`, `${picks.length} plays chosen`)}</span>
               {#if gathering !== null}
-                <input aria-label={l("Kitabın adı", "The book's title")} bind:value={gathering} />
-                <button class="plain" onclick={gather}>{l("Kitap yap", "Make the book")}</button>
-                <button class="plain" onclick={() => (gathering = null)}>{l("Vazgeç", "Cancel")}</button>
+                <input class="ui-field" aria-label={l("Kitabın adı", "The book's title")} bind:value={gathering} />
+                <button class="ui-btn small" onclick={gather}>{l("Kitap yap", "Make the book")}</button>
+                <button class="ui-btn small" onclick={() => (gathering = null)}>{l("Vazgeç", "Cancel")}</button>
               {:else}
-                <button class="plain" onclick={() => (gathering = "")}>{l("Kitapta topla", "Gather in a book")}</button>
-                <button class="plain" onclick={throwPicks}>{arming2 ? l("Evet, çöpe at", "Yes, to the trash") : l("Çöpe at", "To the trash")}</button>
-                <button class="plain" onclick={() => ((picks = []), (arming2 = false))}>{l("Seçimi bırak", "Clear")}</button>
+                <button class="ui-btn small" onclick={() => (gathering = "")}>{l("Kitapta topla", "Gather in a book")}</button>
+                <button class="ui-btn small" onclick={throwPicks}>{arming2 ? l("Evet, çöpe at", "Yes, to the trash") : l("Çöpe at", "To the trash")}</button>
+                <button class="ui-btn small" onclick={() => ((picks = []), (arming2 = false))}>{l("Seçimi bırak", "Clear")}</button>
               {/if}
             </div>
           {/if}
@@ -594,37 +694,37 @@
             <div class="facts">
               {chosen.characters} {l("kişi", "characters")} · {chosen.words} {l("söz", "words")}
             </div>
-            <button class="primary wide" onclick={() => open(chosen!.path)}>{l("Aç", "Open")}</button>
+            <button class="ui-btn primary wide" onclick={() => open(chosen!.path)}>{l("Aç", "Open")}</button>
             {#if reader}
               <p class="muted">{l("Bu projede okursun: oyunlarını okursun, değiştirmezsin.", "You are a reader in this project: you read its plays, you don't change them.")}</p>
             {:else}
             <div class="tools">
-              <button class="plain" onclick={() => startForm("fork")} title={l("Bu hâlinden yeni bir taslak; hangi oyundan geldiğini hatırlar", "A new draft from it as it is; it remembers where it came from")}>{l("Yeni taslak", "New draft")}</button>
-              <button class="plain" onclick={() => startForm("copy")}>{l("Kopya", "Copy")}</button>
-              <button class="plain" onclick={() => startForm("rename")}>{l("Adını değiştir", "Rename")}</button>
-              <button class="plain" onclick={throwAway}>{l("Çöpe at", "To the trash")}</button>
+              <button class="ui-btn small" onclick={() => startForm("fork")} title={l("Bu hâlinden yeni bir taslak; hangi oyundan geldiğini hatırlar", "A new draft from it as it is; it remembers where it came from")}>{l("Yeni taslak", "New draft")}</button>
+              <button class="ui-btn small" onclick={() => startForm("copy")}>{l("Kopya", "Copy")}</button>
+              <button class="ui-btn small" onclick={() => startForm("rename")}>{l("Adını değiştir", "Rename")}</button>
+              <button class="ui-btn small" onclick={throwAway}>{l("Çöpe at", "To the trash")}</button>
             </div>
             {/if}
             {#if arming !== null}
               <p class="undo">
                 {l("Çöp kutusuna gitsin mi?", "To the trash?")}
                 {#if arming}{l(`Taslakları (${arming}) yerinde kalır.`, `Its drafts (${arming}) stay.`)}{/if}
-                <button class="plain" onclick={throwAway}>{l("Evet", "Yes")}</button>
-                <button class="plain" onclick={() => (arming = null)}>{l("Vazgeç", "Cancel")}</button>
+                <button class="ui-btn small" onclick={throwAway}>{l("Evet", "Yes")}</button>
+                <button class="ui-btn small" onclick={() => (arming = null)}>{l("Vazgeç", "Cancel")}</button>
               </p>
             {/if}
             {#if form}
               <form class="playform" onsubmit={(e) => (e.preventDefault(), void submitForm())}>
                 {#if form.kind === "fork"}
-                  <label>{l("Taslak no", "Draft")}<input bind:value={form.draft} oninput={follow} /></label>
+                  <label>{l("Taslak no", "Draft")}<input class="ui-field" bind:value={form.draft} oninput={follow} /></label>
                 {:else}
-                  <label>{l("Başlık", "Title")}<input bind:value={form.title} oninput={follow} /></label>
+                  <label>{l("Başlık", "Title")}<input class="ui-field" bind:value={form.title} oninput={follow} /></label>
                 {/if}
-                <label>{l("Dosya", "File")}<input bind:value={form.file} oninput={() => (form!.touched = true)} /></label>
+                <label>{l("Dosya", "File")}<input class="ui-field" bind:value={form.file} oninput={() => (form!.touched = true)} /></label>
                 {#if form.error}<span class="error">{form.error}</span>{/if}
                 <div>
-                  <button class="primary">{form.kind === "rename" ? l("Değiştir", "Rename") : l("Oluştur", "Make")}</button>
-                  <button type="button" class="plain" onclick={() => (form = null)}>{l("Vazgeç", "Cancel")}</button>
+                  <button class="ui-btn primary">{form.kind === "rename" ? l("Değiştir", "Rename") : l("Oluştur", "Make")}</button>
+                  <button type="button" class="ui-btn small" onclick={() => (form = null)}>{l("Vazgeç", "Cancel")}</button>
                 </div>
               </form>
             {/if}
@@ -654,22 +754,31 @@
           saveSettings();
         }}
       >
-        <label>{l("Yazar", "Author")} <input bind:value={author} /></label>
+        <label>{l("Yazar", "Author")} <input class="ui-field" bind:value={author} /></label>
         <!-- In the browser the plays' folder is the server's to say. -->
         {#if !door}
-          <label>{l("Oyunlar klasörü", "Plays folder")} <input bind:value={playsDir} /></label>
+          <label>{l("Oyunlar klasörü", "Plays folder")} <input class="ui-field" bind:value={playsDir} /></label>
         {/if}
         <label
           >{l("Dil", "Language")}
-          <select bind:value={lang}>
+          <select class="ui-field" bind:value={lang}>
             <option value="auto">{l("kendiliğinden", "automatic")}</option>
             <option value="tr">Türkçe</option>
             <option value="en">English</option>
           </select>
         </label>
-        <button class="primary">{l("Kaydet", "Save")}</button>
+        <button class="ui-btn primary">{l("Kaydet", "Save")}</button>
       </form>
       <h2 class="lookhead">{l("Görünüş", "Appearance")}</h2>
+      <div class="toolbar-pick" role="radiogroup" aria-label={l("Yazıcının komutları", "The writer's commands")}>
+        <span>{l("Yazıcının komutları", "The writer's commands")}</span>
+        {#each [["ribbon", "Şerit: düğmeler sekmelerin altında", "Ribbon: the buttons under the tabs"], ["slim", "İnce çubuk: sekmeler menü olur, yazıya yer kalır", "Slim bar: the tabs are menus, more room to write"]] as [v, t, e]}
+          <label class="ui-card" class:on={toolbar === v}>
+            <input type="radio" name="toolbar" value={v} checked={toolbar === v} onchange={() => setToolbar(v as "ribbon" | "slim")} />
+            {l(t, e)}
+          </label>
+        {/each}
+      </div>
       <LookForm {tr} {look} set={setLook} />
       {#if lookError}<p class="error">{lookError}</p>{/if}
       {#if door}
@@ -798,6 +907,30 @@
   .folder .muted {
     flex: none;
   }
+  .toolbar-pick {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 8px;
+    max-width: 640px;
+    margin-bottom: 18px;
+  }
+  .toolbar-pick > span {
+    grid-column: 1 / -1;
+    color: var(--chrome-muted);
+    font-size: 13px;
+  }
+  .toolbar-pick label {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .toolbar-pick label.on {
+    border-color: var(--accent-ink);
+    box-shadow: 0 0 0 3px var(--on);
+  }
   .lookhead {
     margin: 28px 0 10px;
   }
@@ -810,9 +943,6 @@
     flex-wrap: wrap;
     gap: 4px;
     margin-top: 8px;
-  }
-  .tools button {
-    font-size: 12px;
   }
   .undo {
     font-size: 13px;
@@ -831,13 +961,6 @@
     gap: 2px;
     color: var(--chrome-muted);
   }
-  .playform input {
-    padding: 3px 6px;
-    border: 1px solid var(--chrome-line);
-    border-radius: 4px;
-    background: var(--chrome);
-    color: var(--chrome-fg);
-  }
   .start {
     display: grid;
     grid-template-columns: 210px 1fr;
@@ -846,9 +969,11 @@
   .side {
     display: flex;
     flex-direction: column;
-    background: var(--claret);
-    color: #f6efe4;
+    gap: 2px;
     padding: 18px 0;
+    color: var(--chrome-fg);
+    background: var(--chrome-2);
+    border-right: 1px solid var(--chrome-line);
   }
   .brand {
     margin: -18px 0 14px;
@@ -900,21 +1025,33 @@
     display: flex;
     align-items: center;
     gap: 12px;
+    margin: 0 10px;
+    padding: 8px 12px;
+    color: inherit;
+    font-size: 14px;
+    text-align: left;
     background: none;
     border: 0;
-    color: inherit;
-    text-align: left;
-    padding: 10px 22px;
+    border-radius: var(--r-md);
     cursor: pointer;
-    font-size: 15px;
   }
-  .side button:hover,
+  .side button:hover {
+    background: var(--hover);
+  }
   .side button.on {
-    background: var(--claret-deep);
+    color: var(--accent-ink);
+    font-weight: 600;
+    background: var(--on);
+  }
+  .side .icon {
+    color: var(--accent-ink);
   }
   .side .icon {
     width: 18px;
     text-align: center;
+  }
+  .side .who {
+    color: var(--chrome-muted);
   }
   .grow {
     flex: 1;
@@ -934,7 +1071,171 @@
   }
   main {
     overflow: auto;
-    padding: 30px 40px;
+    padding: 30px 40px 48px;
+  }
+  /* ------------------------------------------------ the desk (home) */
+  .hello {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px 24px;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 22px;
+  }
+  .hello h1 {
+    margin: 2px 0 0;
+  }
+  .quickacts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .newwrap {
+    position: relative;
+  }
+  .caretdown {
+    font-size: 10px;
+    opacity: 0.8;
+  }
+  .newmenu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 41;
+    display: flex;
+    flex-direction: column;
+    width: 300px;
+    padding: 6px;
+    background: var(--chrome);
+    border: 1px solid var(--chrome-line);
+    border-radius: var(--r-lg);
+    box-shadow: var(--sh-2);
+  }
+  .newmenu button {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 7px 10px;
+    text-align: left;
+    background: none;
+    border: 0;
+    border-radius: var(--r-md);
+    cursor: pointer;
+  }
+  .newmenu button:hover,
+  .newmenu button:focus-visible {
+    background: var(--hover);
+  }
+  .newmenu small {
+    color: var(--chrome-muted);
+    font-size: 12px;
+  }
+  .newmenu .all {
+    margin-top: 4px;
+    padding-top: 9px;
+    color: var(--accent-ink);
+    border-top: 1px solid var(--chrome-line);
+    border-radius: 0 0 var(--r-md) var(--r-md);
+  }
+  .block {
+    margin-top: 26px;
+  }
+  .block > .ui-eyebrow {
+    margin-bottom: 10px;
+  }
+  .recent,
+  .projcards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  .rcard,
+  .pcard {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    padding: 14px 16px;
+    color: var(--chrome-fg);
+    text-align: left;
+    cursor: pointer;
+    transition:
+      transform 0.12s,
+      border-color 0.12s,
+      box-shadow 0.12s;
+  }
+  .rcard:hover,
+  .pcard:hover {
+    border-color: color-mix(in srgb, var(--accent-ink) 55%, var(--chrome-line));
+    box-shadow: var(--sh-2);
+    transform: translateY(-1px);
+  }
+  .rcard.first {
+    border-top: 3px solid var(--claret);
+  }
+  .rtitle {
+    overflow: hidden;
+    font: 600 18px/1.2 var(--serif);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .rchips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-height: 18px;
+  }
+  .rmeta,
+  .rwhen,
+  .pcard small {
+    color: var(--chrome-muted);
+    font-size: 12px;
+  }
+  .rfoot {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-top: auto;
+    padding-top: 6px;
+  }
+  .rgo {
+    color: var(--accent-ink);
+    font-size: 12.5px;
+    font-weight: 600;
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+  .rcard.first .rgo,
+  .rcard:hover .rgo,
+  .rcard:focus-visible .rgo {
+    opacity: 1;
+  }
+  .pcard strong {
+    font-size: 15px;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1px;
+    margin-top: 18px;
+    overflow: hidden;
+    background: var(--chrome-line);
+    border: 1px solid var(--chrome-line);
+    border-radius: var(--r-lg);
+  }
+  .stats div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 16px;
+    background: var(--chrome);
+  }
+  .stats strong {
+    font: 600 20px var(--serif);
+  }
+  .stats span {
+    color: var(--chrome-muted);
+    font-size: 12px;
   }
   h1 {
     font: 500 28px var(--serif);
@@ -1019,19 +1320,10 @@
     flex-wrap: wrap;
     gap: 10px;
     margin: 18px 0 0;
-    padding: 12px 14px;
+    padding: 14px 16px;
     background: var(--chrome-2);
-    border-radius: 6px;
-  }
-  .make input,
-  .listhead input,
-  .settings input,
-  .settings select {
-    padding: 6px 10px;
     border: 1px solid var(--chrome-line);
-    border-radius: 4px;
-    background: var(--chrome);
-    color: var(--chrome-fg);
+    border-radius: var(--r-lg);
   }
   .make input {
     width: 320px;
@@ -1039,27 +1331,8 @@
   .error {
     color: var(--accent-ink);
   }
-  .primary {
-    background: var(--claret);
-    color: #f6efe4;
-    border: 0;
-    border-radius: 4px;
-    padding: 7px 16px;
-    cursor: pointer;
-  }
-  .primary:disabled {
-    opacity: 0.5;
-  }
-  .primary.wide {
-    width: 100%;
+  .preview .wide {
     margin-top: 12px;
-  }
-  .plain {
-    background: none;
-    border: 1px solid var(--chrome-line);
-    border-radius: 4px;
-    padding: 6px 12px;
-    cursor: pointer;
   }
   .plays {
     display: grid;

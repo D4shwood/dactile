@@ -223,3 +223,128 @@ textarea {
   outline: 2px solid var(--accent-ink);
   outline-offset: 1px;
 }
+
+/* ------------------------------------------------------------------ parts
+   The shapes every screen shares: corners, shadows, and the buttons,
+   fields, cards and chips drawn from them. A screen's own styles add to
+   these; they don't draw a button again. */
+
+:root {
+  --r-sm: 4px;
+  --r-md: 7px;
+  --r-lg: 12px;
+  --sh-1: 0 1px 2px rgba(0, 0, 0, 0.08), 0 1px 1px rgba(0, 0, 0, 0.04);
+  --sh-2: 0 6px 24px rgba(0, 0, 0, 0.14), 0 2px 6px rgba(0, 0, 0, 0.08);
+  /* What sits on the chrome: a card, a field. */
+  --raised: color-mix(in srgb, var(--chrome) 70%, #fff);
+  --hover: color-mix(in srgb, var(--chrome-fg) 7%, transparent);
+  --on: color-mix(in srgb, var(--accent-ink) 14%, transparent);
+}
+
+:root[data-theme="night"],
+:root[data-theme="dark"] {
+  --raised: color-mix(in srgb, var(--chrome) 88%, #fff);
+  --sh-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --sh-2: 0 8px 28px rgba(0, 0, 0, 0.55);
+}
+
+.ui-btn {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 5px 12px;
+  color: var(--chrome-fg);
+  font: 500 13px var(--sans);
+  white-space: nowrap;
+  background: var(--raised);
+  border: 1px solid var(--chrome-line);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    border-color 0.12s;
+}
+.ui-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--chrome-fg) 30%, var(--chrome-line));
+  background: color-mix(in srgb, var(--raised) 90%, var(--chrome-fg));
+}
+.ui-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.ui-btn.primary {
+  color: #fbf6ee;
+  background: var(--claret);
+  border-color: var(--claret);
+}
+.ui-btn.primary:hover:not(:disabled) {
+  background: var(--claret-deep);
+  border-color: var(--claret-deep);
+}
+.ui-btn.ghost {
+  background: none;
+  border-color: transparent;
+}
+.ui-btn.ghost:hover:not(:disabled) {
+  background: var(--hover);
+  border-color: transparent;
+}
+.ui-btn.small {
+  min-height: 26px;
+  padding: 3px 9px;
+  font-size: 12px;
+}
+.ui-btn.wide {
+  width: 100%;
+}
+
+.ui-field {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 30px;
+  padding: 5px 9px;
+  color: var(--chrome-fg);
+  font: 13px var(--sans);
+  background: var(--chrome);
+  border: 1px solid var(--chrome-line);
+  border-radius: var(--r-md);
+  user-select: text;
+}
+.ui-field:focus {
+  border-color: var(--accent-ink);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--on);
+}
+
+.ui-card {
+  background: var(--raised);
+  border: 1px solid var(--chrome-line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-1);
+}
+
+.ui-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  color: var(--chrome-muted);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  border: 1px solid var(--chrome-line);
+  border-radius: 999px;
+}
+.ui-chip.accent {
+  color: var(--accent-ink);
+  border-color: color-mix(in srgb, var(--accent-ink) 45%, transparent);
+}
+
+.ui-eyebrow {
+  margin: 0;
+  color: var(--chrome-muted);
+  font: 600 11px var(--sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}

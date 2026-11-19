@@ -4,6 +4,7 @@
   let {
     tr,
     folded,
+    slim,
     title,
     dirty,
     run,
@@ -18,6 +19,8 @@
   }: {
     tr: boolean;
     folded: boolean;
+    /// One row, the tabs as menus, instead of the ribbon.
+    slim: boolean;
     title: string;
     dirty: boolean;
     run: (a: Act) => void;
@@ -60,6 +63,8 @@
   }
 
   let tab = $state(1);
+  /// The slim bar's tabs, for where a menu opens.
+  let menuTabs: HTMLButtonElement[] = $state([]);
   /// Folded, a tab opens over the page until a button is pressed.
   let peek = $state(false);
   /// Alt pressed: "tabs" shows a letter on each tab, "btns" on each button.
@@ -87,8 +92,8 @@
       file();
       return;
     }
-    if (folded && tab === i) peek = !peek;
-    else peek = folded;
+    if ((folded || slim) && tab === i) peek = !peek;
+    else peek = folded || slim;
     tab = i;
   }
 
@@ -123,6 +128,12 @@
     // Alt with a key (Alt+N): a shortcut, not the letters.
     altAlone = false;
     if (e.altKey) return;
+    if (!tipMode && slim && peek && e.key === "Escape") {
+      peek = false;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
     if (!tipMode) return;
     if (e.key === "Escape") {
       tipMode = tipMode === "btns" ? "tabs" : "";
@@ -139,7 +150,7 @@
           file();
         } else {
           tab = i;
-          peek = folded;
+          peek = folded || slim;
           tipMode = "btns";
         }
       }
@@ -156,15 +167,16 @@
 
 <svelte:window onkeydown={onkey} {onkeyup} />
 
-<header class="ribbon" class:folded>
-  <div class="bar">
+{#snippet quickBtns()}
     <div class="quick">
       <button title={tr ? "Ana menü" : "Home"} onclick={() => run({ do: "key", id: "home" })}>⌂</button>
       <button title={tr ? "Geri" : "Back"} onclick={() => run({ do: "key", id: "back" })}>←</button>
       <button title={tr ? "Geri al" : "Undo"} onclick={() => run({ do: "key", id: "undo" })}>↶</button>
       <button title={tr ? "Yinele" : "Redo"} onclick={() => run({ do: "key", id: "redo" })}>↷</button>
     </div>
-    <div class="title">{title}{dirty ? " •" : ""}</div>
+{/snippet}
+
+{#snippet searchBox_()}
     <div class="search">
       <input
         bind:this={searchBox}
@@ -196,31 +208,9 @@
         </ul>
       {/if}
     </div>
-  </div>
+{/snippet}
 
-  <nav class="tabs">
-    {#each TABS as t, i}
-      <button
-        class:file={i === FILE_TAB}
-        class:on={i === tab && i !== FILE_TAB && (!folded || peek)}
-        onclick={() => choose(i)}
-      >
-        {name(t)}
-        {#if tipMode === "tabs"}<span class="tip">{tr ? t.tip[0] : t.tip[1]}</span>{/if}
-      </button>
-    {/each}
-    <button
-      class="fold"
-      title={folded ? (tr ? "Şeridi aç" : "Unfold") : tr ? "Şeridi katla (Ctrl+F1)" : "Fold (Ctrl+F1)"}
-      onclick={() => run({ do: "key", id: "fold" })}>{folded ? "⌄" : "⌃"}</button
-    >
-  </nav>
-
-  {#if !folded || peek}
-    <div class="groups" onwheel={(e) => (e.currentTarget.scrollLeft += e.deltaY)} class:over={folded} class:short={rowHeight < 76} style={`height:${rowHeight}px`}>
-      {#each TABS[tab].groups as grp, gi}
-        <section class="group" class:end={grp.end} class:shrinks={grp.shrinks}>
-          {#if grp.font}
+{#snippet fontRow()}
             <div class="fontrow">
               <select
                 class="font"
@@ -242,7 +232,99 @@
                 {#if size && !["10", "11", "13", "14"].includes(size)}<option value={size}>{size}</option>{/if}
               </select>
             </div>
-          {/if}
+{/snippet}
+
+{#if slim}
+  <header class="ribbon slim">
+    <div class="row">
+      {@render quickBtns()}
+      <nav class="menus">
+        {#each TABS as t, i}
+          <button
+            bind:this={menuTabs[i]}
+            class:file={i === FILE_TAB}
+            class:on={i === tab && peek && i !== FILE_TAB}
+            aria-haspopup={i === FILE_TAB ? undefined : "menu"}
+            aria-expanded={i === FILE_TAB ? undefined : i === tab && peek}
+            onclick={() => choose(i)}
+          >
+            {name(t)}
+            {#if tipMode === "tabs"}<span class="tip">{tr ? t.tip[0] : t.tip[1]}</span>{/if}
+          </button>
+        {/each}
+      </nav>
+      <div class="title">{title}{dirty ? " •" : ""}</div>
+      {@render searchBox_()}
+      <button
+        class="mode"
+        title={tr ? "Şeride geç: düğmeler sekmelerin altında" : "Switch to the ribbon: the buttons under the tabs"}
+        onclick={() => run({ do: "key", id: "toolbar" })}>▤</button
+      >
+    </div>
+    {#if peek && tab !== FILE_TAB}
+      <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+      <div class="scrim" onclick={() => (peek = false)}></div>
+      <div class="menu" role="menu" style:left="{menuTabs[tab]?.offsetLeft ?? 0}px">
+        {#each TABS[tab].groups as grp, gi}
+          <section>
+            <p class="ui-eyebrow">{name(grp)}</p>
+            {#if grp.font}{@render fontRow()}{/if}
+            <div class="items" class:icons={grp.icons}>
+              {#each grp.btns as btn, bi}
+                {@const n = TABS[tab].groups.slice(0, gi).reduce((s, x) => s + x.btns.length, 0) + bi}
+                <button
+                  role="menuitem"
+                  disabled={btn.act.do === "soon"}
+                  title={(btn.act.do === "soon" ? (tr ? "Yakında · " : "Soon · ") : "") + name(btn) + (btn.key ? ` (${btn.key})` : "")}
+                  onclick={() => press(btn)}
+                >
+                  <span class="icon">{btn.icon}</span>
+                  {#if !grp.icons}<span class="label">{name(btn)}</span>{#if btn.key}<kbd>{btn.key}</kbd>{/if}{/if}
+                  {#if tipMode === "btns"}<span class="tip">{btnTips[n]}</span>{/if}
+                </button>
+              {/each}
+            </div>
+          </section>
+        {/each}
+      </div>
+    {/if}
+  </header>
+{:else}
+<header class="ribbon" class:folded>
+  <div class="bar">
+    {@render quickBtns()}
+    <div class="title">{title}{dirty ? " •" : ""}</div>
+    {@render searchBox_()}
+  </div>
+
+  <nav class="tabs">
+    {#each TABS as t, i}
+      <button
+        class:file={i === FILE_TAB}
+        class:on={i === tab && i !== FILE_TAB && (!folded || peek)}
+        onclick={() => choose(i)}
+      >
+        {name(t)}
+        {#if tipMode === "tabs"}<span class="tip">{tr ? t.tip[0] : t.tip[1]}</span>{/if}
+      </button>
+    {/each}
+    <button
+      class="mode"
+      title={tr ? "İnce çubuğa geç: sekmeler menü olur" : "Switch to the slim bar: the tabs become menus"}
+      onclick={() => run({ do: "key", id: "toolbar" })}>▭</button
+    >
+    <button
+      class="fold"
+      title={folded ? (tr ? "Şeridi aç" : "Unfold") : tr ? "Şeridi katla (Ctrl+F1)" : "Fold (Ctrl+F1)"}
+      onclick={() => run({ do: "key", id: "fold" })}>{folded ? "⌄" : "⌃"}</button
+    >
+  </nav>
+
+  {#if !folded || peek}
+    <div class="groups" onwheel={(e) => (e.currentTarget.scrollLeft += e.deltaY)} class:over={folded} class:short={rowHeight < 76} style={`height:${rowHeight}px`}>
+      {#each TABS[tab].groups as grp, gi}
+        <section class="group" class:end={grp.end} class:shrinks={grp.shrinks}>
+          {#if grp.font}{@render fontRow()}{/if}
           <div class="btns" class:small={grp.small} class:icons={grp.icons}>
             {#each grp.btns as btn, bi}
               {@const n = TABS[tab].groups.slice(0, gi).reduce((s, x) => s + x.btns.length, 0) + bi}
@@ -277,8 +359,165 @@
     {/if}
   {/if}
 </header>
+{/if}
 
 <style>
+  /* The slim bar: one row on the chrome, the tabs open as menus. */
+  .slim {
+    z-index: 6;
+  }
+  /* Over the scrim: another tab opens its menu with one click. */
+  .slim .row {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 40px;
+    padding: 0 10px;
+  }
+  .slim .quick button {
+    color: var(--chrome-fg);
+  }
+  .slim .quick button:hover {
+    background: var(--hover);
+  }
+  .menus {
+    display: flex;
+    gap: 2px;
+  }
+  .menus button {
+    position: relative;
+    padding: 5px 10px;
+    color: var(--chrome-fg);
+    background: none;
+    border: 0;
+    border-radius: var(--r-md);
+    cursor: pointer;
+  }
+  .menus button:hover,
+  .menus button.on {
+    background: var(--hover);
+  }
+  .menus button.on {
+    color: var(--accent-ink);
+    font-weight: 600;
+  }
+  .menus button.file {
+    color: #f6efe4;
+    background: var(--claret);
+  }
+  .menus button.file:hover {
+    background: var(--claret-deep);
+  }
+  .slim .title {
+    color: var(--chrome-muted);
+  }
+  .slim .search input {
+    color: var(--chrome-fg);
+    background: var(--chrome-2);
+    border: 1px solid var(--chrome-line);
+    border-radius: var(--r-md);
+    height: 28px;
+  }
+  .slim .search .found {
+    top: 32px;
+  }
+  .mode {
+    width: 28px;
+    height: 26px;
+    padding: 0;
+    color: var(--chrome-muted);
+    background: none;
+    border: 0;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+  }
+  .mode:hover {
+    color: var(--accent-ink);
+    background: var(--hover);
+  }
+  .scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+  }
+  .menu {
+    position: absolute;
+    top: 38px;
+    z-index: 2;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    max-width: min(760px, calc(100vw - 20px));
+    max-height: calc(100vh - 60px);
+    padding: 10px;
+    overflow-y: auto;
+    background: var(--chrome);
+    border: 1px solid var(--chrome-line);
+    border-radius: var(--r-lg);
+    box-shadow: var(--sh-2);
+  }
+  .menu section {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 190px;
+  }
+  .menu .ui-eyebrow {
+    padding: 4px 8px 2px;
+  }
+  .menu .fontrow {
+    padding: 0 6px 4px;
+  }
+  .items {
+    display: flex;
+    flex-direction: column;
+  }
+  .items.icons {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .items button {
+    position: relative;
+    display: flex;
+    gap: 9px;
+    align-items: center;
+    padding: 5px 8px;
+    color: var(--chrome-fg);
+    font-size: 13px;
+    text-align: left;
+    background: none;
+    border: 0;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+  }
+  .items.icons button {
+    justify-content: center;
+    width: 34px;
+  }
+  .items button:hover:not(:disabled),
+  .items button:focus-visible {
+    background: var(--hover);
+  }
+  .items button:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+  .items .icon {
+    width: 18px;
+    color: var(--accent-ink);
+    font-size: 15px;
+    text-align: center;
+  }
+  .items .label {
+    flex: 1;
+    white-space: nowrap;
+  }
+  .items kbd {
+    color: var(--chrome-muted);
+    font: 11px var(--sans);
+  }
   .ribbon {
     position: relative;
     z-index: 5;
@@ -399,8 +638,11 @@
     color: #f6efe4;
     border-radius: 4px 4px 0 0;
   }
-  .tabs .fold {
+  .tabs .mode {
     margin-left: auto;
+    align-self: center;
+  }
+  .tabs .fold {
     color: var(--chrome-muted);
   }
   .groups {

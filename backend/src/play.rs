@@ -82,12 +82,15 @@ pub struct Settings {
     pub page_zoom: u16,
     pub ribbon_folded: bool,
     pub ribbon_height: u16,
+    pub toolbar: String,
     pub scene_list: bool,
     pub scene_list_width: u16,
     pub line_numbers: bool,
     pub pdf_width: u16,
     pub cover_last: std::collections::BTreeMap<String, String>,
     pub viewer: config::Viewer,
+    /// Plays opened lately, newest first.
+    pub recent: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -125,12 +128,14 @@ pub fn settings(cfg: &Config) -> Settings {
         page_zoom: cfg.page_zoom,
         ribbon_folded: cfg.ribbon_folded,
         ribbon_height: cfg.ribbon_height,
+        toolbar: cfg.toolbar.clone(),
         scene_list: cfg.scene_list,
         scene_list_width: cfg.scene_list_width,
         line_numbers: cfg.line_numbers,
         pdf_width: cfg.pdf_width,
         cover_last: cfg.cover_last.clone(),
         viewer: cfg.viewer.clone(),
+        recent: cfg.recent.clone(),
     }
 }
 
@@ -541,6 +546,13 @@ fn change(cfg: &mut Config, key: &str, value: &serde_json::Value) -> anyhow::Res
         "scene_list" => cfg.scene_list = value.as_bool().unwrap_or(true),
         "scene_list_width" => cfg.scene_list_width = value.as_u64().unwrap_or(0).min(1000) as u16,
         "line_numbers" => cfg.line_numbers = value.as_bool().unwrap_or(true),
+        "toolbar" => {
+            cfg.toolbar = match value.as_str() {
+                Some("slim") => "slim",
+                _ => "ribbon",
+            }
+            .into()
+        }
         "ribbon_height" => cfg.ribbon_height = value.as_u64().unwrap_or(0).min(400) as u16,
         "pdf_width" => cfg.pdf_width = value.as_u64().unwrap_or(0).min(4000) as u16,
         "cover_last" => {

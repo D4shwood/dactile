@@ -109,12 +109,15 @@ export interface Settings extends Look {
   lang: "tr" | "en";
   ribbon_folded: boolean;
   ribbon_height: number;
+  toolbar: "ribbon" | "slim";
   scene_list: boolean;
   scene_list_width: number;
   line_numbers: boolean;
   pdf_width: number;
   cover_last: Record<string, string>;
   viewer: Viewer;
+  /// Plays opened lately, newest first.
+  recent: string[];
 }
 
 /// A box of the PDF for a line: points from the page's top left.

@@ -140,6 +140,7 @@ export const TABS: Tab[] = [
       g("Görünüş", "Look", [
         b("Tema", "Theme", "◈", "F6", k("theme")),
         b("Şeridi katla", "Fold ribbon", "⌃", "Ctrl+F1", k("fold")),
+        b("İnce çubuk ya da şerit", "Slim bar or ribbon", "▭", "", k("toolbar")),
         // Last in its tab: the letters before it stay the terminal app's.
         b("Görünüş ayarları", "Appearance", "⚙", "", k("look")),
       ]),

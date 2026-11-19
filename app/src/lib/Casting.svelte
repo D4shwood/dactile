@@ -297,50 +297,76 @@
     margin-right: 6px;
   }
   button {
-    border: 1px solid var(--chrome-line);
-    background: var(--chrome);
+    min-height: 28px;
+    padding: 3px 11px;
     color: var(--chrome-fg);
-    border-radius: 4px;
-    padding: 3px 10px;
+    font-size: 13px;
+    background: var(--raised);
+    border: 1px solid var(--chrome-line);
+    border-radius: var(--r-md);
     cursor: pointer;
+    transition: background 0.12s;
+  }
+  button:hover:not(:disabled) {
+    background: var(--hover);
   }
   button:disabled {
     opacity: 0.5;
     cursor: default;
   }
   .primary,
-  .chip.on,
-  .tabs .on {
-    background: var(--claret);
+  .chip.on {
     color: #f6efe4;
+    background: var(--claret);
     border-color: var(--claret);
+  }
+  .primary:hover:not(:disabled),
+  .chip.on:hover:not(:disabled) {
+    background: var(--claret-deep);
+  }
+  .chip {
+    border-radius: 999px;
   }
   .castings {
     display: flex;
     gap: 4px;
   }
+  /* A segmented control: the view on show is raised out of the track. */
   .tabs {
     display: flex;
+    gap: 2px;
+    padding: 2px;
+    background: var(--chrome-2);
+    border-radius: var(--r-md);
   }
   .tabs button {
-    border-radius: 0;
+    min-height: 24px;
+    background: none;
+    border-color: transparent;
+    border-radius: 5px;
   }
-  .tabs button:first-child {
-    border-radius: 4px 0 0 4px;
-  }
-  .tabs button:last-child {
-    border-radius: 0 4px 4px 0;
+  .tabs .on {
+    color: var(--accent-ink);
+    font-weight: 600;
+    background: var(--chrome);
+    box-shadow: var(--sh-1);
   }
   .name {
     display: flex;
     gap: 4px;
   }
   input {
-    border: 1px solid var(--chrome-line);
-    border-radius: 4px;
-    padding: 3px 6px;
-    background: var(--chrome);
+    min-height: 28px;
+    padding: 3px 8px;
     color: var(--chrome-fg);
+    background: var(--chrome);
+    border: 1px solid var(--chrome-line);
+    border-radius: var(--r-md);
+  }
+  input:focus {
+    border-color: var(--accent-ink);
+    outline: none;
+    box-shadow: 0 0 0 3px var(--on);
   }
   .warn {
     color: var(--accent-ink);
@@ -375,9 +401,17 @@
     text-align: left;
   }
   th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
     font-weight: 600;
     font-size: 12px;
     color: var(--chrome-muted);
+    background: var(--chrome);
+    border-bottom: 1px solid var(--chrome-line);
+  }
+  tbody tr {
+    border-bottom: 1px solid color-mix(in srgb, var(--chrome-line) 60%, transparent);
   }
   .role {
     font-weight: 700;
@@ -468,7 +502,7 @@
     display: block;
     height: 10px;
     background: var(--claret);
-    border-radius: 2px;
+    border-radius: 999px;
   }
   .act {
     padding-top: 10px;

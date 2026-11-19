@@ -56,6 +56,9 @@ pub struct Config {
     pub ribbon_folded: bool,
     /// The ribbon's height in pixels, dragged by hand; 0 is its own.
     pub ribbon_height: u16,
+    /// The writer's commands: "ribbon", the tabs and their buttons, or
+    /// "slim", one row with the tabs as menus.
+    pub toolbar: String,
     /// The desktop app: the acts and scenes down the left of the writing.
     pub scene_list: bool,
     /// Its width in pixels, dragged by hand; 0 is its own.
@@ -172,6 +175,7 @@ impl Default for Config {
             pages: false,
             ribbon_folded: false,
             ribbon_height: 0,
+            toolbar: "ribbon".into(),
             scene_list: true,
             scene_list_width: 0,
             line_numbers: true,
