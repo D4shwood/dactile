@@ -854,7 +854,7 @@
       <Side {tr} tab={o.left} {doc} {page} bytes={size} {labels} choose={(tab) => choose({ left: tab })} go={(n) => jump(() => sheets?.go(n))} {follow} />
     {/if}
     <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_static_element_interactions -->
-    <div class="pages {mode}" class:invert={o?.invert} class:gray={o?.gray} class:dim={building} bind:this={host} tabindex="0" onpointerdown={ondown} {onwheel} {onscroll} oncontextmenu={(e) => present && e.preventDefault()}></div>
+    <div class="pages {mode}" class:invert={o?.invert} class:gray={o?.gray} class:dim={building} class:holding={!!glass} bind:this={host} tabindex="0" onpointerdown={ondown} {onwheel} {onscroll} oncontextmenu={(e) => present && e.preventDefault()}></div>
     {#if o?.right && sheets && !present}
       <div class="panel">
         <div class="tabs" role="tablist">
@@ -905,6 +905,9 @@
       style:height="{o.lens_size}px"
     >
       <canvas bind:this={glassCanvas}></canvas>
+      <!-- Where the pointer is: the pointer itself is hidden, so as not to
+           cover what is looked at. -->
+      <span class="focus"></span>
     </div>
   {/if}
   {#if band}
@@ -1144,6 +1147,34 @@
     width: 100%;
     height: 100%;
   }
+  .lens .focus {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 17px;
+    height: 17px;
+    transform: translate(-50%, -50%);
+    opacity: 0.45;
+  }
+  .lens .focus::before,
+  .lens .focus::after {
+    content: "";
+    position: absolute;
+    background: #000;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.8);
+  }
+  .lens .focus::before {
+    left: 7px;
+    top: 0;
+    width: 3px;
+    height: 17px;
+  }
+  .lens .focus::after {
+    left: 0;
+    top: 7px;
+    width: 17px;
+    height: 3px;
+  }
   .lens.invert canvas {
     filter: invert(1) hue-rotate(180deg);
   }
@@ -1205,6 +1236,9 @@
       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Ccircle cx='10' cy='10' r='7' fill='none' stroke='%23000' stroke-width='3'/%3E%3Ccircle cx='10' cy='10' r='7' fill='none' stroke='%23fff' stroke-width='1.5'/%3E%3Cpath d='M15 15l6 6' stroke='%23000' stroke-width='3'/%3E%3C/svg%3E")
         10 10,
       zoom-in;
+  }
+  .pages.magnify.holding {
+    cursor: none;
   }
   .pages.scroll {
     cursor: grab;
