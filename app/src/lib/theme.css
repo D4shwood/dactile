@@ -77,17 +77,24 @@
   color-scheme: dark;
 }
 
+/* Night: a matte black, no blue in it, and text that doesn't glare. */
 :root[data-theme="night"] {
-  --desk: #171b22;
-  --page: #1f2530;
-  --fg: #d6dbe4;
-  --muted: #8d96a8;
-  --faint: #4e576a;
-  --star: #e2c08d;
-  --name-ref: #c9b38a;
-  --heading: #d57f86;
-  --warn: #d79a5a;
-  --selection: #313c52;
+  --chrome: #151515;
+  --chrome-2: #202020;
+  --chrome-line: #2e2e2e;
+  --chrome-fg: #d2d0ca;
+  --chrome-muted: #8a8883;
+  --accent-ink: #d0898e;
+  --desk: #0d0d0d;
+  --page: #171717;
+  --fg: #cdcac2;
+  --muted: #8a8780;
+  --faint: #4a4844;
+  --star: #c9ad80;
+  --name-ref: #b9a986;
+  --heading: #c97c82;
+  --warn: #c98f55;
+  --selection: #36302b;
 }
 
 :root[data-theme="dark"] {

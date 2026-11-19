@@ -6,7 +6,7 @@ import type { Look } from "./api";
 export const THEMES: [string, string, string, string, string][] = [
   ["paper", "Kâğıt", "Paper", "#fbf8f1", "#221f1b"],
   ["sepia", "Sepya", "Sepia", "#f6ead2", "#3a2a1a"],
-  ["night", "Gece", "Night", "#1f2530", "#d6dbe4"],
+  ["night", "Gece", "Night", "#171717", "#cdcac2"],
   ["contrast", "Yüksek kontrast", "High contrast", "#ffffff", "#000000"],
   ["dark", "Koyu", "Dark", "#262624", "#e8e6dd"],
 ];
