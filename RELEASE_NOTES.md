@@ -55,6 +55,21 @@ a Turkish Hunspell dictionary.
 - New drafts, copies, renaming, the trash with an undo.
 - A play's settings: its pace, its dictionary, the play a draft came from.
 
+## New since 0.3.0-beta.1
+
+- Home and back at the top left, where Save was: home goes to the start
+  screen, back closes what is open over the play, then the play. Save stays
+  in the ribbon and on Ctrl+S.
+- The PDF's lens no longer has the pointer in its middle: a faint cross
+  marks the spot instead.
+- Closing the window saves first, and one command that fails stops no other.
+- PDF builds wait their turn, and a play's old versions thin out with time
+  instead of going all at once.
+- A backup that goes badly says so on the start screen.
+- Dactile Web, the same interface in a browser, now lives in this
+  repository: accounts by invitation, and shared projects whose plays are
+  written live, in turns or together. See `docs/web.md`.
+
 ## Fixed since 0.2.0-beta.6
 
 - Import gave two people the same alias when their names began alike, in
