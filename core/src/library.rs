@@ -7,6 +7,7 @@ use crate::lang::Lang;
 use crate::lex;
 use crate::outline::Outline;
 use crate::source;
+use crate::tex::unescape_text;
 use crate::timing;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -91,13 +92,17 @@ pub fn read(path: &Path, wpm: u32) -> Option<Play> {
     Some(Play {
         path: path.to_path_buf(),
         title: title_of(&text, path),
-        author: info::get(&text, "author").unwrap_or_default(),
+        author: info::get(&text, "author")
+            .map(|a| unescape_text(&a))
+            .unwrap_or_default(),
         acts: o.acts.len(),
         scenes: o.scenes.len(),
         secs: o.scenes.iter().map(|s| timing::scene_secs(s, wpm)).sum(),
         characters: cast.characters.len(),
         words: o.scenes.iter().map(|s| s.words).sum(),
-        draft: info::get(&text, "draft").filter(|d| !d.trim().is_empty()),
+        draft: info::get(&text, "draft")
+            .map(|d| unescape_text(&d))
+            .filter(|d| !d.trim().is_empty()),
         final_mode: info::is_final(&text),
         starred: cast
             .characters
@@ -119,7 +124,7 @@ pub fn read(path: &Path, wpm: u32) -> Option<Play> {
 /// The title on the cover's first line, or the file's name.
 pub fn title_of(text: &str, path: &Path) -> String {
     info::get(text, "title")
-        .map(|t| t.split("\\\\").next().unwrap_or("").trim().to_string())
+        .map(|t| unescape_text(t.split("\\\\").next().unwrap_or("").trim()))
         .filter(|t| !t.is_empty())
         .unwrap_or_else(|| {
             path.file_stem()
@@ -739,6 +744,19 @@ mod tests {
         }));
         crate::trash::restore(&moved).unwrap();
         assert!(b.exists() && d.join("b.pdf").exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn the_list_reads_values_as_typed() {
+        let t = "\\documentclass{tiyatro}\n\\title{Ada \\& Baran\\\\Kar}\n\\draft{Son \\#10}\n\\begin{document}\n\\end{document}\n";
+        assert_eq!(title_of(t, Path::new("x.tex")), "Ada & Baran");
+        let d = std::env::temp_dir().join(format!("dactile-typed-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let play = d.join("kar.tex");
+        std::fs::write(&play, t).unwrap();
+        let p = read(&play, 150).unwrap();
+        assert_eq!(p.draft.as_deref(), Some("Son #10"));
         let _ = std::fs::remove_dir_all(&d);
     }
 

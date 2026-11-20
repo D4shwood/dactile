@@ -318,7 +318,22 @@ textarea {
   box-shadow: 0 0 0 3px var(--on);
 }
 
+/* Long text never leaves its box: names, titles and drafts are the user's,
+   of any length. A card lets a long word break; a chip or a .ui-clip line
+   ends in "…" (give it a title for the whole). */
+body {
+  overflow-wrap: break-word;
+}
+.ui-clip {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ui-card {
+  min-width: 0;
+  overflow-wrap: anywhere;
   background: var(--raised);
   border: 1px solid var(--chrome-line);
   border-radius: var(--r-lg);
@@ -326,8 +341,12 @@ textarea {
 }
 
 .ui-chip {
-  display: inline-flex;
-  align-items: center;
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  line-height: 1.5;
   padding: 1px 8px;
   color: var(--chrome-muted);
   font-size: 11px;

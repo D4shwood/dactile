@@ -507,7 +507,7 @@
               <button class="ui-card rcard" class:first={i === 0} onclick={() => open(p.path)} oncontextmenu={(e) => rightClick(p, e)}>
                 <span class="rtitle">{p.title}</span>
                 <span class="rchips">
-                  {#if p.draft}<span class="ui-chip">{p.draft}</span>{/if}
+                  {#if p.draft}<span class="ui-chip" title={p.draft}>{p.draft}</span>{/if}
                   {#if pr}<span class="ui-chip accent">{pr.name}</span>{/if}
                   {#if p.book}<span class="ui-chip">{l("kitap", "book")}</span>{/if}
                 </span>
@@ -1183,6 +1183,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
+    min-width: 0;
     min-height: 18px;
   }
   .rmeta,

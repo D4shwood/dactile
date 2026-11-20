@@ -202,13 +202,13 @@
             <tr>
               <th></th>
               {#each r.roles as role (role.alias)}
-                <th class="col"><span>{role.name}</span>{#if role.actor}<small>{role.actor}</small>{/if}</th>
+                <th class="col" title={role.actor ? `${role.name} · ${role.actor}` : role.name}><span>{role.name}</span>{#if role.actor}<small>{role.actor}</small>{/if}</th>
               {/each}
             </tr>
           </thead>
           <tbody>
             {#each r.scenes as s, i (i)}
-              <tr onclick={() => go(s.at)} title={l("Sahneye git", "Go to the scene")}>
+              <tr onclick={() => go(s.at)} title={`${s.name} ${s.place}`}>
                 <td class="scene"><b>{s.name}</b> {s.place}</td>
                 {#each s.here as h, j (j)}
                   <td class="mark" class:speaks={h === 2} class:on={h === 1}>{h === 2 ? "●" : h === 1 ? "○" : "·"}</td>
@@ -455,15 +455,25 @@
     font-size: 12px;
     color: var(--chrome-fg);
   }
+  /* A long name or scene ends in "…": the table stays on the screen, the
+     whole of it on hover. */
   .grid .col span,
   .grid .col small {
     display: block;
+    max-width: 9em;
+    margin: 0 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .grid .col small {
     font-weight: 400;
     color: var(--chrome-muted);
   }
   .grid .scene {
+    max-width: 22em;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
   .mark {
