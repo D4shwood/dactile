@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ask } from "./ask.svelte";
   import { onDestroy, onMount, tick, untrack } from "svelte";
   import { getVersion } from "@tauri-apps/api/app";
   import { Annotation, Compartment, EditorState, type Extension } from "@codemirror/state";
@@ -376,12 +377,12 @@
         return true;
       }
       if (r.kind === "changed-elsewhere") {
-        const keep = confirm(
-          l(
-            "Oyun bu arada başka bir yerde değişmiş. Seninkini yazayım mı? (Öbürü geçmişte kalır.)",
-            "The play changed elsewhere meanwhile. Write yours? (The other stays in the history.)",
-          ),
-        );
+        const keep = await ask({
+          title: l("Oyun bu arada başka bir yerde değişmiş.", "The play changed elsewhere meanwhile."),
+          detail: l("Seninkini yazayım mı? Öbürü geçmişte kalır.", "Write yours? The other stays in the history."),
+          yes: l("Benimkini yaz", "Write mine"),
+          no: l("Yazma", "Don't"),
+        });
         return keep ? save(true) : false;
       }
     } catch (e) {

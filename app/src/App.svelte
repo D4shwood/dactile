@@ -4,6 +4,7 @@
   import { applyLook } from "./lib/look";
   import Start from "./lib/Start.svelte";
   import Writer from "./lib/Writer.svelte";
+  import Ask from "./lib/Ask.svelte";
 
   let home = $state<Home | null>(null);
   let opened = $state<Opened | null>(null);
@@ -50,6 +51,8 @@
 {:else if home}
   <Start {home} {tr} {open} {reload} />
 {/if}
+
+<Ask />
 
 {#if error}
   <div class="error" role="alert">

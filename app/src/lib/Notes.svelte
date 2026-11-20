@@ -1,6 +1,7 @@
 <script lang="ts">
   // Notes beside the play, from anyone: kept in `oyun.notlar.md` next to it
   // (core/src/notes.rs). Each finds its place by what it quotes.
+  import { ask } from "./ask.svelte";
   import type { NoteCard } from "./api";
 
   let {
@@ -243,9 +244,10 @@
             </button>
             <button
               class="danger"
-              onclick={(e) => {
+              onclick={async (e) => {
                 e.stopPropagation();
-                if (confirm(l("Bu not silinsin mi?", "Delete this note?"))) set(c.i, "delete");
+                if (await ask({ title: l("Bu not silinsin mi?", "Delete this note?"), yes: l("Sil", "Delete"), no: l("Vazgeç", "Cancel"), danger: true, at: e }))
+                  set(c.i, "delete");
               }}>{l("Sil", "Delete")}</button
             >
           </div>

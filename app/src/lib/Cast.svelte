@@ -1,6 +1,7 @@
 <script lang="ts">
   // Ctrl+O: the people of the play beside the page, as the terminal app's
   // cast panel lists them, with how many lines and words each one has.
+  import { ask } from "./ask.svelte";
   import type { CastEntry } from "./api";
 
   let {
@@ -118,9 +119,17 @@
               <button onclick={(e) => (e.stopPropagation(), (merging = !merging), (into = ""))}>{l("Birleştir…", "Merge…")}</button>
               <button
                 class="danger"
-                onclick={(e) => {
+                onclick={async (e) => {
                   e.stopPropagation();
-                  if (confirm(l(`\\${r.alias} silinsin mi?`, `Delete \\${r.alias}?`))) remove(r.alias);
+                  const yes = await ask({
+                    title: l(`\\${r.alias} silinsin mi?`, `Delete \\${r.alias}?`),
+                    detail: l("Replikleri yerinde kalır; geri almak için Ctrl+Z.", "Their lines stay; Ctrl+Z brings them back."),
+                    yes: l("Sil", "Delete"),
+                    no: l("Vazgeç", "Cancel"),
+                    danger: true,
+                    at: e,
+                  });
+                  if (yes) remove(r.alias);
                 }}>{l("Sil", "Delete")}</button
               >
             </div>

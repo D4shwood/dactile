@@ -2,6 +2,7 @@
   // In the browser, the signed-in person's own account: their name, their
   // address, their password, and a way out everywhere. The desktop never
   // shows this.
+  import { ask } from "./ask.svelte";
   import { api, type Account } from "./api";
 
   let { tr, renamed }: { tr: boolean; renamed: (name: string) => void } = $props();
@@ -15,7 +16,6 @@
   let again = $state("");
   /// What the last thing done said, and whether it went wrong.
   let said = $state<{ what: string; bad: boolean; where: string } | null>(null);
-  let arming = $state(false);
 
   async function load() {
     try {
@@ -67,12 +67,16 @@
       );
     });
 
-  async function outEverywhere() {
-    if (!arming) {
-      arming = true;
-      return;
-    }
-    await api.accountOut();
+  async function outEverywhere(e: MouseEvent) {
+    const yes = await ask({
+      title: l("Bütün cihazlardan çıkılsın mı?", "Sign out everywhere?"),
+      detail: l("Bu cihaz da çıkar; yeniden girmen gerekir.", "This device too; you sign in again."),
+      yes: l("Çık", "Sign out"),
+      no: l("Vazgeç", "Cancel"),
+      danger: true,
+      at: e,
+    });
+    if (yes) await api.accountOut();
   }
 </script>
 
@@ -135,9 +139,7 @@
     {#if said?.where === "password"}<p class:error={said.bad} class="said">{said.what}</p>{/if}
 
     <p class="out">
-      <button class:danger={arming} onclick={outEverywhere}>
-        {arming ? l("Emin misin? Bu cihaz da çıkar", "Sure? This device too") : l("Bütün cihazlardan çık", "Sign out everywhere")}
-      </button>
+      <button onclick={outEverywhere}>{l("Bütün cihazlardan çık", "Sign out everywhere")}</button>
     </p>
   </div>
 {:else if said}
@@ -183,9 +185,5 @@
   }
   .out {
     margin-top: 18px;
-  }
-  .danger {
-    color: var(--danger);
-    font-weight: 600;
   }
 </style>

@@ -4,6 +4,7 @@
   // left, tiles for a new play along the top, the plays below with a
   // preview of the one picked.
   import { untrack } from "svelte";
+  import { ask, notify, type Where } from "./ask.svelte";
   import { api, type Door, type Files, type Home, type Look, type PlayCard, type Preview, type Shown, type TemplateCard } from "./api";
   import FileList from "./FileList.svelte";
   import Import from "./Import.svelte";
@@ -212,13 +213,9 @@
   let form = $state<PlayForm | null>(null);
   /// To pick once the list has it.
   let want = $state<string | null>(null);
-  /// Delete pressed once, with the drafts that stay.
-  let arming = $state<number | null>(null);
-  let thrown = $state("");
 
   async function startForm(kind: PlayForm["kind"]) {
     const p = chosen!;
-    arming = null;
     const s =
       kind === "fork"
         ? await api.forkStart(p.path, p.draft, new Date().toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "numeric" }))
@@ -255,18 +252,30 @@
     }
   }
 
-  async function throwAway() {
-    const p = chosen!;
+  /// Plays to the trash, asked where it was asked for; one comes back with
+  /// Undo.
+  async function trash(paths: string[], at: Where) {
+    const one = paths.length === 1 ? everyPlay.find((p) => p.path === paths[0]) : undefined;
+    const drafts = one ? await api.playDrafts(one.path) : 0;
+    const yes = await ask({
+      title: one ? l(`«${one.title}» çöp kutusuna gitsin mi?`, `«${one.title}» to the trash?`) : l(`${paths.length} oyun çöp kutusuna gitsin mi?`, `${paths.length} plays to the trash?`),
+      detail: [drafts ? l(`Taslakları (${drafts}) yerinde kalır.`, `Its drafts (${drafts}) stay.`) : "", one ? l("Geri alınabilir.", "It can come back.") : ""].filter(Boolean).join(" "),
+      yes: l("Çöpe at", "To the trash"),
+      no: l("Vazgeç", "Cancel"),
+      danger: true,
+      at,
+    });
+    if (!yes) return;
     form = null;
-    if (arming === null) {
-      arming = await api.playDrafts(p.path);
-      return;
-    }
-    arming = null;
     try {
-      await api.playThrow(p.path);
-      thrown = p.title;
+      for (const path of paths) await api.playThrow(path);
+      picks = [];
       await reload();
+      notify(
+        one
+          ? { text: l(`«${one.title}» çöp kutusunda.`, `«${one.title}» is in the trash.`), action: { label: l("Geri al", "Undo"), run: restore }, at }
+          : { text: l(`${paths.length} oyun çöp kutusunda.`, `${paths.length} plays are in the trash.`), at },
+      );
     } catch (e) {
       error = String(e);
     }
@@ -277,19 +286,14 @@
   /// The paths chosen with Shift or Ctrl, past the one on view.
   let picks = $state<string[]>([]);
   let anchor = $state<string | null>(null);
-  /// The menu of a right click. Asking before the trash happens in it, where
-  /// the click was, not where the eye isn't: `ask` is how many drafts stay
-  /// (one play) or -1 (the chosen plays).
-  let menu = $state<{ x: number; y: number; ask?: number } | null>(null);
+  /// The menu of a right click.
+  let menu = $state<{ x: number; y: number } | null>(null);
   /// Asking the name of a book to gather the chosen plays under.
   let gathering = $state<string | null>(null);
-  let arming2 = $state(false);
   let working = $state("");
 
   function clickRow(p: PlayCard, e: MouseEvent) {
     form = null;
-    arming = null;
-    arming2 = false;
     gathering = null;
     if (e.shiftKey && anchor) {
       const a = plays.findIndex((x) => x.path === anchor);
@@ -313,7 +317,6 @@
       void choose(p);
     }
     form = null;
-    arming = null;
     menu = { x: Math.min(e.clientX, innerWidth - 230), y: Math.min(e.clientY, innerHeight - 300) };
   }
 
@@ -322,38 +325,6 @@
     menu = null;
     run();
   };
-
-  async function askTrash() {
-    const m = menu!;
-    m.ask = picks.length > 1 ? -1 : await api.playDrafts(chosen!.path);
-  }
-  function trashAsked() {
-    const many = menu?.ask === -1;
-    const drafts = menu?.ask ?? 0;
-    menu = null;
-    if (many) {
-      arming2 = true;
-      void throwPicks();
-    } else {
-      arming = drafts;
-      void throwAway();
-    }
-  }
-
-  async function throwPicks() {
-    if (!arming2) {
-      arming2 = true;
-      return;
-    }
-    arming2 = false;
-    try {
-      for (const path of picks) await api.playThrow(path);
-      picks = [];
-      await reload();
-    } catch (e) {
-      error = String(e);
-    }
-  }
 
   async function gather() {
     if (gathering === null) return;
@@ -386,7 +357,6 @@
     } catch (e) {
       error = String(e);
     }
-    thrown = "";
   }
 
   async function browse() {
@@ -624,12 +594,6 @@
           {#if error && !making}
             <p class="error">{error}</p>
           {/if}
-          {#if thrown}
-            <p class="undo">
-              {l(`«${thrown}» çöp kutusunda.`, `«${thrown}» is in the trash.`)}
-              <button class="ui-btn small" onclick={restore}>{l("Geri al", "Undo")}</button>
-            </p>
-          {/if}
           <div class="shelves" role="tablist">
             <button role="tab" aria-selected={shelf === "mine"} class:on={shelf === "mine"} onclick={() => (shelf = "mine")}>
               {l("Oyunlarım", "My plays")} <small>{home.plays.length - importedCount}</small>
@@ -670,8 +634,8 @@
                 <button class="ui-btn small" onclick={() => (gathering = null)}>{l("Vazgeç", "Cancel")}</button>
               {:else}
                 <button class="ui-btn small" onclick={() => (gathering = "")}>{l("Kitapta topla", "Gather in a book")}</button>
-                <button class="ui-btn small" onclick={throwPicks}>{arming2 ? l("Evet, çöpe at", "Yes, to the trash") : l("Çöpe at", "To the trash")}</button>
-                <button class="ui-btn small" onclick={() => ((picks = []), (arming2 = false))}>{l("Seçimi bırak", "Clear")}</button>
+                <button class="ui-btn small" onclick={(e) => trash(picks, e)}>{l("Çöpe at", "To the trash")}</button>
+                <button class="ui-btn small" onclick={() => (picks = [])}>{l("Seçimi bırak", "Clear")}</button>
               {/if}
             </div>
           {/if}
@@ -721,16 +685,8 @@
               <button class="ui-btn small" onclick={() => startForm("fork")} title={l("Bu hâlinden yeni bir taslak; hangi oyundan geldiğini hatırlar", "A new draft from it as it is; it remembers where it came from")}>{l("Yeni taslak", "New draft")}</button>
               <button class="ui-btn small" onclick={() => startForm("copy")}>{l("Kopya", "Copy")}</button>
               <button class="ui-btn small" onclick={() => startForm("rename")}>{l("Adını değiştir", "Rename")}</button>
-              <button class="ui-btn small" onclick={throwAway}>{l("Çöpe at", "To the trash")}</button>
+              <button class="ui-btn small" onclick={(e) => trash([chosen!.path], e)}>{l("Çöpe at", "To the trash")}</button>
             </div>
-            {/if}
-            {#if arming !== null}
-              <p class="undo">
-                {l("Çöp kutusuna gitsin mi?", "To the trash?")}
-                {#if arming}{l(`Taslakları (${arming}) yerinde kalır.`, `Its drafts (${arming}) stay.`)}{/if}
-                <button class="ui-btn small" onclick={throwAway}>{l("Evet", "Yes")}</button>
-                <button class="ui-btn small" onclick={() => (arming = null)}>{l("Vazgeç", "Cancel")}</button>
-              </p>
             {/if}
             {#if form}
               <form class="playform" onsubmit={(e) => (e.preventDefault(), void submitForm())}>
@@ -825,26 +781,11 @@
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="scrim" onclick={() => (menu = null)} oncontextmenu={(e) => (e.preventDefault(), (menu = null))}></div>
   <div class="context" role="menu" tabindex="-1" style:left="{menu.x}px" style:top="{menu.y}px" onkeydown={(e) => e.key === "Escape" && (menu = null)}>
-    {#if menu.ask !== undefined}
-      <div class="ask" role="alertdialog" aria-label={l("Çöp kutusuna gitsin mi?", "To the trash?")}>
-        <strong>
-          {menu.ask === -1
-            ? l(`${picks.length} oyun çöp kutusuna gitsin mi?`, `${picks.length} plays to the trash?`)
-            : l(`«${chosen.title}» çöp kutusuna gitsin mi?`, `«${chosen.title}» to the trash?`)}
-        </strong>
-        {#if menu.ask > 0}<small>{l(`Taslakları (${menu.ask}) yerinde kalır.`, `Its drafts (${menu.ask}) stay.`)}</small>{/if}
-        <small>{l("Çöp kutusundan geri alınabilir.", "It can come back from the trash.")}</small>
-        <span class="ask-row">
-          <!-- svelte-ignore a11y_autofocus -->
-          <button class="ui-btn small" autofocus onclick={() => (menu = null)}>{l("Vazgeç", "Cancel")}</button>
-          <button class="ui-btn small danger" onclick={trashAsked}>{l("Evet, çöpe at", "Yes, to the trash")}</button>
-        </span>
-      </div>
-    {:else if reader}
+    {#if reader}
       <button role="menuitem" onclick={pick(() => open(chosen!.path))}>{l("Aç", "Open")}</button>
     {:else if picks.length > 1}
       <button role="menuitem" onclick={pick(() => (gathering = ""))}>{l("Kitapta topla", "Gather in a book")}</button>
-      <button role="menuitem" onclick={askTrash}>{l(`${picks.length} oyunu çöpe at`, `${picks.length} plays to the trash`)}</button>
+      <button role="menuitem" onclick={(e) => ((menu = null), void trash(picks, e))}>{l(`${picks.length} oyunu çöpe at`, `${picks.length} plays to the trash`)}</button>
     {:else}
       {@const p = chosen}
       <button role="menuitem" onclick={pick(() => open(p.path))}>{l("Aç", "Open")}</button>
@@ -860,7 +801,7 @@
           {p.imported ? l("Oyunlarıma taşı", "Move to my plays") : l("İçe aktarılanlara taşı", "Move to imported")}
         </button>
       {/if}
-      <button role="menuitem" onclick={askTrash}>{l("Çöpe at", "To the trash")}</button>
+      <button role="menuitem" onclick={(e) => ((menu = null), void trash([p.path], e))}>{l("Çöpe at", "To the trash")}</button>
     {/if}
   </div>
 {/if}
@@ -883,37 +824,16 @@
     border-radius: 6px;
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
   }
-  .context > button {
+  .context button {
     all: unset;
     padding: 6px 10px;
     border-radius: 4px;
     cursor: pointer;
     font-size: 13px;
   }
-  .context > button:hover,
-  .context > button:focus-visible {
+  .context button:hover,
+  .context button:focus-visible {
     background: var(--chrome-line);
-  }
-  .ask {
-    display: grid;
-    gap: 6px;
-    max-width: 280px;
-    padding: 8px 10px;
-    font-size: 13px;
-    overflow-wrap: anywhere;
-  }
-  .ask small {
-    color: var(--chrome-muted);
-  }
-  .ask-row {
-    display: flex;
-    gap: 6px;
-    justify-content: flex-end;
-    margin-top: 4px;
-  }
-  .ask .danger {
-    color: var(--danger);
-    border-color: var(--danger);
   }
   .several {
     display: flex;
@@ -998,10 +918,6 @@
     flex-wrap: wrap;
     gap: 4px;
     margin-top: 8px;
-  }
-  .undo {
-    font-size: 13px;
-    margin: 8px 0;
   }
   .playform {
     display: flex;

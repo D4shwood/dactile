@@ -2,6 +2,7 @@
   // In the browser, for the site's owner: who has an account, who is
   // invited, and links for those mail doesn't reach. The desktop never
   // shows this.
+  import { ask } from "./ask.svelte";
   import { api, type People } from "./api";
 
   let { tr }: { tr: boolean } = $props();
@@ -15,7 +16,6 @@
   let mail = $state("");
   let name = $state("");
   /// Asked once more before someone is taken off.
-  let arming = $state("");
 
   async function load() {
     try {
@@ -56,12 +56,17 @@
       if (link?.key === to) link = null;
     });
 
-  async function remove(id: string) {
-    if (arming !== id) {
-      arming = id;
-      return;
-    }
-    arming = "";
+  async function remove(id: string, e: MouseEvent) {
+    const who = all?.people.find((p) => p.id === id)?.name || id;
+    const yes = await ask({
+      title: l(`${who} listeden çıkarılsın mı?`, `Remove ${who} from the list?`),
+      detail: l("Oyunları yerinde kalır.", "Their plays stay."),
+      yes: l("Çıkar", "Remove"),
+      no: l("Vazgeç", "Cancel"),
+      danger: true,
+      at: e,
+    });
+    if (!yes) return;
     await act(async () => {
       await api.personRemove(id);
       if (link?.key === id) link = null;
@@ -119,9 +124,7 @@
             <td class="does">
               <button onclick={() => reset(p.id)}>{l("Parola bağlantısı", "Password link")}</button>
               {#if p.role !== "owner"}
-                <button class:danger={arming === p.id} onclick={() => remove(p.id)}>
-                  {arming === p.id ? l("Emin misin?", "Sure?") : l("Çıkar", "Remove")}
-                </button>
+                <button onclick={(e) => remove(p.id, e)}>{l("Çıkar", "Remove")}</button>
               {/if}
             </td>
           </tr>
@@ -222,10 +225,6 @@
   input {
     font: inherit;
     padding: 5px 8px;
-  }
-  .danger {
-    color: var(--danger);
-    font-weight: 600;
   }
   .error {
     color: var(--danger);

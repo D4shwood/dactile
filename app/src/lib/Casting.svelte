@@ -6,6 +6,7 @@
   import { onMount } from "svelte";
   import { api, type CastingEdit, type CopyKind, type Roles } from "./api";
   import { WHO } from "./color";
+  import { ask } from "./ask.svelte";
 
   let {
     tr,
@@ -33,13 +34,24 @@
   /// A casting being named: new, or the one in use renamed.
   let naming = $state<"new" | "rename" | null>(null);
   let name = $state("");
-  let deleting = $state(false);
   /// The PDF or the folder last made, to open.
   let out = $state<string | null>(null);
   let busy = $state("");
 
   async function load() {
     r = await api.castingRoles(text());
+  }
+
+  async function deleteCasting(e: MouseEvent) {
+    const name = r?.castings[r.casting] ?? "";
+    const yes = await ask({
+      title: l(`"${name}" dağıtımı silinsin mi?`, `Delete the casting "${name}"?`),
+      yes: l("Sil", "Delete"),
+      no: l("Vazgeç", "Cancel"),
+      danger: true,
+      at: e,
+    });
+    if (yes) void edit({ kind: "delete" });
   }
 
   async function edit(e: CastingEdit) {
@@ -117,10 +129,6 @@
             <button class="primary">{naming === "new" ? l("Ekle", "Add") : l("Adlandır", "Rename")}</button>
             <button type="button" onclick={() => (naming = null)}>{l("Vazgeç", "Cancel")}</button>
           </form>
-        {:else if deleting}
-          <span class="warn">{l(`"${r.castings[r.casting]}" silinsin mi?`, `Delete "${r.castings[r.casting]}"?`)}</span>
-          <button class="primary" onclick={() => ((deleting = false), void edit({ kind: "delete" }))}>{l("Sil", "Delete")}</button>
-          <button onclick={() => (deleting = false)}>{l("Vazgeç", "Cancel")}</button>
         {:else}
           <button
             title={r.castings.length ? l("Şimdikinin kopyası olarak başlar", "Starts as a copy of this one") : ""}
@@ -128,7 +136,7 @@
           >
           <button onclick={() => ((naming = "rename"), (name = r?.castings[r.casting] ?? ""))}>{l("Adı", "Name")}</button>
           {#if r.castings.length}
-            <button onclick={() => (deleting = true)}>{l("Sil", "Delete")}</button>
+            <button onclick={deleteCasting}>{l("Sil", "Delete")}</button>
           {/if}
         {/if}
       {/if}
@@ -370,9 +378,6 @@
     border-color: var(--accent-ink);
     outline: none;
     box-shadow: 0 0 0 3px var(--on);
-  }
-  .warn {
-    color: var(--accent-ink);
   }
   .muted {
     color: var(--chrome-muted);
