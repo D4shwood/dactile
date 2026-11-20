@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { drag } from "./pointer";
   import { FILE_TAB, TABS, tips, type Act, type Btn } from "./ribbon";
 
   let {
@@ -44,21 +45,16 @@
   let dragged = $state(0);
   const rowHeight = $derived(dragged || height || OWN);
   function dragEdge(e: PointerEvent) {
-    const edge = e.currentTarget as HTMLElement;
     const startY = e.clientY;
     const from = rowHeight;
-    edge.setPointerCapture(e.pointerId);
-    const move = (m: PointerEvent) => {
-      dragged = Math.round(Math.min(HIGH, Math.max(LOW, from + m.clientY - startY)));
-    };
-    const up = () => {
-      edge.removeEventListener("pointermove", move);
-      edge.removeEventListener("pointerup", up);
-      if (dragged) resized(dragged);
-      dragged = 0;
-    };
-    edge.addEventListener("pointermove", move);
-    edge.addEventListener("pointerup", up);
+    drag(
+      e,
+      (m) => (dragged = Math.round(Math.min(HIGH, Math.max(LOW, from + m.clientY - startY)))),
+      () => {
+        if (dragged) resized(dragged);
+        dragged = 0;
+      },
+    );
     e.preventDefault();
   }
 

@@ -3,6 +3,7 @@
   // app's margin: a click goes there, the cursor's one is marked. It folds
   // away to a strip, an act folds its scenes, its edge is dragged wider, and
   // a scene or act is dragged to another place, as on the board.
+  import { drag } from "./pointer";
   import type { Card, Head } from "./api";
 
   let {
@@ -48,13 +49,12 @@
   // Folded acts, by their place among the acts: it stays while typing moves
   // their text.
   let folded = $state<number[]>([]);
-  const actOf = $derived(
-    heads.map((_, i) => {
-      let n = -1;
-      for (let j = 0; j <= i; j++) if (heads[j].depth === 0) n++;
-      return n;
-    }),
-  );
+  // Both made in one pass each time the headings change (every keystroke
+  // that moves text): the act each heading is in, and the card it is.
+  const actOf = $derived.by(() => {
+    let n = -1;
+    return heads.map((h) => (h.depth === 0 ? ++n : n));
+  });
   const shown = (i: number) => heads[i].depth === 0 || !folded.includes(actOf[i]);
   function fold(i: number) {
     const n = actOf[i];
@@ -63,18 +63,19 @@
 
   // ---------------------------------------------------------- dragging
 
-  /// The card a heading is: the last one starting at or before it.
-  function cardOf(h: Head): number {
+  /// The card each heading is: the last one starting at or before it. Both
+  /// lists run down the play, so one walk finds them all.
+  const cardOf = $derived.by(() => {
     let c = -1;
-    cards.forEach((card, j) => {
-      if (card.at <= h.from) c = j;
+    return heads.map((h) => {
+      while (c + 1 < cards.length && cards[c + 1].at <= h.from) c++;
+      return c;
     });
-    return c;
-  }
+  });
   let dragging = $state<number | null>(null);
   /// Where it would go: before this heading, or past the last one (-1).
   let over = $state<number | null>(null);
-  const placeOf = (i: number) => (i < 0 ? cards.length : cardOf(heads[i]));
+  const placeOf = (i: number) => (i < 0 ? cards.length : cardOf[i]);
   const can = (to: number) => dragging !== null && dragging >= 0 && to !== dragging && !!cards[dragging]?.places.includes(to);
 
   const zone = (i: number) => ({
@@ -99,21 +100,16 @@
   let dragged = $state(0);
   const shownWidth = $derived(dragged || width || OWN);
   function dragEdge(e: PointerEvent) {
-    const edge = e.currentTarget as HTMLElement;
     const startX = e.clientX;
     const from = shownWidth;
-    edge.setPointerCapture(e.pointerId);
-    const moveTo = (m: PointerEvent) => {
-      dragged = Math.round(Math.min(MOST, Math.max(LEAST, from + m.clientX - startX)));
-    };
-    const up = () => {
-      edge.removeEventListener("pointermove", moveTo);
-      edge.removeEventListener("pointerup", up);
-      if (dragged) resized(dragged);
-      dragged = 0;
-    };
-    edge.addEventListener("pointermove", moveTo);
-    edge.addEventListener("pointerup", up);
+    drag(
+      e,
+      (m) => (dragged = Math.round(Math.min(MOST, Math.max(LEAST, from + m.clientX - startX)))),
+      () => {
+        if (dragged) resized(dragged);
+        dragged = 0;
+      },
+    );
     e.preventDefault();
   }
 </script>
@@ -133,10 +129,10 @@
             class:on={i === here}
             class:hidden={h.hidden}
             class:over={over === i}
-            class:dragging={dragging !== null && dragging === cardOf(h)}
+            class:dragging={dragging !== null && dragging === cardOf[i]}
             draggable={!locked && cards.length > 0}
             ondragstart={(e) => {
-              dragging = cardOf(h);
+              dragging = cardOf[i];
               e.dataTransfer?.setData("text/plain", h.label);
               if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
             }}

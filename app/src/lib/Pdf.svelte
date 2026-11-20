@@ -1,6 +1,7 @@
 <script lang="ts">
   // The built PDF beside the page, drawn by pdf.js: the bars, the keys and
   // the mouse. The pages themselves are in pdf/sheets.ts.
+  import { drag } from "./pointer";
   import { onDestroy, onMount, tick, untrack } from "svelte";
   import * as pdfjs from "pdfjs-dist";
   import worker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
@@ -634,24 +635,6 @@
     else if (e.button === 4) forward();
     else return;
     e.preventDefault();
-  }
-
-  /// Follows one drag to its end.
-  function drag(e: PointerEvent, move: (m: PointerEvent) => void, up: (m: PointerEvent) => void) {
-    const el = e.currentTarget as HTMLElement;
-    // A pointer already gone cannot be captured: the drag still ends on its "up".
-    try {
-      el.setPointerCapture(e.pointerId);
-    } catch {}
-    const end = (m: PointerEvent) => {
-      el.removeEventListener("pointermove", move);
-      el.removeEventListener("pointerup", end);
-      el.removeEventListener("pointercancel", end);
-      up(m);
-    };
-    el.addEventListener("pointermove", move);
-    el.addEventListener("pointerup", end);
-    el.addEventListener("pointercancel", end);
   }
 
   let clicking = 0;

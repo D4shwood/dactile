@@ -5,6 +5,7 @@
   // preview of the one picked.
   import { untrack } from "svelte";
   import { ask, notify, type Where } from "./ask.svelte";
+  import { onScreen } from "./pointer";
   import { api, type Door, type Files, type Home, type Look, type PlayCard, type Preview, type Shown, type TemplateCard } from "./api";
   import FileList from "./FileList.svelte";
   import Import from "./Import.svelte";
@@ -317,7 +318,7 @@
       void choose(p);
     }
     form = null;
-    menu = { x: Math.min(e.clientX, innerWidth - 230), y: Math.min(e.clientY, innerHeight - 300) };
+    menu = { x: e.clientX, y: e.clientY };
   }
 
   /// A menu's choice: the menu goes, whatever it does.
@@ -780,7 +781,7 @@
 {#if menu && chosen}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="scrim" onclick={() => (menu = null)} oncontextmenu={(e) => (e.preventDefault(), (menu = null))}></div>
-  <div class="context" role="menu" tabindex="-1" style:left="{menu.x}px" style:top="{menu.y}px" onkeydown={(e) => e.key === "Escape" && (menu = null)}>
+  <div class="context" role="menu" tabindex="-1" use:onScreen style:left="{menu.x}px" style:top="{menu.y}px" onkeydown={(e) => e.key === "Escape" && (menu = null)}>
     {#if reader}
       <button role="menuitem" onclick={pick(() => open(chosen!.path))}>{l("Aç", "Open")}</button>
     {:else if picks.length > 1}

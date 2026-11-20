@@ -7,6 +7,7 @@
   import type { Look } from "./api";
   import { HARMONIES, PRESETS, WHO, fit, harmony, hex, palette, parseSeed, randomSeed, ratio, seedText, type Seed } from "./color";
   import { lookSeed } from "./look";
+  import { drag } from "./pointer";
 
   let { tr, look, set }: { tr: boolean; look: Look; set: <K extends keyof Look>(key: K, value: Look[K]) => void } = $props();
 
@@ -19,6 +20,9 @@
   const seed = $derived(draft ?? worn);
   const colours = $derived(palette(seed));
   const kept = $derived((look.saved_surprises ?? []).filter((s) => parseSeed(s)));
+  /// The ready themes' colours never change: made once.
+  const READY = PRESETS.map(([name, t, e, s]) => ({ name, t, e, p: palette(s) }));
+  const keptColours = $derived(kept.map((t) => ({ t, p: palette(parseSeed(t)!) })));
   let open = $state(false);
   const showBuilder = $derived(own || open);
 
@@ -96,14 +100,7 @@
       const p = pointer(m);
       show(what === "accent" ? { ...seed, accent: p.hue } : { ...seed, base: p.hue, warmth: +(Math.min(1, p.dist / DISC) * MOST_WARMTH).toFixed(3) });
     };
-    const up = () => {
-      svg!.removeEventListener("pointermove", move);
-      svg!.removeEventListener("pointerup", up);
-      if (draft) keep(draft);
-    };
-    svg!.setPointerCapture(e.pointerId);
-    svg!.addEventListener("pointermove", move);
-    svg!.addEventListener("pointerup", up);
+    drag(e, move, () => draft && keep(draft));
     move(e);
     e.preventDefault();
   }
@@ -140,8 +137,7 @@
 
 <div class="themes">
   <div class="presets" role="radiogroup" aria-label={l("Hazır temalar", "Ready themes")}>
-    {#each PRESETS as [name, t, e, s] (name)}
-      {@const p = palette(s)}
+    {#each READY as { name, t, e, p } (name)}
       <button class="card" class:on={look.theme === name} role="radio" aria-checked={look.theme === name} title={l(t, e)} onclick={() => wearPreset(name)}>
         <span class="sheet" style:background={p["--page"]} style:border-color={p["--chrome-line"]}>
           <span class="bar" style:background={p["--chrome"]}><i style:background={p["--claret"]}></i></span>
@@ -277,8 +273,7 @@
     <div class="kept">
       <span class="ui-eyebrow">{l("Kaydedilen temalar", "Saved themes")}</span>
       <div class="swatches">
-        {#each kept as t (t)}
-          {@const p = palette(parseSeed(t)!)}
+        {#each keptColours as { t, p } (t)}
           <span class="saved">
             <button
               class="mini"

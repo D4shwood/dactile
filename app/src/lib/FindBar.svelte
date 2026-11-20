@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { drag as dragPointer } from "./pointer";
   import {
     closeSearchPanel,
     findNext,
@@ -54,21 +55,13 @@
   }
   function drag(e: PointerEvent) {
     if ((e.target as HTMLElement).closest("button")) return;
-    const head = e.currentTarget as HTMLElement;
     const from = { ...at, px: e.clientX, py: e.clientY };
-    head.setPointerCapture(e.pointerId);
-    const move = (m: PointerEvent) => {
+    dragPointer(e, (m) => {
       at = {
         x: Math.min(innerWidth - 80, Math.max(-380, from.x + m.clientX - from.px)),
         y: Math.min(innerHeight - 40, Math.max(0, from.y + m.clientY - from.py)),
       };
-    };
-    const up = () => {
-      head.removeEventListener("pointermove", move);
-      head.removeEventListener("pointerup", up);
-    };
-    head.addEventListener("pointermove", move);
-    head.addEventListener("pointerup", up);
+    });
     e.preventDefault();
   }
   function go(cmd: (v: EditorView) => boolean) {

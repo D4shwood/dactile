@@ -28,6 +28,7 @@
   import CharacterFormView from "./CharacterForm.svelte";
   import Ribbon from "./Ribbon.svelte";
   import { PRESETS } from "./color";
+  import { drag as dragPointer } from "./pointer";
   import Keys from "./Keys.svelte";
   import Guide from "./Guide.svelte";
   import SceneList from "./SceneList.svelte";
@@ -111,26 +112,23 @@
   findLang.tr = untrack(() => tr);
 
   function dragPdf(e: PointerEvent) {
-    const edge = e.currentTarget as HTMLElement;
-    const body = edge.parentElement!;
-    edge.setPointerCapture(e.pointerId);
-    const move = (m: PointerEvent) => {
-      const box = body.getBoundingClientRect();
-      const most = Math.max(320, box.width - 360);
-      pdfDrag = Math.round(Math.min(most, Math.max(320, box.right - m.clientX)));
-    };
-    const up = () => {
-      edge.removeEventListener("pointermove", move);
-      edge.removeEventListener("pointerup", up);
-      if (pdfDrag) {
-        pdfWidth = pdfDrag;
-        api.set("pdf_width", pdfWidth);
-      }
-      pdfDrag = 0;
-      requestAnimationFrame(() => view.requestMeasure());
-    };
-    edge.addEventListener("pointermove", move);
-    edge.addEventListener("pointerup", up);
+    const body = (e.currentTarget as HTMLElement).parentElement!;
+    dragPointer(
+      e,
+      (m) => {
+        const box = body.getBoundingClientRect();
+        const most = Math.max(320, box.width - 360);
+        pdfDrag = Math.round(Math.min(most, Math.max(320, box.right - m.clientX)));
+      },
+      () => {
+        if (pdfDrag) {
+          pdfWidth = pdfDrag;
+          api.set("pdf_width", pdfWidth);
+        }
+        pdfDrag = 0;
+        requestAnimationFrame(() => view.requestMeasure());
+      },
+    );
     e.preventDefault();
   }
 
@@ -494,8 +492,8 @@
   // ------------------------------------------------------------ the cast
 
   async function refreshCast() {
-    castRows = await api.cast(view.state.doc.toString(), byLines);
-    castOthers = await api.castOthers(view.state.doc.toString());
+    const text = view.state.doc.toString();
+    [castRows, castOthers] = await Promise.all([api.cast(text, byLines), api.castOthers(text)]);
   }
 
   async function openCast(on = side !== "cast") {
