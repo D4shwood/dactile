@@ -66,8 +66,11 @@ The rest of this page was written for Dactile Light, now retired, and
 describes its keys and screens; Dactile has the same plays and tools on a
 page, with a ribbon and the mouse. On its start
 screen Shift and Ctrl choose several plays and a right click gives a play's
-options. Its themes are the same five, with a sixth button, Surprise me, that
-makes new colours at every press.
+options. Its themes are made by colour theory: eight ready ones, and your
+own on a colour wheel, where the accent's hue, a harmony (analogous,
+complementary, triadic…) and the neutrals' warmth make every colour, each
+text kept readable on its ground. Each character's name can have a colour
+of its own, the same on the page and in the casting.
 
 ```sh
 dactile-light                   # the home screen: your plays, a new one, settings

@@ -193,7 +193,7 @@
     font-weight: 400;
   }
   .warn {
-    color: var(--warn, #b05820);
+    color: var(--warn);
   }
   .does {
     text-align: right;
@@ -224,10 +224,10 @@
     padding: 5px 8px;
   }
   .danger {
-    color: #a33;
+    color: var(--danger);
     font-weight: 600;
   }
   .error {
-    color: #a33;
+    color: var(--danger);
   }
 </style>

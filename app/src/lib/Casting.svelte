@@ -5,6 +5,7 @@
   // never printed; out of it come the table and each actor's copy.
   import { onMount } from "svelte";
   import { api, type CastingEdit, type CopyKind, type Roles } from "./api";
+  import { WHO } from "./color";
 
   let {
     tr,
@@ -89,6 +90,8 @@
     }
   }
 
+  /// Each role's colour, as the page shows its name: by its place in the cast.
+  const whoOf = $derived(new Map((r?.roles ?? []).map((x, i) => [x.alias, `var(--who-${i % WHO})`])));
   const most = $derived(r ? Math.max(1, ...r.roles.map((x) => x.words)) : 1);
   const byWords = $derived(r ? [...r.roles].sort((a, b) => b.words - a.words) : []);
   onMount(load);
@@ -161,7 +164,7 @@
         <tbody>
           {#each r.roles as role (role.alias)}
             <tr>
-              <td class="role">{role.name}</td>
+              <td class="role" style:--who={whoOf.get(role.alias)}>{role.name}</td>
               <td>
                 <input
                   class="actor"
@@ -202,7 +205,7 @@
             <tr>
               <th></th>
               {#each r.roles as role (role.alias)}
-                <th class="col" title={role.actor ? `${role.name} · ${role.actor}` : role.name}><span>{role.name}</span>{#if role.actor}<small>{role.actor}</small>{/if}</th>
+                <th class="col" style:--who={whoOf.get(role.alias)} title={role.actor ? `${role.name} · ${role.actor}` : role.name}><span>{role.name}</span>{#if role.actor}<small>{role.actor}</small>{/if}</th>
               {/each}
             </tr>
           </thead>
@@ -233,12 +236,12 @@
           <tbody>
             {#each byWords as role (role.alias)}
               <tr>
-                <td class="role">{role.name}</td>
+                <td class="role" style:--who={whoOf.get(role.alias)}>{role.name}</td>
                 <td class="num">{role.lines} {l("replik", "lines")}</td>
                 <td class="num">{role.words} {l("kelime", "words")}</td>
                 <td class="num">{role.time}</td>
                 <td class="num">{tr ? `%${role.share}` : `${role.share}%`}</td>
-                <td class="bar"><span style:width="{(role.words / most) * 100}%"></span></td>
+                <td class="bar" style:--who={whoOf.get(role.alias)}><span style:width="{(role.words / most) * 100}%"></span></td>
               </tr>
             {/each}
           </tbody>
@@ -316,7 +319,7 @@
   }
   .primary,
   .chip.on {
-    color: #f6efe4;
+    color: var(--on-claret);
     background: var(--claret);
     border-color: var(--claret);
   }
@@ -417,6 +420,11 @@
     font-weight: 700;
     letter-spacing: 0.03em;
   }
+  /* The characters' own colours, as on the page, when the settings say so. */
+  :global(:root[data-who="on"]) .role,
+  :global(:root[data-who="on"]) .grid .col span {
+    color: var(--who, inherit);
+  }
   .roles tbody tr:hover,
   .grid tbody tr:hover,
   .go:hover {
@@ -508,11 +516,15 @@
   .bar {
     width: 220px;
   }
+  /* A share is data, not something to press: not the accent. */
   .bar span {
     display: block;
     height: 10px;
-    background: var(--claret);
+    background: var(--chrome-muted);
     border-radius: 999px;
+  }
+  :global(:root[data-who="on"]) .bar span {
+    background: var(--who, var(--chrome-muted));
   }
   .act {
     padding-top: 10px;

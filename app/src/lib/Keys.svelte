@@ -100,17 +100,19 @@
   .keyboard,
   .legend,
   .about {
-    --file: var(--claret, #8a3a25);
-    --edit: #b9a27a;
-    --panel: #6f93b8;
-    --view: #86a86e;
-    --write: #d39a3f;
+    /* Kinds of keys are categories: the theme's character colours, one
+       lightness, hues apart. */
+    --file: var(--who-0);
+    --edit: var(--who-1);
+    --panel: var(--who-2);
+    --view: var(--who-3);
+    --write: var(--who-4);
   }
-  .file { --c: #b4553a; }
-  .edit { --c: #b9a27a; }
-  .panel { --c: #6f93b8; }
-  .view { --c: #86a86e; }
-  .write { --c: #d39a3f; }
+  .file { --c: var(--who-0); }
+  .edit { --c: var(--who-1); }
+  .panel { --c: var(--who-2); }
+  .view { --c: var(--who-3); }
+  .write { --c: var(--who-4); }
   .keyboard {
     display: flex;
     flex-direction: column;

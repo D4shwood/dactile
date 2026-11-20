@@ -125,7 +125,7 @@
   }
   .primary {
     background: var(--claret);
-    color: #f6efe4;
+    color: var(--on-claret);
     border-color: var(--claret);
   }
 </style>

@@ -66,8 +66,11 @@ Bu sayfanın geri kalanı artık emekli olan Dactile Light için yazıldı ve
 onun tuşlarını ve ekranlarını anlatır; Dactile
 aynı oyunları ve araçları bir sayfa üstünde, şerit ve fareyle sunar. Başlangıç
 ekranında Shift ve Ctrl birkaç oyunu seçer, sağ tık oyunun seçeneklerini açar.
-Temaları aynı beş temadır; altıncı düğme Sürpriz yap, her basışta yeni renkler
-üretir.
+Temaları renk kuramıyla yapılır: sekiz hazır tema, bir de renk çarkında
+kendi teman. Vurgunun tonu, bir uyum (komşu, tamamlayıcı, üçlü…) ve
+zeminin sıcaklığı bütün renkleri üretir; her yazı kendi zemininde okunur
+kalır. Her kişinin adı kendi renginde olabilir; sayfada da dağılımda da
+aynı renk.
 
 ```sh
 dactile-light                   # ana ekran: oyunların, yeni oyun, ayarlar

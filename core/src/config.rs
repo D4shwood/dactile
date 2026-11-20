@@ -30,11 +30,13 @@ pub struct Config {
     /// The play on a paper page; dark otherwise. Kept for older settings:
     /// `theme` says more.
     pub paper: bool,
-    /// paper, sepia, night, contrast, dark or surprise; empty in older settings.
+    /// A ready theme's name (`color.ts` PRESETS), or `surprise` for the
+    /// user's own; empty in older settings.
     pub theme: String,
-    /// The desktop app's surprise theme: a hue and `dark` or `light`.
+    /// The user's own theme: a seed as `color.ts` keeps it (older ones: a
+    /// hue and `dark` or `light`).
     pub surprise: String,
-    /// Surprises kept to come back to, in the same form.
+    /// Own themes kept to come back to, in the same form.
     pub saved_surprises: Vec<String>,
     /// One of `ACCENTS`.
     pub accent: String,
@@ -50,6 +52,8 @@ pub struct Config {
     /// Typing, scrolling and windows move; off, everything appears at once.
     /// The cursor blinks either way.
     pub animations: bool,
+    /// Each character's name on the page in a colour of its own.
+    pub character_colors: bool,
     /// Page view: A4-shaped sheets.
     pub pages: bool,
     /// The writer's ribbon folded to its tabs.
@@ -172,6 +176,7 @@ impl Default for Config {
             page_bg: String::new(),
             page_fg: String::new(),
             animations: true,
+            character_colors: true,
             pages: false,
             ribbon_folded: false,
             ribbon_height: 0,

@@ -264,9 +264,9 @@
     border-radius: 6px;
   }
   .mode button.on {
-    background: var(--accent, #8a2a2a);
-    border-color: var(--accent, #8a2a2a);
-    color: #fff;
+    background: var(--claret);
+    border-color: var(--claret);
+    color: var(--on-claret);
   }
   .mode small {
     flex-basis: 100%;
@@ -294,10 +294,10 @@
     margin-top: 8px;
   }
   .danger {
-    color: #a33;
+    color: var(--danger);
     font-weight: 600;
   }
   .error {
-    color: #a33;
+    color: var(--danger);
   }
 </style>

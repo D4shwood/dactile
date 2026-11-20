@@ -307,6 +307,6 @@
   }
   mark {
     color: inherit;
-    background: color-mix(in srgb, var(--accent-ink, #c96) 40%, transparent);
+    background: color-mix(in srgb, var(--accent-ink) 40%, transparent);
   }
 </style>

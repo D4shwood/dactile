@@ -404,7 +404,7 @@
     font-weight: 600;
   }
   .menus button.file {
-    color: #f6efe4;
+    color: var(--on-claret);
     background: var(--claret);
   }
   .menus button.file:hover {
@@ -531,7 +531,7 @@
     height: 34px;
     padding: 0 10px;
     background: var(--claret);
-    color: #f6efe4;
+    color: var(--on-claret);
   }
   .quick {
     display: flex;
@@ -635,7 +635,7 @@
   }
   .tabs button.file {
     background: var(--claret-deep);
-    color: #f6efe4;
+    color: var(--on-claret);
     border-radius: 4px 4px 0 0;
   }
   .tabs .mode {
@@ -804,8 +804,8 @@
     position: absolute;
     right: 2px;
     top: 2px;
-    background: #2a2520;
-    color: #f6efe4;
+    background: var(--chrome-fg);
+    color: var(--chrome);
     font-size: 11px;
     font-weight: 700;
     padding: 0 5px;

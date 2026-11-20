@@ -969,7 +969,7 @@
   }
   .error {
     padding: 6px 16px;
-    color: #f6efe4;
+    color: var(--on-claret);
     background: var(--claret);
     font-size: 13px;
   }
@@ -1031,7 +1031,7 @@
   .primary,
   .primary:hover:not(:disabled) {
     background: var(--claret);
-    color: #f6efe4;
+    color: var(--on-claret);
     border-color: var(--claret);
   }
   .primary:hover:not(:disabled) {

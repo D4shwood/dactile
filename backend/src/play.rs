@@ -79,6 +79,7 @@ pub struct Settings {
     pub line_spacing: u16,
     pub page_width: u16,
     pub animations: bool,
+    pub character_colors: bool,
     pub page_zoom: u16,
     pub ribbon_folded: bool,
     pub ribbon_height: u16,
@@ -125,6 +126,7 @@ pub fn settings(cfg: &Config) -> Settings {
         line_spacing: cfg.line_spacing,
         page_width: cfg.page_width,
         animations: cfg.animations,
+        character_colors: cfg.character_colors,
         page_zoom: cfg.page_zoom,
         ribbon_folded: cfg.ribbon_folded,
         ribbon_height: cfg.ribbon_height,
@@ -585,6 +587,7 @@ fn change(cfg: &mut Config, key: &str, value: &serde_json::Value) -> anyhow::Res
         "line_spacing" => cfg.line_spacing = number(155, 120, 220),
         "page_width" => cfg.page_width = number(44, 32, 64),
         "animations" => cfg.animations = value.as_bool().unwrap_or(true),
+        "character_colors" => cfg.character_colors = value.as_bool().unwrap_or(true),
         _ => anyhow::bail!("no setting {key}"),
     }
     cfg.normal();
@@ -651,6 +654,8 @@ mod tests {
         assert_eq!(c.page_font, "Noto Serif");
         change(&mut c, "animations", &json!(false)).unwrap();
         assert!(!settings(&c).animations);
+        change(&mut c, "character_colors", &json!(false)).unwrap();
+        assert!(!settings(&c).character_colors);
         let mut v = serde_json::to_value(config::Viewer::default()).unwrap();
         v["columns"] = json!(0);
         v["lens_size"] = json!(5000);

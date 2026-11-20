@@ -72,9 +72,9 @@ export interface TemplateCard {
 /// How the app and its page look.
 export interface Look {
   theme: string;
-  /// The surprise theme's hue and brightness, as `newSurprise` makes them.
+  /// The user's own theme, a seed as `color.ts` keeps it.
   surprise: string;
-  /// Surprises kept to come back to.
+  /// Own themes kept to come back to.
   saved_surprises: string[];
   accent: string;
   page_font: string;
@@ -83,6 +83,7 @@ export interface Look {
   page_width: number;
   page_zoom: number;
   animations: boolean;
+  character_colors: boolean;
 }
 
 export interface PartLook {

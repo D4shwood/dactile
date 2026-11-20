@@ -1,6 +1,10 @@
-/* Dactile's look: claret and beige, and the page in the themes the terminal
-   app has (tui/src/tui/theme.rs). The chrome around the page is the same
-   warm grey in each; the page takes the theme. */
+/* Dactile's look. Every colour here is the Paper theme's, for the first
+   moment: look.ts puts the chosen theme's in their place, made by color.ts
+   from a seed (its head says how). Use the roles, never a colour of your
+   own: --page/--fg/--muted/--faint for the play, --chrome* for what is
+   around it, --accent-ink and --claret only for what acts, is picked or
+   says "you are here", --heading, --star, --name-ref and --who-N for the
+   play's parts, --warn and --ok for what they say. */
 
 :root {
   --claret: #b0444a;
@@ -26,6 +30,10 @@
   --name-ref: #5e4a34;
   --heading: #932c34;
   --warn: #b05820;
+  --ok: #2f6f4f;
+  --danger: #a3302a;
+  --on-claret: #fbf6ee;
+  --link: #a03a40;
   --selection: #d2c4a6;
 
   --serif: "EB Garamond", "Libertinus Serif", "Noto Serif", "DejaVu Serif", Georgia, serif;
@@ -39,147 +47,6 @@
   --page-width: 44;
 
   color-scheme: light;
-}
-
-:root[data-theme="sepia"] {
-  --page: #f6ead2;
-  --desk: #d8c8a8;
-  --fg: #3a2a1a;
-  --muted: #7a6246;
-  --faint: #b29a78;
-  --star: #7a3b12;
-  --name-ref: #6b4a2a;
-  --heading: #8a3324;
-  --selection: #ddc596;
-}
-
-:root[data-theme="contrast"] {
-  --page: #ffffff;
-  --desk: #c8c8c8;
-  --fg: #000000;
-  --muted: #303030;
-  --faint: #707070;
-  --star: #000000;
-  --name-ref: #1a1a1a;
-  --heading: #a00010;
-  --warn: #b04000;
-  --selection: #ffd84d;
-}
-
-:root[data-theme="night"],
-:root[data-theme="dark"] {
-  --chrome: #22252b;
-  --chrome-2: #2b2f37;
-  --chrome-line: #3a3f4a;
-  --chrome-fg: #e2e4e8;
-  --chrome-muted: #9198a5;
-  --accent-ink: #e08f94;
-  color-scheme: dark;
-}
-
-/* Night: a matte black, no blue in it, and text that doesn't glare. */
-:root[data-theme="night"] {
-  --chrome: #151515;
-  --chrome-2: #202020;
-  --chrome-line: #2e2e2e;
-  --chrome-fg: #d2d0ca;
-  --chrome-muted: #8a8883;
-  --accent-ink: #d0898e;
-  --desk: #0d0d0d;
-  --page: #171717;
-  --fg: #cdcac2;
-  --muted: #8a8780;
-  --faint: #4a4844;
-  --star: #c9ad80;
-  --name-ref: #b9a986;
-  --heading: #c97c82;
-  --warn: #c98f55;
-  --selection: #36302b;
-}
-
-:root[data-theme="dark"] {
-  --chrome: #1f1e1d;
-  --chrome-2: #30302e;
-  --chrome-line: #3e3e38;
-  --chrome-fg: #faf9f5;
-  --chrome-muted: #a3a198;
-  --desk: #1f1e1d;
-  --page: #262624;
-  --fg: #e8e6dd;
-  --muted: #9c9a92;
-  --faint: #5f5d56;
-  --star: #e3cdb0;
-  --name-ref: #d8cfc0;
-  --heading: #e08f94;
-  --warn: #e0a458;
-  --selection: #4a3a32;
-}
-
-/* The accents: for fills and light pages, and as ink on dark ones. Each
-   reads at 4.5:1 on what it stands on. */
-:root[data-accent="blue"] {
-  --claret: #2f5f9e;
-  --accent-ink: #2f5f9e;
-  --claret-deep: #24497a;
-  --heading: #2f5f9e;
-}
-
-:root[data-theme="night"][data-accent="blue"],
-:root[data-theme="dark"][data-accent="blue"] {
-  --accent-ink: #8ab4e8;
-  --heading: #8ab4e8;
-}
-
-:root[data-accent="green"] {
-  --claret: #2f6f4f;
-  --accent-ink: #2f6f4f;
-  --claret-deep: #245539;
-  --heading: #2f6f4f;
-}
-
-:root[data-theme="night"][data-accent="green"],
-:root[data-theme="dark"][data-accent="green"] {
-  --accent-ink: #7cc4a0;
-  --heading: #7cc4a0;
-}
-
-:root[data-accent="plum"] {
-  --claret: #7a3f8a;
-  --accent-ink: #7a3f8a;
-  --claret-deep: #5f2f6c;
-  --heading: #7a3f8a;
-}
-
-:root[data-theme="night"][data-accent="plum"],
-:root[data-theme="dark"][data-accent="plum"] {
-  --accent-ink: #c79ad6;
-  --heading: #c79ad6;
-}
-
-:root[data-accent="ochre"] {
-  --claret: #8a5a10;
-  --accent-ink: #8a5a10;
-  --claret-deep: #6b450c;
-  --heading: #8a5a10;
-}
-
-:root[data-theme="night"][data-accent="ochre"],
-:root[data-theme="dark"][data-accent="ochre"] {
-  --accent-ink: #d9a95a;
-  --heading: #d9a95a;
-}
-
-:root[data-accent="clay"] {
-  --claret: #963f20;
-  --accent-ink: #963f20;
-  --claret-deep: #7a3218;
-  --heading: #963f20;
-}
-
-:root[data-theme="night"][data-accent="clay"],
-:root[data-theme="dark"][data-accent="clay"] {
-  --accent-ink: #d97757;
-  --heading: #d97757;
 }
 
 /* Everything appears at once; the cursor still blinks. */
@@ -241,9 +108,7 @@ textarea {
   --on: color-mix(in srgb, var(--accent-ink) 14%, transparent);
 }
 
-:root[data-theme="night"],
-:root[data-theme="dark"] {
-  --raised: color-mix(in srgb, var(--chrome) 88%, #fff);
+:root[data-mode="dark"] {
   --sh-1: 0 1px 2px rgba(0, 0, 0, 0.5);
   --sh-2: 0 8px 28px rgba(0, 0, 0, 0.55);
 }

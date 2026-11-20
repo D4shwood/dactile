@@ -195,7 +195,7 @@
     padding: 9px 12px;
     border-radius: var(--r-md);
     background: var(--claret);
-    color: #f6efe4;
+    color: var(--on-claret);
     cursor: grab;
     margin-bottom: 4px;
   }

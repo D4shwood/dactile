@@ -6,6 +6,7 @@
 // cursor leaves it. Typed characters are escaped as the terminal app does
 // (core/src/buffer.rs), so a % prints as a %.
 
+import { WHO } from "./color";
 import { EditorState, RangeSet, StateEffect, StateField, type Extension, type Range } from "@codemirror/state";
 import {
   Decoration,
@@ -286,15 +287,21 @@ function decorate(state: EditorState): DecorationSet {
     if (head < from) out.push(Decoration.replace({ block: true }).range(Math.max(from - 1, 0), v.tail.end));
   }
 
+  // Each character's colour, by their place in the cast: a new one leaves
+  // the others' colours be (color.ts says how they are made).
+  const who = new Map(v.cast.map((c, i) => [c.alias, `--who: var(--who-${i % WHO})`]));
   for (const b of v.blocks) {
     if (!ok(b.to)) break;
     const raw = p.raw !== null && b.from <= p.raw.to && b.to >= p.raw.from;
     const cls = "cm-b-" + b.cls + (raw ? " cm-raw" : "");
+    const style = b.alias ? who.get(b.alias) : undefined;
     for (let pos = b.from; pos <= b.to; ) {
       const line = doc.lineAt(pos);
       // The number the PDF prints, in the margin beside the block's first line.
-      const n = p.numbers && pos === b.from && b.number !== null ? { "data-n": String(b.number) } : undefined;
-      out.push(Decoration.line({ class: cls, attributes: n }).range(line.from));
+      const attributes: Record<string, string> = {};
+      if (p.numbers && pos === b.from && b.number !== null) attributes["data-n"] = String(b.number);
+      if (style) attributes.style = style;
+      out.push(Decoration.line({ class: cls, attributes }).range(line.from));
       pos = line.to + 1;
     }
     if (raw) continue;

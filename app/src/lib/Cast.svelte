@@ -227,7 +227,7 @@
   }
   .filter button.on {
     background: var(--claret);
-    color: #f6efe4;
+    color: var(--on-claret);
   }
   .list {
     flex: 1;
@@ -340,7 +340,7 @@
   }
   .primary {
     background: var(--claret);
-    color: #f6efe4;
+    color: var(--on-claret);
     border-color: var(--claret);
   }
   .primary:disabled {

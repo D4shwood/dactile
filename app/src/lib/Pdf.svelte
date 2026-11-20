@@ -1309,7 +1309,7 @@
   }
   .pages :global(.textLayer ::selection) {
     color: transparent;
-    background: rgba(176, 68, 74, 0.3);
+    background: color-mix(in srgb, var(--claret) 30%, transparent);
   }
   .pages :global(.textLayer .endOfContent) {
     position: absolute;

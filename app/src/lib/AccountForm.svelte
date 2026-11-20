@@ -171,7 +171,7 @@
     opacity: 0.7;
   }
   .warn {
-    color: var(--warn, #b05820);
+    color: var(--warn);
     font-size: 13px;
   }
   .said {
@@ -179,13 +179,13 @@
     font-size: 13px;
   }
   .error {
-    color: #a33;
+    color: var(--danger);
   }
   .out {
     margin-top: 18px;
   }
   .danger {
-    color: #a33;
+    color: var(--danger);
     font-weight: 600;
   }
 </style>

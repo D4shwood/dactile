@@ -26,6 +26,7 @@
   import { setSummaries, summaries } from "./summaries";
   import CharacterFormView from "./CharacterForm.svelte";
   import Ribbon from "./Ribbon.svelte";
+  import { PRESETS } from "./color";
   import Keys from "./Keys.svelte";
   import Guide from "./Guide.svelte";
   import SceneList from "./SceneList.svelte";
@@ -44,7 +45,8 @@
     close,
   }: { opened: Opened; settings: Settings; tr: boolean; close: (next?: string) => void } = $props();
 
-  const THEMES = ["paper", "sepia", "night", "contrast", "dark"];
+  /// What the theme key cycles through: the ready themes.
+  const THEMES = PRESETS.map(([name]) => name);
 
   let host: HTMLDivElement;
   let view: EditorView;
@@ -1730,9 +1732,9 @@
     flex-direction: column;
     gap: 10px;
     padding: 18px;
-    background: var(--paper, #fff);
+    background: var(--page);
     color: inherit;
-    border: 1px solid var(--accent, #8a2a2a);
+    border: 1px solid var(--claret);
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
   }
   .lost textarea {
@@ -1992,6 +1994,10 @@
     color: var(--star);
     font-weight: 800;
   }
+  /* Each character in their own colour, when the settings say so. */
+  :global(:root[data-who="on"]) .page :global(.cm-b-line .cm-c-name) {
+    color: var(--who, var(--name-ref));
+  }
   .page :global(.cm-c-ref) {
     font-variant: small-caps;
     color: var(--name-ref);
@@ -2129,7 +2135,7 @@
     color: var(--faint);
   }
   .page :global(.cm-misspelt) {
-    text-decoration: underline wavy #d23a2f;
+    text-decoration: underline wavy var(--danger);
     text-decoration-skip-ink: none;
     text-underline-offset: 3px;
   }
@@ -2153,7 +2159,7 @@
   }
   :global(.dactile-menu.cm-tooltip-autocomplete > ul > li[aria-selected]) {
     background: var(--claret);
-    color: #f6efe4;
+    color: var(--on-claret);
   }
   :global(.dactile-menu .cm-completionLabel) {
     font-family: var(--mono);
@@ -2344,7 +2350,7 @@
     text-align: left;
     background: none;
     border: 0;
-    color: #f6efe4;
+    color: var(--on-claret);
     padding: 10px 22px;
     cursor: pointer;
     font-size: 15px;
@@ -2404,7 +2410,7 @@
   }
   .primary {
     background: var(--claret);
-    color: #f6efe4;
+    color: var(--on-claret);
     border: 0;
     border-radius: 4px;
     padding: 7px 16px;
