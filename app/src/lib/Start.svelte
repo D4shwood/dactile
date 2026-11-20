@@ -277,8 +277,10 @@
   /// The paths chosen with Shift or Ctrl, past the one on view.
   let picks = $state<string[]>([]);
   let anchor = $state<string | null>(null);
-  /// The menu of a right click.
-  let menu = $state<{ x: number; y: number } | null>(null);
+  /// The menu of a right click. Asking before the trash happens in it, where
+  /// the click was, not where the eye isn't: `ask` is how many drafts stay
+  /// (one play) or -1 (the chosen plays).
+  let menu = $state<{ x: number; y: number; ask?: number } | null>(null);
   /// Asking the name of a book to gather the chosen plays under.
   let gathering = $state<string | null>(null);
   let arming2 = $state(false);
@@ -320,6 +322,23 @@
     menu = null;
     run();
   };
+
+  async function askTrash() {
+    const m = menu!;
+    m.ask = picks.length > 1 ? -1 : await api.playDrafts(chosen!.path);
+  }
+  function trashAsked() {
+    const many = menu?.ask === -1;
+    const drafts = menu?.ask ?? 0;
+    menu = null;
+    if (many) {
+      arming2 = true;
+      void throwPicks();
+    } else {
+      arming = drafts;
+      void throwAway();
+    }
+  }
 
   async function throwPicks() {
     if (!arming2) {
@@ -805,12 +824,27 @@
 {#if menu && chosen}
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="scrim" onclick={() => (menu = null)} oncontextmenu={(e) => (e.preventDefault(), (menu = null))}></div>
-  <div class="context" role="menu" style:left="{menu.x}px" style:top="{menu.y}px">
-    {#if reader}
+  <div class="context" role="menu" tabindex="-1" style:left="{menu.x}px" style:top="{menu.y}px" onkeydown={(e) => e.key === "Escape" && (menu = null)}>
+    {#if menu.ask !== undefined}
+      <div class="ask" role="alertdialog" aria-label={l("Çöp kutusuna gitsin mi?", "To the trash?")}>
+        <strong>
+          {menu.ask === -1
+            ? l(`${picks.length} oyun çöp kutusuna gitsin mi?`, `${picks.length} plays to the trash?`)
+            : l(`«${chosen.title}» çöp kutusuna gitsin mi?`, `«${chosen.title}» to the trash?`)}
+        </strong>
+        {#if menu.ask > 0}<small>{l(`Taslakları (${menu.ask}) yerinde kalır.`, `Its drafts (${menu.ask}) stay.`)}</small>{/if}
+        <small>{l("Çöp kutusundan geri alınabilir.", "It can come back from the trash.")}</small>
+        <span class="ask-row">
+          <!-- svelte-ignore a11y_autofocus -->
+          <button class="ui-btn small" autofocus onclick={() => (menu = null)}>{l("Vazgeç", "Cancel")}</button>
+          <button class="ui-btn small danger" onclick={trashAsked}>{l("Evet, çöpe at", "Yes, to the trash")}</button>
+        </span>
+      </div>
+    {:else if reader}
       <button role="menuitem" onclick={pick(() => open(chosen!.path))}>{l("Aç", "Open")}</button>
     {:else if picks.length > 1}
       <button role="menuitem" onclick={pick(() => (gathering = ""))}>{l("Kitapta topla", "Gather in a book")}</button>
-      <button role="menuitem" onclick={pick(throwPicks)}>{l(`${picks.length} oyunu çöpe at`, `${picks.length} plays to the trash`)}</button>
+      <button role="menuitem" onclick={askTrash}>{l(`${picks.length} oyunu çöpe at`, `${picks.length} plays to the trash`)}</button>
     {:else}
       {@const p = chosen}
       <button role="menuitem" onclick={pick(() => open(p.path))}>{l("Aç", "Open")}</button>
@@ -826,7 +860,7 @@
           {p.imported ? l("Oyunlarıma taşı", "Move to my plays") : l("İçe aktarılanlara taşı", "Move to imported")}
         </button>
       {/if}
-      <button role="menuitem" onclick={pick(throwAway)}>{l("Çöpe at", "To the trash")}</button>
+      <button role="menuitem" onclick={askTrash}>{l("Çöpe at", "To the trash")}</button>
     {/if}
   </div>
 {/if}
@@ -849,16 +883,37 @@
     border-radius: 6px;
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
   }
-  .context button {
+  .context > button {
     all: unset;
     padding: 6px 10px;
     border-radius: 4px;
     cursor: pointer;
     font-size: 13px;
   }
-  .context button:hover,
-  .context button:focus-visible {
+  .context > button:hover,
+  .context > button:focus-visible {
     background: var(--chrome-line);
+  }
+  .ask {
+    display: grid;
+    gap: 6px;
+    max-width: 280px;
+    padding: 8px 10px;
+    font-size: 13px;
+    overflow-wrap: anywhere;
+  }
+  .ask small {
+    color: var(--chrome-muted);
+  }
+  .ask-row {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+    margin-top: 4px;
+  }
+  .ask .danger {
+    color: var(--danger);
+    border-color: var(--danger);
   }
   .several {
     display: flex;
