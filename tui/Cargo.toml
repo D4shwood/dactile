@@ -1,10 +1,12 @@
 [package]
 name = "dactile-light"
 description = "Dactile Light: write stage plays in a terminal, with the tiyatro class"
-version.workspace = true
-edition.workspace = true
-repository.workspace = true
-license.workspace = true
+# Retired at 0.3.0-beta.2 and outside the workspace: build it from that tag
+# (`git checkout v0.3.0-beta.2`, then `cargo install --path tui`).
+version = "0.3.0-beta.2"
+edition = "2024"
+repository = "https://github.com/D4shwood/dactile"
+license = "GPL-3.0-or-later"
 readme = "../README.md"
 
 [[bin]]

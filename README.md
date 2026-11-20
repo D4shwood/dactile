@@ -2,8 +2,8 @@
 
 [Türkçe](README.tr.md)
 
-Dactile is an app for writing stage plays, and Dactile Light is the same writer
-in a terminal. You write the play in the syntax of the **tiyatro** XeLaTeX class, and the macros come alive as you type: `\se Amca`
+Dactile is an app for writing stage plays, on the desktop and in the
+browser. You write the play in the syntax of the **tiyatro** XeLaTeX class, and the macros come alive as you type: `\se Amca`
 turns into `SELİN   Amca` on the spot, `\sahne` asks for a place and a time
 and opens a numbered scene, and the characters who appear in a scene gather
 under its heading by themselves.
@@ -42,28 +42,17 @@ chmod +x Dactile-*-x86_64.AppImage
 ./Dactile-*-x86_64.AppImage
 ```
 
-On Arch, the AUR's `dactile-bin` gives the `dactile` command, a menu entry
-and Dactile Light.
+On Arch, the AUR's `dactile-bin` gives the `dactile` command and a menu entry.
 
 From source, it needs WebKitGTK and Node.js: in `app/`, `npm install`, then
 `npm run tauri dev`.
 
-**Dactile Light** is the same writer in a terminal:
-
-```sh
-tar xzf dactile-light-*-x86_64-linux.tar.gz
-cd dactile-light-*-x86_64-linux
-./dactile-light install
-```
-
-`dactile-light install` puts the `dactile-light` command in `~/.local/bin`,
-adds a menu entry with its icon, and copies the tiyatro class into your TeX tree
-(`~/texmf`), so plays compile from any folder. `dactile-light uninstall`
-removes all three; your plays and settings stay. From source:
-`cargo install --path tui`, then `dactile-light install`.
-
-Before 0.3 Dactile Light was the `dactile` command: `dactile uninstall`
-removes that one.
+**Dactile Light**, the same writer in a terminal, is retired: its last
+version is 0.3.0-beta.2, on that release's page, and it gets no more
+changes. It still opens the same plays. From source:
+`git checkout v0.3.0-beta.2`, `cargo install --path tui`, then
+`dactile-light install`; `dactile-light uninstall` removes it, and your
+plays and settings stay.
 
 - **Spell checking** needs a Turkish Hunspell dictionary (`tr_TR.aff` and
   `tr_TR.dic`) in `~/.local/share/hunspell` or `/usr/share/hunspell`; on
@@ -73,8 +62,9 @@ removes that one.
 
 ## Using it
 
-This page describes Dactile Light's keys and screens; Dactile has the
-same plays and tools on a page, with a ribbon and the mouse. On its start
+The rest of this page was written for Dactile Light, now retired, and
+describes its keys and screens; Dactile has the same plays and tools on a
+page, with a ribbon and the mouse. On its start
 screen Shift and Ctrl choose several plays and a right click gives a play's
 options. Its themes are the same five, with a sixth button, Surprise me, that
 makes new colours at every press.

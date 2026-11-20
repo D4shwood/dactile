@@ -1,8 +1,11 @@
 [workspace]
-members = ["core", "tui", "backend", "app/src-tauri", "server", "web-wasm"]
+members = ["core", "backend", "app/src-tauri", "server", "web-wasm"]
+# Dactile Light, the terminal app, retired at 0.3.0-beta.2: kept as it was,
+# built from that tag, not with the rest.
+exclude = ["tui"]
 # The desktop app needs WebKitGTK and a built front end: plain `cargo`
 # commands leave it out; `-p dactile-app` or `--workspace` take it in.
-default-members = ["core", "tui", "backend", "server", "web-wasm"]
+default-members = ["core", "backend", "server", "web-wasm"]
 resolver = "3"
 
 [workspace.package]

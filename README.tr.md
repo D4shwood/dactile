@@ -2,8 +2,8 @@
 
 [English](README.md)
 
-Dactile, tiyatro oyunu yazmak için bir uygulama; Dactile Light aynı yazıcının
-terminal sürümü. Oyunu **tiyatro** XeLaTeX sınıfının sözdizimiyle yazarsın; makrolar yazarken canlanır: `\se Amca`
+Dactile, masaüstünde ve tarayıcıda tiyatro oyunu yazmak için bir uygulama.
+Oyunu **tiyatro** XeLaTeX sınıfının sözdizimiyle yazarsın; makrolar yazarken canlanır: `\se Amca`
 anında `SELİN   Amca` olur, `\sahne` yer ve zaman sorup numaralı bir sahne
 açar, sahnede görünen karakterler kendiliğinden sahne başlığının altında
 toplanır.
@@ -42,28 +42,16 @@ chmod +x Dactile-*-x86_64.AppImage
 ./Dactile-*-x86_64.AppImage
 ```
 
-Arch'ta AUR'daki `dactile-bin`, `dactile` komutunu, bir menü girdisini ve
-Dactile Light'ı kurar.
+Arch'ta AUR'daki `dactile-bin`, `dactile` komutunu ve bir menü girdisini kurar.
 
 Kaynaktan kurmak WebKitGTK ve Node.js ister: `app/` içinde `npm install`,
 ardından `npm run tauri dev`.
 
-**Dactile Light**, aynı yazıcının terminal sürümüdür:
-
-```sh
-tar xzf dactile-light-*-x86_64-linux.tar.gz
-cd dactile-light-*-x86_64-linux
-./dactile-light install
-```
-
-`dactile-light install`, `dactile-light` komutunu `~/.local/bin`'e koyar,
-menüye simgesiyle bir girdi ekler ve tiyatro sınıfını TeX ağacına (`~/texmf`) kopyalar;
-böylece oyunlar her klasörden derlenir. `dactile-light uninstall` üçünü de
-kaldırır; oyunların ve ayarların kalır. Kaynaktan:
-`cargo install --path tui`, ardından `dactile-light install`.
-
-0.3'ten önce Dactile Light `dactile` komutuydu: `dactile uninstall`
-onu kaldırır.
+**Dactile Light**, aynı yazıcının terminal sürümü, emekliye ayrıldı: son
+sürümü 0.3.0-beta.2, o sürümün sayfasında duruyor ve artık değişmeyecek.
+Aynı oyunları açmaya devam eder. Kaynaktan: `git checkout v0.3.0-beta.2`,
+`cargo install --path tui`, ardından `dactile-light install`;
+`dactile-light uninstall` onu kaldırır, oyunların ve ayarların kalır.
 
 - **Yazım denetimi** için Türkçe bir Hunspell sözlüğü (`tr_TR.aff` ve
   `tr_TR.dic`) `~/.local/share/hunspell` ya da `/usr/share/hunspell` içinde
@@ -74,7 +62,8 @@ onu kaldırır.
 
 ## Kullanım
 
-Bu sayfa Dactile Light'ın tuşlarını ve ekranlarını anlatır; Dactile
+Bu sayfanın geri kalanı artık emekli olan Dactile Light için yazıldı ve
+onun tuşlarını ve ekranlarını anlatır; Dactile
 aynı oyunları ve araçları bir sayfa üstünde, şerit ve fareyle sunar. Başlangıç
 ekranında Shift ve Ctrl birkaç oyunu seçer, sağ tık oyunun seçeneklerini açar.
 Temaları aynı beş temadır; altıncı düğme Sürpriz yap, her basışta yeni renkler

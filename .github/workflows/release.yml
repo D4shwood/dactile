@@ -18,27 +18,13 @@ env:
   VERSION: ${{ github.ref_type == 'tag' && github.ref_name || 'dev' }}
 
 jobs:
-  light:
-    # An older glibc, so the binary runs on older distributions too.
+  test:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test
-      - run: cargo build --release --locked -p dactile-light
-      - name: Package
-        run: |
-          name=dactile-light-${VERSION}-x86_64-linux
-          mkdir "$name"
-          cp target/release/dactile-light README.md README.tr.md LICENSE "$name"/
-          cp -r tex examples tui/icons "$name"/
-          rm -rf "$name"/tex/test
-          tar czf "$name.tar.gz" "$name"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: light
-          path: dactile-light-*.tar.gz
 
   app:
     runs-on: ubuntu-22.04
@@ -80,7 +66,7 @@ jobs:
 
   publish:
     if: github.ref_type == 'tag'
-    needs: [light, app]
+    needs: [test, app]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
