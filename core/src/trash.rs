@@ -140,8 +140,9 @@ mod tests {
         assert_eq!(fs::read_to_string(&moved[0].file).unwrap(), "bir");
         let note = fs::read_to_string(&moved[0].info).unwrap();
         // The note is the spec's, a Unix path as a URI; Windows keeps its own.
-        #[cfg(unix)]
-        assert!(note.contains("/oyunlar/kar%20masal%C4%B1.tex\n"), "{note}");
+        if cfg!(unix) {
+            assert!(note.contains("/oyunlar/kar%20masal%C4%B1.tex\n"), "{note}");
+        }
         // The same name again: a second place.
         fs::write(&play, "iki").unwrap();
         let again = throw(std::slice::from_ref(&play), &bin).unwrap();
