@@ -381,6 +381,8 @@ mod tests {
         fs::remove_dir_all(d).unwrap();
     }
 
+    // Unix's own programs and process ids.
+    #[cfg(unix)]
     #[test]
     fn locking() {
         let d = tmp("lock");

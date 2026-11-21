@@ -385,6 +385,8 @@ mod tests {
         let _ = fs::remove_dir_all(d);
     }
 
+    // Linux's runtime folder, and names Windows can't have.
+    #[cfg(unix)]
     #[test]
     fn mounts_in_the_runtime_folder_stay() {
         let d = tmp("run");
