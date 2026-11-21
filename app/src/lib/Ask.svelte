@@ -1,8 +1,8 @@
 <script lang="ts">
-  // The question and the notice of ask.svelte.ts, beside where the user
+  // The question and the notice of asking.svelte.ts, beside where the user
   // pressed or what has focus, kept on the screen.
   import { tick } from "svelte";
-  import { shown } from "./ask.svelte";
+  import { shown } from "./asking.svelte";
 
   const q = $derived(shown.question);
   const n = $derived(shown.notice);

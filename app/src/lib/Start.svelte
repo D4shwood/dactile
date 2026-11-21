@@ -4,7 +4,7 @@
   // left, tiles for a new play along the top, the plays below with a
   // preview of the one picked.
   import { untrack } from "svelte";
-  import { ask, notify, type Where } from "./ask.svelte";
+  import { ask, notify, type Where } from "./asking.svelte";
   import { onScreen } from "./pointer";
   import { api, type Door, type Files, type Home, type Look, type PlayCard, type Preview, type Shown, type TemplateCard } from "./api";
   import FileList from "./FileList.svelte";

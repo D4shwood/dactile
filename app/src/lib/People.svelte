@@ -2,7 +2,7 @@
   // In the browser, for the site's owner: who has an account, who is
   // invited, and links for those mail doesn't reach. The desktop never
   // shows this.
-  import { ask } from "./ask.svelte";
+  import { ask } from "./asking.svelte";
   import { api, type People } from "./api";
 
   let { tr }: { tr: boolean } = $props();

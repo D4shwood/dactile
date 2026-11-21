@@ -1,7 +1,7 @@
 <script lang="ts">
   // Notes beside the play, from anyone: kept in `oyun.notlar.md` next to it
   // (core/src/notes.rs). Each finds its place by what it quotes.
-  import { ask } from "./ask.svelte";
+  import { ask } from "./asking.svelte";
   import type { NoteCard } from "./api";
 
   let {

@@ -2,7 +2,7 @@
   // In the browser, the signed-in person's own account: their name, their
   // address, their password, and a way out everywhere. The desktop never
   // shows this.
-  import { ask } from "./ask.svelte";
+  import { ask } from "./asking.svelte";
   import { api, type Account, type LinkedDevice } from "./api";
 
   let { tr, renamed }: { tr: boolean; renamed: (name: string) => void } = $props();

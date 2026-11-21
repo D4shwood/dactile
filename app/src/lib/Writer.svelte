@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ask } from "./ask.svelte";
+  import { ask } from "./asking.svelte";
   import { onDestroy, onMount, tick, untrack } from "svelte";
   import { getVersion } from "@tauri-apps/api/app";
   import { Annotation, Compartment, EditorState, type Extension } from "@codemirror/state";

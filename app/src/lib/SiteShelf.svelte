@@ -6,7 +6,7 @@
   // site.
   import { onMount } from "svelte";
   import type { Home, PlayCard } from "./api";
-  import { ask, notify } from "./ask.svelte";
+  import { ask, notify } from "./asking.svelte";
   import { API, SignedOut } from "./site/commands";
   import {
     site,

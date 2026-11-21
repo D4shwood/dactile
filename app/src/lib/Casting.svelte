@@ -6,7 +6,7 @@
   import { onMount } from "svelte";
   import { api, type CastingEdit, type CopyKind, type Roles } from "./api";
   import { WHO } from "./color";
-  import { ask } from "./ask.svelte";
+  import { ask } from "./asking.svelte";
 
   let {
     tr,

@@ -6,7 +6,7 @@
   import Writer from "./lib/Writer.svelte";
   import Ask from "./lib/Ask.svelte";
   import { isOnSite, SITE_OUT, siteUpdate, siteUpdateInstall, useSite } from "./lib/site/desk";
-  import { notify } from "./lib/ask.svelte";
+  import { notify } from "./lib/asking.svelte";
 
   let home = $state<Home | null>(null);
   let opened = $state<Opened | null>(null);

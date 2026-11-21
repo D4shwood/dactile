@@ -1,7 +1,7 @@
 <script lang="ts">
   // Ctrl+O: the people of the play beside the page, as the terminal app's
   // cast panel lists them, with how many lines and words each one has.
-  import { ask } from "./ask.svelte";
+  import { ask } from "./asking.svelte";
   import type { CastEntry } from "./api";
 
   let {
