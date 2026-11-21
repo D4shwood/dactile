@@ -29,6 +29,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub const COOKIE: &str = "dactile";
+/// What a linked desktop and this site must agree on: raised when a command
+/// or a route changes so that an older desktop would go wrong with it.
+pub const API: u32 = 1;
 /// The header the gate's word comes in.
 pub const GATE: &str = "x-dactile-gate";
 
@@ -196,7 +199,19 @@ pub fn fail(code: StatusCode, message: impl Into<String>) -> Response {
     (code, Json(Value::String(message.into()))).into_response()
 }
 
+/// The session a request carries: a browser's in its cookie, a linked
+/// desktop's as `Authorization: Bearer`. A desktop's token never rides
+/// along on its own, as a cookie does, so another site can't use it.
 pub fn session(headers: &HeaderMap) -> Option<String> {
+    let bearer = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty());
+    if bearer.is_some() {
+        return bearer;
+    }
     headers
         .get_all(header::COOKIE)
         .iter()
@@ -670,8 +685,8 @@ async fn lang() -> Json<&'static str> {
     })
 }
 
-async fn version() -> Json<&'static str> {
-    Json(env!("CARGO_PKG_VERSION"))
+async fn version() -> Json<Value> {
+    Json(serde_json::json!({ "version": env!("CARGO_PKG_VERSION"), "api": API }))
 }
 
 #[cfg(test)]

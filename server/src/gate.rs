@@ -90,6 +90,21 @@ pub struct Gate {
     client: Client<HttpConnector, Body>,
     /// The projects' plays open now, written live (`room.rs`).
     pub rooms: Arc<Rooms>,
+    /// Desktops asking to be linked, by the word they wait with.
+    linking: std::sync::Mutex<HashMap<String, Linking>>,
+    /// A linked desktop's way into a room, used once: whose, which play,
+    /// the second it ends.
+    tickets: std::sync::Mutex<HashMap<String, (String, String, u64)>>,
+}
+
+/// A desktop asking to be linked: the code it shows, its name, and who
+/// said yes to it.
+struct Linking {
+    code: String,
+    name: String,
+    ends: u64,
+    by: Option<String>,
+    denied: bool,
 }
 
 type Shared = Arc<Gate>;
@@ -110,6 +125,8 @@ impl Gate {
             running: tokio::sync::Mutex::new(HashMap::new()),
             client: Client::builder(TokioExecutor::new()).build(HttpConnector::new()),
             rooms: Rooms::new(home.clone()),
+            linking: std::sync::Mutex::new(HashMap::new()),
+            tickets: std::sync::Mutex::new(HashMap::new()),
         }
     }
 
@@ -199,6 +216,14 @@ impl Gate {
         self.running.lock().await.get(id).map(|t| t.port)
     }
 
+    fn linking(&self) -> std::sync::MutexGuard<'_, HashMap<String, Linking>> {
+        self.linking.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn tickets(&self) -> std::sync::MutexGuard<'_, HashMap<String, (String, String, u64)>> {
+        self.tickets.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     /// How many people's servers are running.
     pub async fn awake(&self) -> usize {
         self.running.lock().await.len()
@@ -226,6 +251,12 @@ pub fn router(gate: Shared, web: Option<PathBuf>) -> Router {
         .route("/projects/{id}/name", post(project_rename))
         .route("/projects/{id}/leave", post(project_leave))
         .route("/oda", get(room_join))
+        .route("/oda/bilet", post(room_ticket))
+        .route("/cihaz/bak/{code}", get(link_look))
+        .route("/cihaz/onay/{code}", post(link_yes))
+        .route("/cihaz/ret/{code}", post(link_no))
+        .route("/cihazlar", get(devices))
+        .route("/cihazlar/{id}/kaldir", post(device_off))
         // What isn't the gate's own is the person's server's.
         .route("/{*rest}", any(pass))
         .route_layer(middleware::from_fn_with_state(gate.clone(), guard));
@@ -238,6 +269,9 @@ pub fn router(gate: Shared, web: Option<PathBuf>) -> Router {
         .route("/parola", post(forgot))
         .route("/parola/{code}", get(reset_page).post(reset))
         .route("/dogrula/{code}", post(check))
+        .route("/cihaz", post(link_start))
+        .route("/cihaz/{poll}", get(link_wait))
+        .route("/oda/bilet/{ticket}", get(room_by_ticket))
         .merge(inside);
     let app = Router::new()
         .nest("/api", api)
@@ -284,6 +318,8 @@ async fn door_kind(State(g): State<Shared>) -> Json<Value> {
         "google": g.google.is_some(),
         "mail": g.mail.is_some(),
         "stage": g.stage,
+        "version": env!("CARGO_PKG_VERSION"),
+        "api": crate::API,
     }))
 }
 
@@ -295,8 +331,8 @@ async fn me(Extension(p): Extension<Person>) -> Json<Value> {
     Json(json!({ "id": p.id, "name": p.name, "role": p.role }))
 }
 
-async fn version() -> Json<&'static str> {
-    Json(env!("CARGO_PKG_VERSION"))
+async fn version() -> Json<Value> {
+    Json(json!({ "version": env!("CARGO_PKG_VERSION"), "api": crate::API }))
 }
 
 async fn logout(State(g): State<Shared>, headers: HeaderMap) -> Response {
@@ -1175,6 +1211,7 @@ async fn pass(
     *req.uri_mut() = uri;
     let h = req.headers_mut();
     h.remove(header::COOKIE);
+    h.remove(header::AUTHORIZATION);
     h.remove(header::HOST);
     h.remove(GATE);
     match HeaderValue::from_str(&theirs.word) {
@@ -1233,6 +1270,252 @@ async fn room_join(
     };
     let rooms = g.rooms.clone();
     ws.on_upgrade(move |socket| async move { rooms.join(&play.path, who, socket).await })
+}
+
+/// A linked desktop's ticket into a room: its WebSocket can't carry the
+/// desktop's token, so it asks for a word good once, for a moment.
+async fn room_ticket(
+    State(g): State<Shared>,
+    Extension(me): Extension<Person>,
+    Json(play): Json<Play>,
+) -> Response {
+    let Ok(ticket) = door::random() else {
+        return fail(StatusCode::INTERNAL_SERVER_ERROR, "no randomness");
+    };
+    let now = door::now();
+    let mut all = g.tickets();
+    all.retain(|_, (_, _, ends)| *ends > now);
+    all.insert(ticket.clone(), (me.id, play.path, now + TICKET));
+    Json(json!({ "ticket": ticket })).into_response()
+}
+
+/// A room, by a ticket: the person and the play are the ticket's.
+async fn room_by_ticket(
+    State(g): State<Shared>,
+    Url(ticket): Url<String>,
+    ws: axum::extract::WebSocketUpgrade,
+) -> Response {
+    let took = g.tickets().remove(&ticket);
+    let Some((id, path, _)) = took.filter(|(_, _, ends)| *ends > door::now()) else {
+        return fail(StatusCode::UNAUTHORIZED, "signed out");
+    };
+    let Some(me) = people::find(&g.home, &id) else {
+        return fail(StatusCode::UNAUTHORIZED, "signed out");
+    };
+    let who = room::Who {
+        id: me.id,
+        name: me.name,
+    };
+    let rooms = g.rooms.clone();
+    ws.on_upgrade(move |socket| async move { rooms.join(&path, who, socket).await })
+}
+
+// ------------------------------------------------------ linking a desktop
+//
+// The desktop asks for a code and opens this site's /cihaz/<code> in the
+// browser; there someone signed in says yes, and the desktop, waiting with
+// a word only it knows, gets a token of its own. No password is typed into
+// the desktop, and those who sign in with Google link one too.
+
+/// How long a code waits for its yes.
+const LINKING: u64 = 10 * 60;
+/// How long a room's ticket lasts.
+const TICKET: u64 = 30;
+/// Codes waiting at once, at the most: a flood is told to wait.
+const WAITING: usize = 200;
+
+/// Eight letters and digits that can't be mistaken for one another.
+fn short_code() -> std::io::Result<String> {
+    const ABC: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let hex = door::random()?;
+    Ok(hex
+        .as_bytes()
+        .chunks(2)
+        .take(8)
+        .map(|b| {
+            let n = u8::from_str_radix(std::str::from_utf8(b).unwrap_or("0"), 16).unwrap_or(0);
+            ABC[n as usize % ABC.len()] as char
+        })
+        .collect())
+}
+
+/// A code as typed or linked: no dashes, no spaces, any case.
+fn plain_code(code: &str) -> String {
+    code.chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .map(|c| c.to_ascii_uppercase())
+        .collect()
+}
+
+#[derive(serde::Deserialize)]
+struct LinkAsk {
+    #[serde(default)]
+    name: String,
+}
+
+async fn link_start(
+    State(g): State<Shared>,
+    headers: HeaderMap,
+    Json(a): Json<LinkAsk>,
+) -> Response {
+    if g.door.waiting(&address(&headers)) {
+        return too_many();
+    }
+    let (Ok(poll), Ok(code)) = (door::random(), short_code()) else {
+        return fail(StatusCode::INTERNAL_SERVER_ERROR, "no randomness");
+    };
+    let now = door::now();
+    let mut all = g.linking();
+    all.retain(|_, w| w.ends > now);
+    if all.len() >= WAITING {
+        return too_many();
+    }
+    let name: String = a
+        .name
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(60)
+        .collect();
+    all.insert(
+        poll.clone(),
+        Linking {
+            code: code.clone(),
+            name: name.trim().to_string(),
+            ends: now + LINKING,
+            by: None,
+            denied: false,
+        },
+    );
+    Json(json!({ "poll": poll, "code": code, "page": format!("/cihaz/{code}"), "ends": now + LINKING }))
+        .into_response()
+}
+
+/// The desktop waiting: 202 until someone says yes, then its token, once.
+async fn link_wait(State(g): State<Shared>, Url(poll): Url<String>) -> Response {
+    let now = door::now();
+    let mut all = g.linking();
+    let Some(w) = all.get(&poll) else {
+        return fail(
+            StatusCode::NOT_FOUND,
+            l("Kodun süresi doldu.", "The code has run out."),
+        );
+    };
+    if w.ends <= now {
+        all.remove(&poll);
+        return fail(
+            StatusCode::NOT_FOUND,
+            l("Kodun süresi doldu.", "The code has run out."),
+        );
+    }
+    if w.denied {
+        all.remove(&poll);
+        return fail(
+            StatusCode::FORBIDDEN,
+            l("Bağlanma reddedildi.", "Linking was refused."),
+        );
+    }
+    let Some(id) = w.by.clone() else {
+        return (StatusCode::ACCEPTED, Json(json!("waiting"))).into_response();
+    };
+    let Some(w) = all.remove(&poll) else {
+        return fail(StatusCode::NOT_FOUND, "gone");
+    };
+    drop(all);
+    let Some(person) = people::find(&g.home, &id) else {
+        return fail(StatusCode::UNAUTHORIZED, "signed out");
+    };
+    match g.door.link(&person.id, &w.name) {
+        Ok(token) => {
+            Json(json!({ "token": token, "id": person.id, "name": person.name })).into_response()
+        }
+        Err(_) => fail(StatusCode::INTERNAL_SERVER_ERROR, "no randomness"),
+    }
+}
+
+/// What the page asks before its yes: the computer's name.
+async fn link_look(State(g): State<Shared>, Url(code): Url<String>) -> Response {
+    let code = plain_code(&code);
+    let now = door::now();
+    let all = g.linking();
+    match all
+        .values()
+        .find(|w| door::same(&w.code, &code) && w.ends > now && w.by.is_none() && !w.denied)
+    {
+        Some(w) => Json(json!({ "name": w.name, "code": w.code })).into_response(),
+        None => fail(
+            StatusCode::NOT_FOUND,
+            l(
+                "Bu kodun süresi dolmuş ya da kullanılmış.",
+                "This code has run out or been used.",
+            ),
+        ),
+    }
+}
+
+/// Yes, or no, from someone signed in, on a page of this site.
+fn link_answer(g: &Gate, headers: &HeaderMap, me: &Person, code: &str, yes: bool) -> Response {
+    if !own_page(headers) {
+        return not_from_here();
+    }
+    let code = plain_code(code);
+    let now = door::now();
+    let mut all = g.linking();
+    let Some(w) = all
+        .values_mut()
+        .find(|w| door::same(&w.code, &code) && w.ends > now && w.by.is_none() && !w.denied)
+    else {
+        return fail(
+            StatusCode::NOT_FOUND,
+            l(
+                "Bu kodun süresi dolmuş ya da kullanılmış.",
+                "This code has run out or been used.",
+            ),
+        );
+    };
+    if yes {
+        w.by = Some(me.id.clone());
+    } else {
+        w.denied = true;
+    }
+    Json(json!(true)).into_response()
+}
+
+async fn link_yes(
+    State(g): State<Shared>,
+    Extension(me): Extension<Person>,
+    headers: HeaderMap,
+    Url(code): Url<String>,
+) -> Response {
+    link_answer(&g, &headers, &me, &code, true)
+}
+
+async fn link_no(
+    State(g): State<Shared>,
+    Extension(me): Extension<Person>,
+    headers: HeaderMap,
+    Url(code): Url<String>,
+) -> Response {
+    link_answer(&g, &headers, &me, &code, false)
+}
+
+/// The computers linked to one's account.
+async fn devices(State(g): State<Shared>, Extension(me): Extension<Person>) -> Json<Value> {
+    Json(json!(g.door.devices(&me.id)))
+}
+
+async fn device_off(
+    State(g): State<Shared>,
+    Extension(me): Extension<Person>,
+    Url(id): Url<String>,
+) -> Response {
+    if g.door.unlink(&me.id, &id) {
+        Json(json!(true)).into_response()
+    } else {
+        fail(
+            StatusCode::NOT_FOUND,
+            l("Böyle bir bilgisayar yok.", "No such computer."),
+        )
+    }
 }
 
 // ------------------------------------------------------------- projects

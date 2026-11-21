@@ -31,9 +31,9 @@ function askPassword(wrong = false) {
   });
 }
 
-/// The links mail brings: an invitation, a new password, an address. They
-/// open the door's page whether or not this browser is signed in.
-const DOOR = /^\/(davet|parola|giris|dogrula)(\/[0-9a-f]+)?$/;
+/// The links mail brings: an invitation, a new password, an address; and
+/// the page a desktop opens to be linked. They open the door's page whether or not this browser is signed in.
+const DOOR = /^\/(davet|parola|giris|dogrula)(\/[0-9a-f]+)?$|^\/cihaz\/[A-Za-z0-9-]+$/;
 
 const door = fetch("/api/door")
   .then((r) => r.json())

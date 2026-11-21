@@ -3,7 +3,7 @@
   // address, their password, and a way out everywhere. The desktop never
   // shows this.
   import { ask } from "./ask.svelte";
-  import { api, type Account } from "./api";
+  import { api, type Account, type LinkedDevice } from "./api";
 
   let { tr, renamed }: { tr: boolean; renamed: (name: string) => void } = $props();
   const l = (t: string, e: string) => (tr ? t : e);
@@ -26,6 +26,28 @@
     }
   }
   void load();
+
+  /// The desktops linked to the account.
+  let desks = $state<LinkedDevice[]>([]);
+  const loadDesks = async () => (desks = await api.devices().catch(() => []));
+  void loadDesks();
+
+  async function unlink(d: LinkedDevice, e: MouseEvent) {
+    const yes = await ask({
+      title: l(`${d.name} kaldırılsın mı?`, `Take off ${d.name}?`),
+      detail: l("Oradaki Dactile sitedeki oyunlarını artık açamaz.", "Its Dactile can no longer open your plays here."),
+      yes: l("Kaldır", "Take off"),
+      no: l("Vazgeç", "Cancel"),
+      danger: true,
+      at: e,
+    });
+    if (!yes) return;
+    await act("desks", async () => {
+      await api.deviceOff(d.id);
+      await loadDesks();
+      return l("Bilgisayar kaldırıldı.", "The computer is taken off.");
+    });
+  }
 
   async function act(where: string, f: () => Promise<string>) {
     said = null;
@@ -138,6 +160,26 @@
     </form>
     {#if said?.where === "password"}<p class:error={said.bad} class="said">{said.what}</p>{/if}
 
+    <h3 class="ui-eyebrow">{l("Bağlı bilgisayarlar", "Linked computers")}</h3>
+    {#if desks.length}
+      <ul class="desks">
+        {#each desks as d (d.id)}
+          <li>
+            <span class="ui-clip" title={d.name}>{d.name}</span>
+            <button class="ui-btn small danger" onclick={(e) => unlink(d, e)}>{l("Kaldır", "Take off")}</button>
+          </li>
+        {/each}
+      </ul>
+    {:else}
+      <p class="muted none">
+        {l(
+          "Bağlı bilgisayar yok. Masaüstündeki Dactile'da Ayarlar > Site'den bağlanır.",
+          "No computer is linked. Dactile on a desktop links from Settings > Site.",
+        )}
+      </p>
+    {/if}
+    {#if said?.where === "desks"}<p class:error={said.bad} class="said">{said.what}</p>{/if}
+
     <p class="out">
       <button onclick={outEverywhere}>{l("Bütün cihazlardan çık", "Sign out everywhere")}</button>
     </p>
@@ -185,5 +227,31 @@
   }
   .out {
     margin-top: 18px;
+  }
+  h3 {
+    margin: 22px 0 8px;
+  }
+  .desks {
+    display: grid;
+    gap: 6px;
+    max-width: 420px;
+    margin: 0 0 10px;
+    padding: 0;
+    list-style: none;
+  }
+  .desks li {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: space-between;
+    min-width: 0;
+    padding: 6px 6px 6px 10px;
+    background: var(--raised);
+    border: 1px solid var(--chrome-line);
+    border-radius: var(--r-md);
+  }
+  .none {
+    margin: 0 0 10px;
+    font-size: 13px;
   }
 </style>

@@ -372,6 +372,14 @@ export interface People {
 }
 
 /// The signed-in person's own account.
+/// A desktop linked to the account: a short name to take it off by, what it
+/// calls itself, and the second its link ends.
+export interface LinkedDevice {
+  id: string;
+  name: string;
+  ends: number;
+}
+
 export interface Account extends Person {
   /// Whether the site has Google sign-in, and sends mail.
   google: boolean;
@@ -398,6 +406,9 @@ export const api = {
   accountMail: (mail: string) => invoke<void>("account_mail", { mail }),
   /// Out on every device, this one too.
   accountOut: () => invoke<void>("account_out"),
+  /// The desktops linked to the account.
+  devices: () => invoke<LinkedDevice[]>("devices"),
+  deviceOff: (id: string) => invoke<void>("device_off", { id }),
   projects: () => invoke<Project[]>("projects"),
   projectCreate: (name: string) => invoke<Project>("project_create", { name }),
   /// Everyone with an account, to put in a project.

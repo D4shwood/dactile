@@ -15,9 +15,11 @@
   const davet = code("davet");
   const parola = code("parola") || code("giris");
   const dogrula = code("dogrula");
-  type Screen = "giris" | "davet" | "unuttum" | "parola" | "dogrula";
+  /// A desktop asking to be linked: the code it shows.
+  const cihaz = path.match(/^\/cihaz\/([A-Za-z0-9-]{4,16})$/)?.[1] ?? "";
+  type Screen = "giris" | "davet" | "unuttum" | "parola" | "dogrula" | "cihaz";
   let screen = $state<Screen>(
-    davet ? "davet" : parola ? "parola" : dogrula ? "dogrula" : path === "/parola" ? "unuttum" : "giris",
+    cihaz ? "cihaz" : davet ? "davet" : parola ? "parola" : dogrula ? "dogrula" : path === "/parola" ? "unuttum" : "giris",
   );
 
   let error = $state("");
@@ -25,12 +27,15 @@
   /// A screen whose link was no good: what to say instead of it.
   let gone = $state(false);
 
+  class SignedOut extends Error {}
+
   async function ask<T>(url: string, body?: unknown): Promise<T> {
     const r = await fetch(url, {
       method: body === undefined ? "GET" : "POST",
-      headers: body === undefined ? {} : { "content-type": "application/json" },
+      headers: body === undefined ? {} : { "content-type": "application/json", "x-dactile": "1" },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
+    if (r.status === 401) throw new SignedOut();
     const said = await r.json().catch(() => null);
     if (!r.ok) throw typeof said === "string" ? said : "Bir şeyler ters gitti; biraz sonra yine dene.";
     return said as T;
@@ -61,7 +66,8 @@
   const signIn = () =>
     act(async () => {
       await ask("/api/giris", { who, password });
-      location.href = "/";
+      // Signed in on the way to linking a desktop: back to that.
+      location.href = cihaz ? path : "/";
     });
 
   // An invitation.
@@ -105,6 +111,15 @@
   // An address.
   let checkedMail = $state("");
 
+  // A desktop to link.
+  let desk = $state<{ name: string; code: string } | null>(null);
+  let linked = $state<boolean | null>(null);
+  const answerDesk = (yes: boolean) =>
+    act(async () => {
+      await ask(`/api/cihaz/${yes ? "onay" : "ret"}/${cihaz}`, {});
+      linked = yes;
+    });
+
   onMount(async () => {
     try {
       if (screen === "davet") {
@@ -116,8 +131,15 @@
         whose = await ask(`/api/parola/${parola}`);
       } else if (screen === "dogrula") {
         checkedMail = (await ask<{ mail: string }>(`/api/dogrula/${dogrula}`, {})).mail;
+      } else if (screen === "cihaz") {
+        desk = await ask(`/api/cihaz/bak/${cihaz}`);
       }
     } catch (e) {
+      // Linking wants someone signed in: first that, then back here.
+      if (e instanceof SignedOut) {
+        screen = "giris";
+        return;
+      }
       gone = true;
       error = String(e);
     }
@@ -269,6 +291,31 @@
       {:else}
         <p class="muted">Bağlantı açılıyor…</p>
       {/if}
+    {:else if screen === "cihaz"}
+      {#if linked === true}
+        <h1>Bilgisayar bağlandı</h1>
+        <p>Masaüstündeki Dactile'a dönebilirsin; sitedeki oyunların orada da görünecek.</p>
+        <p class="muted">Bağlı bilgisayarları Ayarlar &gt; Hesabım'dan kaldırabilirsin.</p>
+      {:else if linked === false}
+        <h1>Bağlanmadı</h1>
+        <p>Bu bilgisayar hesabına bağlanmadı.</p>
+        <a class="button" href="/">Dactile'a git</a>
+      {:else if desk}
+        <h1>Bu bilgisayar bağlansın mı?</h1>
+        <p class="lead"><b>{desk.name || "Adı olmayan bir bilgisayar"}</b> hesabına bağlanmak istiyor.</p>
+        <p class="code" aria-label="Kod">{desk.code.slice(0, 4)}-{desk.code.slice(4)}</p>
+        <p class="muted">
+          Bu kod masaüstündeki Dactile'da görünenle aynı değilse ya da bağlanmayı sen istemediysen Hayır de. Bağlanan bilgisayar
+          oyunlarını açıp yazabilir.
+        </p>
+        {#if error}<p class="error" role="alert">{error}</p>{/if}
+        <div class="row">
+          <button class="primary" disabled={busy} onclick={() => answerDesk(true)}>Evet, bağla</button>
+          <button disabled={busy} onclick={() => answerDesk(false)}>Hayır</button>
+        </div>
+      {:else}
+        <p class="muted">Açılıyor…</p>
+      {/if}
     {:else if screen === "dogrula"}
       {#if checkedMail}
         <h1>Adresin doğrulandı</h1>
@@ -360,6 +407,13 @@
     font-size: 26px;
     margin: 0 0 16px;
     color: var(--fg);
+  }
+  .code {
+    margin: 4px 0 10px;
+    color: var(--accent-ink);
+    font: 600 26px var(--mono);
+    letter-spacing: 0.12em;
+    text-align: center;
   }
   .lead {
     margin: -6px 0 16px;

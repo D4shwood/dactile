@@ -14,6 +14,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// A session's life, and its cookie's.
 pub const SESSION: Duration = Duration::from_secs(30 * 24 * 3600);
+/// A linked computer's: it asks again in a year, or when taken off.
+pub const DEVICE: Duration = Duration::from_secs(365 * 24 * 3600);
 /// Wrong passwords from one address before it has to wait.
 const GUESSES: u32 = 5;
 const WAIT: Duration = Duration::from_secs(15 * 60);
@@ -41,11 +43,31 @@ pub fn now() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
+/// A session: the second it ends, whose it is (no one's name where one
+/// password is the only way in), and the computer's name for a linked
+/// desktop (empty for a browser).
+#[derive(Clone)]
+struct Session {
+    ends: u64,
+    who: String,
+    device: String,
+}
+
+/// A linked computer, as its person sees it in their list.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Device {
+    /// Enough of the token to take it off by; not enough to sign in with.
+    pub id: String,
+    pub name: String,
+    pub ends: u64,
+}
+
+/// How much of a token names a device.
+const SHORT: usize = 12;
+
 pub struct Door {
     file: PathBuf,
-    /// Each token: the second it ends, and whose it is (no one's name where
-    /// one password is the only way in).
-    sessions: Mutex<HashMap<String, (u64, String)>>,
+    sessions: Mutex<HashMap<String, Session>>,
     /// Each address's wrong guesses, and the second they are forgotten.
     guesses: Mutex<HashMap<String, (u32, u64)>>,
 }
@@ -58,11 +80,12 @@ impl Door {
             .unwrap_or_default()
             .lines()
             .filter_map(|l| {
-                let mut parts = l.splitn(3, ' ');
+                let mut parts = l.splitn(4, ' ');
                 let token = parts.next()?;
                 let ends: u64 = parts.next()?.parse().ok()?;
-                let who = parts.next().unwrap_or("");
-                (ends > now).then(|| (token.to_string(), (ends, who.to_string())))
+                let who = parts.next().unwrap_or("").to_string();
+                let device = parts.next().unwrap_or("").to_string();
+                (ends > now).then(|| (token.to_string(), Session { ends, who, device }))
             })
             .collect();
         Door {
@@ -72,7 +95,7 @@ impl Door {
         }
     }
 
-    fn sessions(&self) -> std::sync::MutexGuard<'_, HashMap<String, (u64, String)>> {
+    fn sessions(&self) -> std::sync::MutexGuard<'_, HashMap<String, Session>> {
         self.sessions.lock().unwrap_or_else(|e| e.into_inner())
     }
 
@@ -82,7 +105,7 @@ impl Door {
 
     /// Written whole to a file of its own and moved over, readable by the
     /// person alone. A write that fails only means signing in again later.
-    fn keep(&self, sessions: &HashMap<String, (u64, String)>) {
+    fn keep(&self, sessions: &HashMap<String, Session>) {
         let tmp = self.file.with_extension("new");
         let written = (|| {
             if let Some(d) = self.file.parent() {
@@ -94,8 +117,13 @@ impl Door {
                 .truncate(true)
                 .mode(0o600)
                 .open(&tmp)?;
-            for (token, (ends, who)) in sessions {
-                writeln!(f, "{token} {ends} {who}")?;
+            for (token, s) in sessions {
+                let (ends, who, device) = (s.ends, &s.who, &s.device);
+                if device.is_empty() {
+                    writeln!(f, "{token} {ends} {who}")?;
+                } else {
+                    writeln!(f, "{token} {ends} {who} {device}")?;
+                }
             }
             f.sync_all()?;
             std::fs::rename(&tmp, &self.file)
@@ -108,13 +136,66 @@ impl Door {
     /// A new session's token, for `who` (a name with no space or line
     /// break in it, or none).
     pub fn sign_in(&self, who: &str) -> std::io::Result<String> {
+        self.start(who, "", SESSION)
+    }
+
+    /// A linked computer's token, for `who`; `name` is what the computer
+    /// calls itself, kept to one line.
+    pub fn link(&self, who: &str, name: &str) -> std::io::Result<String> {
+        let name: String = name
+            .chars()
+            .map(|c| if c.is_control() { ' ' } else { c })
+            .take(60)
+            .collect();
+        let name = name.trim();
+        self.start(who, if name.is_empty() { "?" } else { name }, DEVICE)
+    }
+
+    fn start(&self, who: &str, device: &str, life: Duration) -> std::io::Result<String> {
         let token = random()?;
         let now = now();
         let mut sessions = self.sessions();
-        sessions.retain(|_, (ends, _)| *ends > now);
-        sessions.insert(token.clone(), (now + SESSION.as_secs(), who.to_string()));
+        sessions.retain(|_, s| s.ends > now);
+        let s = Session {
+            ends: now + life.as_secs(),
+            who: who.to_string(),
+            device: device.to_string(),
+        };
+        sessions.insert(token.clone(), s);
         self.keep(&sessions);
         Ok(token)
+    }
+
+    /// The computers linked to `who`'s account.
+    pub fn devices(&self, who: &str) -> Vec<Device> {
+        let now = now();
+        let mut all: Vec<Device> = self
+            .sessions()
+            .iter()
+            .filter(|(_, s)| s.who == who && !s.device.is_empty() && s.ends > now)
+            .map(|(t, s)| Device {
+                id: t[..SHORT.min(t.len())].to_string(),
+                name: s.device.clone(),
+                ends: s.ends,
+            })
+            .collect();
+        all.sort_by_key(|d| std::cmp::Reverse(d.ends));
+        all
+    }
+
+    /// Takes one of `who`'s computers off; false if there was no such one.
+    pub fn unlink(&self, who: &str, id: &str) -> bool {
+        if id.len() != SHORT {
+            return false;
+        }
+        let mut sessions = self.sessions();
+        let before = sessions.len();
+        sessions.retain(|t, s| !(s.who == who && !s.device.is_empty() && t.starts_with(id)));
+        let gone = sessions.len() != before;
+        if gone {
+            self.keep(&sessions);
+        }
+        gone
     }
 
     pub fn signed_in(&self, token: &str) -> bool {
@@ -125,15 +206,15 @@ impl Door {
     pub fn who(&self, token: &str) -> Option<String> {
         self.sessions()
             .get(token)
-            .filter(|(ends, _)| *ends > now())
-            .map(|(_, who)| who.clone())
+            .filter(|s| s.ends > now())
+            .map(|s| s.who.clone())
     }
 
     /// Every session of `who` ends: they were taken off the list.
     pub fn sign_out_all(&self, who: &str) {
         let mut sessions = self.sessions();
         let before = sessions.len();
-        sessions.retain(|_, (_, theirs)| theirs != who);
+        sessions.retain(|_, s| s.who != who);
         if sessions.len() != before {
             self.keep(&sessions);
         }
@@ -204,6 +285,33 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let mode = std::fs::metadata(&f).unwrap().permissions().mode();
         assert_eq!(mode & 0o777, 0o600);
+    }
+
+    #[test]
+    fn a_linked_computer_lasts_is_listed_and_can_be_taken_off() {
+        let f = file("devices");
+        let door = Door::open(f.clone());
+        let browser = door.sign_in("ada").unwrap();
+        let desk = door.link("ada", "Ada'nın\nmasaüstü").unwrap();
+        door.link("baran", "Baran").unwrap();
+        // A year, not a month; read back after a restart, name and all.
+        let again = Door::open(f.clone());
+        assert_eq!(again.who(&desk).as_deref(), Some("ada"));
+        let mine = again.devices("ada");
+        assert_eq!(mine.len(), 1);
+        assert_eq!(mine[0].name, "Ada'nın masaüstü");
+        assert!(mine[0].ends > now() + SESSION.as_secs());
+        assert!(desk.starts_with(&mine[0].id) && mine[0].id.len() < desk.len());
+        // Only one's own, by its short name; the browser stays.
+        assert!(!again.unlink("baran", &mine[0].id));
+        assert!(!again.unlink("ada", "ab"));
+        assert!(again.unlink("ada", &mine[0].id));
+        assert!(!again.signed_in(&desk) && again.signed_in(&browser));
+        assert!(again.devices("ada").is_empty());
+        // Off the list, the computers go with the browsers.
+        let desk = again.link("ada", "yine").unwrap();
+        again.sign_out_all("ada");
+        assert!(!again.signed_in(&desk));
     }
 
     #[test]

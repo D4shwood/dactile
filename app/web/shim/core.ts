@@ -228,6 +228,10 @@ export async function invoke<T>(cmd: string, args: Args = {}): Promise<T> {
       return post<T>("/api/hesap/parola", { old: args.old, new: args.new });
     case "account_mail":
       return post<T>("/api/hesap/eposta", { mail: args.mail });
+    case "devices":
+      return fetch("/api/cihazlar").then(answer<T>);
+    case "device_off":
+      return post<T>(`/api/cihazlar/${encodeURIComponent(args.id)}/kaldir`, {});
     case "account_out":
       await post("/api/hesap/cik", {});
       location.href = "/";
