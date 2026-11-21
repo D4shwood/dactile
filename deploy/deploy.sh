@@ -4,7 +4,8 @@
 #   bash deploy/deploy.sh pbe     the trial site (PBE_DOMAIN), first
 #   bash deploy/deploy.sh live    the real one (DOMAIN), with what the
 #                                 trial site already runs, and nothing else
-#   ... --no-desktop              without building the desktop for it
+#   ... --no-desktop              without building the desktops for it
+#   ... --no-windows              with Linux's desktop alone
 #
 # The two are apart: each its own folder, accounts, plays and service. The
 # trial site lives in ~/pbe and listens on 1431; it has no backups, and its
@@ -18,7 +19,8 @@
 # The desktop of the same commit is built here too, signed with the key in
 # ~/.config/dactile-release/updater.key (never in the repository), and put
 # in the site's /indir/: desktops linked to the site update themselves to it
-# (app/src-tauri/src/site.rs, "updating").
+# (app/src-tauri/src/site.rs, "updating"). Windows's is built here as well,
+# with cargo-xwin and NSIS (deploy/kurulum.md, "Windows").
 # Reads deploy/site.env (IP, DOMAIN; GOOGLE_ID and GOOGLE_SECRET if people
 # are to sign in with Google; MAIL_URL, MAIL_USER, MAIL_PASS, MAIL_FROM for
 # the mail service invitations and new passwords go by). People have
@@ -37,7 +39,18 @@ case ${1:-} in
   *) echo "Which site: bash deploy/deploy.sh pbe | live"; exit 1 ;;
 esac
 desktop=1
-[ "${2:-}" != --no-desktop ] || desktop=
+windows=1
+for o in "${@:2}"; do
+  case $o in
+    --no-desktop) desktop= windows= ;;
+    --no-windows) windows= ;;
+    *) echo "No such option: $o" >&2; exit 1 ;;
+  esac
+done
+if [ -n "$windows" ] && ! { command -v cargo-xwin && command -v makensis; } >/dev/null; then
+  echo "Windows's desktop needs cargo-xwin and makensis (deploy/kurulum.md), or add --no-windows."
+  exit 1
+fi
 key="$HOME/.config/dactile-release/updater.key"
 if [ -n "$desktop" ] && [ ! -f "$key" ]; then
   echo "No signing key at $key for the desktop: make one (npx tauri signer generate -w $key), or add --no-desktop."
@@ -111,16 +124,27 @@ if [ -n "$desktop" ]; then
     flock "$HOME/.cache/dactile-team/build.lock" npm run --silent tauri build -- --bundles appimage --config "$deskconf" >/dev/null)
   case $deskconf in /tmp/dactile-desk.*) rm -- "$deskconf" ;; esac
   image=$(ls -t "$repo"/target/release/bundle/appimage/*.AppImage | head -1)
+  platforms=$(printf '"linux-x86_64":{"url":"https://%s/indir/Dactile.AppImage","signature":"%s"}' "$domain" "$(cat "$image.sig")")
+  if [ -n "$windows" ]; then
+    echo "== Windows's desktop"
+    (cd "$repo/app" && TAURI_SIGNING_PRIVATE_KEY="$(cat "$key")" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
+      flock "$HOME/.cache/dactile-team/build.lock" npm run --silent tauri build -- \
+      --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis \
+      --config '{"bundle":{"createUpdaterArtifacts":true}}' >/dev/null)
+    setup=$(ls -t "$repo"/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe | head -1)
+    platforms+=$(printf ',"windows-x86_64":{"url":"https://%s/indir/Dactile-kurulum.exe","signature":"%s"}' "$domain" "$(cat "$setup.sig")")
+  fi
   # Its version carries the commit's time: a desktop takes it when its own
   # is older (build.rs stamps each the same way).
   version=$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' "$repo/Cargo.toml")
   stamp=$(git -C "$repo" log -1 --format=%ct)
   latest=$(mktemp /tmp/dactile-latest.XXXXXX.json)
-  printf '{"version":"%s+%s","pub_date":"%s","platforms":{"linux-x86_64":{"url":"https://%s/indir/Dactile.AppImage","signature":"%s"}}}\n' \
-    "$version" "$stamp" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$domain" "$(cat "$image.sig")" > "$latest"
+  printf '{"version":"%s+%s","pub_date":"%s","platforms":{%s}}\n' \
+    "$version" "$stamp" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$platforms" > "$latest"
   run "mkdir -p $home/web/indir"
   # The image first: the list never names one that isn't there yet.
   put "$image" "$to:$home/web/indir/Dactile.AppImage"
+  [ -z "$windows" ] || put "$setup" "$to:$home/web/indir/Dactile-kurulum.exe"
   put "$latest" "$to:$home/web/indir/latest.json"
   case $latest in /tmp/dactile-latest.*) rm -- "$latest" ;; esac
 fi

@@ -14,6 +14,7 @@
   import AccountForm from "./AccountForm.svelte";
   import Projects from "./Projects.svelte";
   import SiteShelf from "./SiteShelf.svelte";
+  import { localPlays } from "./site/desk";
   import { applyLook, pickLook } from "./look";
   import Temporary from "./Temporary.svelte";
   import { getVersion } from "@tauri-apps/api/app";
@@ -23,6 +24,14 @@
 
   type Section = "home" | "new" | "open" | "projects" | "site" | "settings" | "keys";
   let section = $state<Section>("home");
+  /// False where this computer opens a site's plays alone (Windows): only
+  /// "On the site" and this computer's own settings.
+  let local = $state(true);
+  void localPlays().then((v) => {
+    local = v;
+    if (!v) section = "site";
+  });
+  const SITE_ONLY: Section[] = ["site", "settings", "keys"];
   let version = $state("");
   void getVersion().then((v) => (version = v));
   // In the browser: who is signed in, and the way out.
@@ -414,7 +423,7 @@
     </div>
     <!-- Projects are the site's: in the browser. The desktop reaches a
          site's through "On the site". -->
-    {#each SIDE.filter(([id]) => (id !== "projects" || door) && (id !== "site" || !door)) as [id, icon, t, e]}
+    {#each SIDE.filter(([id]) => (id !== "projects" || door) && (id !== "site" || !door) && (local || SITE_ONLY.includes(id))) as [id, icon, t, e]}
       <button class:on={section === id} onclick={() => (section = id)}>
         <span class="icon">{icon}</span>{tr ? t : e}
       </button>
@@ -726,7 +735,7 @@
     {/if}
 
     {#if section === "site"}
-      <SiteShelf {tr} {open} />
+      <SiteShelf {tr} {open} {local} />
     {/if}
 
     {#if section === "settings"}
@@ -740,7 +749,7 @@
       >
         <label>{l("Yazar", "Author")} <input class="ui-field" bind:value={author} /></label>
         <!-- In the browser the plays' folder is the server's to say. -->
-        {#if !door}
+        {#if !door && local}
           <label>{l("Oyunlar klasörü", "Plays folder")} <input class="ui-field" bind:value={playsDir} /></label>
         {/if}
         <label

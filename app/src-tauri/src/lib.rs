@@ -173,6 +173,14 @@ fn text_only() -> &'static [&'static str] {
     dactile_backend::TEXT_ONLY
 }
 
+/// Whether this desktop writes plays of its own. On Windows, for now, it
+/// opens a site's alone: there is no TeX there, and the site makes the PDF.
+/// `DACTILE_SITE_ONLY` shows that here, in a debug build.
+#[tauri::command]
+fn local_plays() -> bool {
+    !(cfg!(windows) || (cfg!(debug_assertions) && std::env::var_os("DACTILE_SITE_ONLY").is_some()))
+}
+
 /// In a debug build with `DACTILE_DEV_EVAL=file`: JavaScript written to that
 /// file runs in the window, and the file goes; `!close` alone closes the
 /// window as its own button would. For trying the app out from a script,
@@ -230,6 +238,7 @@ pub fn run() {
             door,
             sign_out,
             text_only,
+            local_plays,
             site::site_status,
             site::site_door,
             site::site_connect,

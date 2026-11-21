@@ -12,7 +12,6 @@ use dactile_backend::Res;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::io::Write;
-use std::os::unix::fs::OpenOptionsExt;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -60,12 +59,12 @@ fn keep(link: &Link) -> Result<(), String> {
         if let Some(d) = f.parent() {
             std::fs::create_dir_all(d)?;
         }
-        let mut w = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(&tmp)?;
+        let mut o = std::fs::OpenOptions::new();
+        o.write(true).create(true).truncate(true);
+        // On Windows the person's own AppData is theirs alone already.
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut o, 0o600);
+        let mut w = o.open(&tmp)?;
         w.write_all(text.as_bytes())?;
         w.sync_all()?;
         std::fs::rename(&tmp, &f)
@@ -438,8 +437,9 @@ fn stamp_of(v: &semver::Version) -> u64 {
 
 fn updater(app: &tauri::AppHandle) -> Result<Option<tauri_plugin_updater::Updater>, String> {
     use tauri_plugin_updater::UpdaterExt;
-    // Only an AppImage can put a new one in its own place.
-    if std::env::var_os("APPIMAGE").is_none() {
+    // Only an AppImage can put a new one in its own place on Linux; on
+    // Windows the installer does it.
+    if !cfg!(windows) && std::env::var_os("APPIMAGE").is_none() {
         return Ok(None);
     }
     let Some(link) = read() else {

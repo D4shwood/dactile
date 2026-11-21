@@ -8,6 +8,20 @@
   let { tr, renamed }: { tr: boolean; renamed: (name: string) => void } = $props();
   const l = (t: string, e: string) => (tr ? t : e);
 
+  /// The desktops the site hands out (deploy.sh puts them in /indir/), as
+  /// its list of them says: file, and its name in each language.
+  const DESKTOPS: Record<string, [string, string, string]> = {
+    "windows-x86_64": ["Dactile-kurulum.exe", "Windows için indir", "Download for Windows"],
+    "linux-x86_64": ["Dactile.AppImage", "Linux (AppImage)", "Linux (AppImage)"],
+  };
+  let handed = $state<[string, string, string][]>([]);
+  void fetch("/indir/latest.json")
+    .then((r) => (r.ok ? r.json() : null))
+    .then((list) => {
+      if (list?.platforms) handed = Object.keys(DESKTOPS).filter((p) => p in list.platforms).map((p) => DESKTOPS[p]);
+    })
+    .catch(() => {});
+
   let me = $state<Account | null>(null);
   let name = $state("");
   let mail = $state("");
@@ -179,6 +193,12 @@
       </p>
     {/if}
     {#if said?.where === "desks"}<p class:error={said.bad} class="said">{said.what}</p>{/if}
+    {#if handed.length}
+      <p class="muted get">
+        {l("Masaüstü uygulaması:", "The desktop app:")}
+        {#each handed as [file, t, e], i (file)}{#if i}<span> · </span>{/if}<a class="ui-link" href={`/indir/${file}`} download>{l(t, e)}</a>{/each}
+      </p>
+    {/if}
 
     <p class="out">
       <button onclick={outEverywhere}>{l("Bütün cihazlardan çık", "Sign out everywhere")}</button>
@@ -189,6 +209,9 @@
 {/if}
 
 <style>
+  .get a {
+    margin-left: 4px;
+  }
   .account {
     max-width: 760px;
   }

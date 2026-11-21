@@ -61,6 +61,29 @@ jobs:
       - run: cargo clippy -p dactile-app --all-targets -- -D warnings
       - run: cargo test -p dactile-app
 
+  # The desktop on Windows, which opens a site's plays: the core, the
+  # backend and the app, tested there. The server and the browser's build
+  # are Linux's and the browser's.
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: npm ci
+        working-directory: app
+      - run: npm run build
+        working-directory: app
+      - run: cargo clippy -p dactile -p dactile-backend -p dactile-app --all-targets -- -D warnings
+      - run: cargo test -p dactile -p dactile-backend -p dactile-app
+
   # The tiyatro class: the example play must compile in draft and final mode.
   tex:
     runs-on: ubuntu-latest

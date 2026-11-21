@@ -49,6 +49,10 @@ export const siteUpdate = () => tauri<string | null>("site_update");
 /// Puts the site's desktop in this one's place and opens it anew.
 export const siteUpdateInstall = () => tauri<void>("site_update_install");
 
+/// Whether this computer writes plays of its own; false on Windows, which
+/// opens a site's alone. True in the browser, where it isn't asked.
+export const localPlays = () => tauri<boolean>("local_plays").catch(() => true);
+
 /// Whether the play open now is the site's.
 let onSite = false;
 /// The backend's commands that run here even then: they read only their

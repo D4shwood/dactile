@@ -9,7 +9,7 @@
 
 use crate::cast::Cast;
 use crate::outline::Outline;
-use crate::{class, config, file, lang, lex, source, trash};
+use crate::{class, config, file, lang, lex, source};
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -409,7 +409,7 @@ fn still_there(path: &Path) -> anyhow::Result<()> {
 /// Opens a file or a folder with the desktop's own program for it.
 pub fn launch(path: &Path) -> anyhow::Result<()> {
     still_there(path)?;
-    let mut child = outside("xdg-open")
+    let mut child = outside(OPENER)
         .arg(path)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -419,13 +419,19 @@ pub fn launch(path: &Path) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// What opens a file or an address with the desktop's own program for it.
+#[cfg(not(windows))]
+const OPENER: &str = "xdg-open";
+#[cfg(windows)]
+const OPENER: &str = "explorer";
+
 /// A web or mail address with the desktop's own program; nothing else, a
 /// PDF's link being anyone's to write.
 pub fn open_url(url: &str) -> anyhow::Result<()> {
     if !web_address(url) {
         anyhow::bail!("{url}: not a web address");
     }
-    let mut child = outside("xdg-open")
+    let mut child = outside(OPENER)
         .arg(url)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -439,6 +445,10 @@ pub fn open_url(url: &str) -> anyhow::Result<()> {
 /// times, and waits for `lp` to take them.
 pub fn print(pdf: &Path, first: usize, last: usize, copies: usize) -> anyhow::Result<()> {
     still_there(pdf)?;
+    // Windows has no `lp`: the PDF opens in its viewer, which prints it.
+    if cfg!(windows) {
+        return launch(pdf);
+    }
     let out = outside("lp")
         .args(print_args(first, last, copies))
         .arg("--")
@@ -498,20 +508,34 @@ fn web_address(url: &str) -> bool {
 pub fn reveal(path: &Path) -> anyhow::Result<()> {
     still_there(path)?;
     let path = std::path::absolute(path)?;
-    if show_items(&file_uri(&path)) {
-        return Ok(());
+    #[cfg(windows)]
+    {
+        // Explorer answers with a failure even when it has shown the file.
+        let mut select = std::ffi::OsString::from("/select,");
+        select.push(&path);
+        let mut child = outside("explorer").arg(select).spawn()?;
+        std::thread::spawn(move || child.wait());
+        Ok(())
     }
-    launch(path.parent().unwrap_or(&path))
+    #[cfg(not(windows))]
+    {
+        if show_items(&file_uri(&path)) {
+            return Ok(());
+        }
+        launch(path.parent().unwrap_or(&path))
+    }
 }
 
+#[cfg(not(windows))]
 /// `/a b/ç.pdf` → `file:///a%20b/%C3%A7.pdf`.
 fn file_uri(path: &Path) -> String {
     format!(
         "file://{}",
-        trash::encode(path.as_os_str().as_encoded_bytes())
+        crate::trash::encode(path.as_os_str().as_encoded_bytes())
     )
 }
 
+#[cfg(not(windows))]
 /// Asks for `org.freedesktop.FileManager1.ShowItems`: whether it was done.
 /// The URI goes in as a GVariant string: encoded, it has no quote to break it.
 fn show_items(uri: &str) -> bool {
@@ -647,6 +671,9 @@ const APPIMAGE_OWN: [&str; 4] = ["APPIMAGE", "APPDIR", "ARGV0", "OWD"];
 /// gets the environment as it was, without Dactile's name for itself.
 pub fn outside(program: &str) -> Command {
     let mut c = Command::new(program);
+    // No console window flashing up beside the app on Windows.
+    #[cfg(windows)]
+    std::os::windows::process::CommandExt::creation_flags(&mut c, 0x0800_0000);
     let dir = std::env::var("APPDIR").ok().filter(|d| !d.is_empty());
     for (name, value) in child_env(std::env::vars_os(), dir.as_deref()) {
         match value {
@@ -748,6 +775,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(windows))]
     #[test]
     fn file_uris_are_percent_encoded() {
         assert_eq!(

@@ -351,6 +351,8 @@ mod tests {
         d
     }
 
+    // Windows makes links for its administrators alone.
+    #[cfg(unix)]
     #[test]
     fn atomic_write_through_a_link() {
         let d = tmp("link");

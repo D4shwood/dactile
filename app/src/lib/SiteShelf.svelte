@@ -22,7 +22,7 @@
     type SiteLink,
   } from "./site/desk";
 
-  let { tr, open }: { tr: boolean; open: (path: string) => void } = $props();
+  let { tr, open, local = true }: { tr: boolean; open: (path: string) => void; local?: boolean } = $props();
   const l = (t: string, e: string) => (tr ? t : e);
 
   let link = $state<SiteLink | null>(null);
@@ -147,6 +147,12 @@
   <p class="muted">{l("Bakılıyor…", "Looking…")}</p>
 {:else if !link}
   <p class="lead">
+    {#if !local}
+      {l(
+        "Bu Dactile sitedeki oyunlarını açar: yazdıkların orada kalır, PDF'i site yapar. ",
+        "This Dactile opens your plays on a site: what you write stays there, and the site makes the PDF. ",
+      )}
+    {/if}
     {l(
       "Bu bilgisayarı bir Dactile sitesindeki hesabına bağla: oradaki oyunların ve projelerin burada da açılır, birlikte yazma dahil. Parola buraya yazılmaz; tarayıcıda onaylarsın.",
       "Link this computer to your account on a Dactile site: your plays and projects there open here too, writing together included. No password is typed here; you say yes in the browser.",
