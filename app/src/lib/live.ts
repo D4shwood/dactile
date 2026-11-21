@@ -18,6 +18,18 @@ const SAVED = 102;
 const BYE = 103;
 const REFUSED = 104;
 
+/// Where a play's room is. In the browser, this site's, with the page's
+/// cookie; a desktop linked to a site puts its own here (a ticket's
+/// address: its token can't ride on a WebSocket).
+let roomAddress = async (path: string) => {
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${location.host}/api/oda?path=${encodeURIComponent(path)}`;
+};
+
+export function setRoomAddress(f: (path: string) => Promise<string>) {
+  roomAddress = f;
+}
+
 /// What the room says to this page.
 export interface RoomInfo {
   epoch: string;
@@ -94,7 +106,7 @@ export class Live {
       encoding.writeVarUint8Array(e, aware.encodeAwarenessUpdate(this.awareness, changed));
       this.send(encoding.toUint8Array(e));
     });
-    this.connect();
+    void this.connect();
   }
 
   /// The room has told this page who it is, and the epoch matched.
@@ -109,11 +121,22 @@ export class Live {
     this.hooks.link(l);
   }
 
-  private connect() {
+  private async connect() {
     if (this.closed) return;
     this.joined = false;
-    const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${proto}//${location.host}/api/oda?path=${encodeURIComponent(this.path)}`);
+    let at: string;
+    try {
+      at = await roomAddress(this.path);
+    } catch {
+      // No way in for now (the site out of reach): try again soon.
+      if (this.closed) return;
+      this.setLink("offline");
+      this.timer = setTimeout(() => void this.connect(), this.wait);
+      this.wait = Math.min(this.wait * 2, 5000);
+      return;
+    }
+    if (this.closed) return;
+    const ws = new WebSocket(at);
     ws.binaryType = "arraybuffer";
     this.ws = ws;
     ws.onopen = () => (this.wait = 500);
@@ -130,7 +153,7 @@ export class Live {
       );
       if (this.closed) return;
       this.setLink("offline");
-      this.timer = setTimeout(() => this.connect(), this.wait);
+      this.timer = setTimeout(() => void this.connect(), this.wait);
       this.wait = Math.min(this.wait * 2, 5000);
     };
   }

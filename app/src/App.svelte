@@ -5,6 +5,7 @@
   import Start from "./lib/Start.svelte";
   import Writer from "./lib/Writer.svelte";
   import Ask from "./lib/Ask.svelte";
+  import { isOnSite, SITE_OUT, useSite } from "./lib/site/desk";
 
   let home = $state<Home | null>(null);
   let opened = $state<Opened | null>(null);
@@ -25,10 +26,22 @@
       if (home) home.settings = await api.settings();
     } catch (e) {
       error = String(e);
+      // A site's play that didn't open: home stays this computer's.
+      if (!opened && isOnSite()) await useSite(false);
     }
   }
 
   onMount(async () => {
+    // A linked site let this computer go while one of its plays was open.
+    window.addEventListener(SITE_OUT, async () => {
+      if (!isOnSite()) return;
+      opened = null;
+      await useSite(false);
+      await reload();
+      error = tr
+        ? "Site bu bilgisayarı artık tanımıyor: Sitede bölümünden yeniden bağlan."
+        : "The site no longer knows this computer: link it again from On the site.";
+    });
     await reload();
     const first = await api.startup();
     if (first) open(first);
@@ -43,6 +56,9 @@
       {tr}
       close={async (next) => {
         opened = null;
+        // Back home: the commands are this computer's again. The next play
+        // of a site's play (a draft of it) is the site's too.
+        if (!next) await useSite(false);
         await reload();
         if (next) await open(next);
       }}

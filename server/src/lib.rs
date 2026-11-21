@@ -30,7 +30,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub const COOKIE: &str = "dactile";
 /// What a linked desktop and this site must agree on: raised when a command
-/// or a route changes so that an older desktop would go wrong with it.
+/// or a route changes so that an older desktop would go wrong with it. The
+/// desktop's own is `API` in app/src/lib/site/commands.ts (a test keeps the
+/// two the same).
 pub const API: u32 = 1;
 /// The header the gate's word comes in.
 pub const GATE: &str = "x-dactile-gate";

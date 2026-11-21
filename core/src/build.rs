@@ -342,7 +342,7 @@ pub fn pages_in(log: &str) -> Option<usize> {
 
 /// `~/.cache/dactile`. Never a shared folder like `/tmp`, where someone
 /// else could put a class of their own first.
-fn cache() -> anyhow::Result<PathBuf> {
+pub fn cache() -> anyhow::Result<PathBuf> {
     dirs::cache_dir()
         .map(|d| d.join("dactile"))
         .ok_or_else(|| anyhow::anyhow!("no cache folder (HOME is not set)"))

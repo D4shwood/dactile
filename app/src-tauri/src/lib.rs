@@ -3,6 +3,8 @@
 //! those a desktop has and a web page doesn't: its file dialogs, its
 //! programs, its printer, its screen.
 
+mod site;
+
 use dactile_backend::{Ctx, Res, err, importing, play};
 use std::path::PathBuf;
 use tauri::{Manager, State};
@@ -164,6 +166,13 @@ fn door() -> Option<()> {
 #[tauri::command]
 fn sign_out() {}
 
+/// The backend's commands that read only their arguments: with a site's
+/// play open they still run here, as the browser runs them itself.
+#[tauri::command]
+fn text_only() -> &'static [&'static str] {
+    dactile_backend::TEXT_ONLY
+}
+
 /// In a debug build with `DACTILE_DEV_EVAL=file`: JavaScript written to that
 /// file runs in the window, and the file goes; `!close` alone closes the
 /// window as its own button would. For trying the app out from a script,
@@ -197,6 +206,7 @@ pub fn run() {
     glib::set_prgname(Some("io.github.d4shwood.dactile"));
     tauri::Builder::default()
         .manage(Ctx::default())
+        .manage(site::Linking::default())
         .setup(|app| {
             dactile_backend::spell::load(app.state::<Ctx>().spell.clone());
             dev_eval(app.handle().clone());
@@ -218,6 +228,17 @@ pub fn run() {
             open_url,
             door,
             sign_out,
+            text_only,
+            site::site_status,
+            site::site_door,
+            site::site_connect,
+            site::site_wait,
+            site::site_forget,
+            site::site_request,
+            site::site_file,
+            site::site_fetch,
+            site::site_upload,
+            site::site_room,
         ])
         .run(tauri::generate_context!())
         .expect("the window could not open");

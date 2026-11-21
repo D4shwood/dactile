@@ -4,6 +4,7 @@
 // uploads, downloads and the browser's own tabs here.
 
 import init, { call as callHere, names, set_lang } from "../wasm/dactile_wasm.js";
+import { siteCommands, SignedOut } from "../../src/lib/site/commands";
 
 const IMPORT = ".docx,.odt,.pdf,.md,.txt,.tex";
 
@@ -42,12 +43,10 @@ function local<T>(name: string, args: unknown): T | undefined {
   }
 }
 
-export class SignedOut extends Error {}
-
 async function answer<T>(r: Response): Promise<T> {
   if (r.status === 401) {
     window.dispatchEvent(new Event("dactile-signed-out"));
-    throw new SignedOut("signed out");
+    throw new SignedOut();
   }
   const body = await r.json().catch(() => r.statusText);
   // A command's error is its message, as Tauri gives it.
@@ -130,22 +129,10 @@ function print(path: string) {
 
 type Args = Record<string, any>;
 
-// The play that is open, as the server knows it. A person's server is
-// stopped when they have been away a while and started again when they come
-// back, with no play open: the next command that needs one opens it first.
-let openPath: string | null = null;
-
-async function call<T>(name: string, args: unknown): Promise<T> {
-  // A save is finished even if the tab closes on it.
-  const send = () => post<T>(`/api/call/${name}`, args, name === "save");
-  try {
-    return await send();
-  } catch (e) {
-    if (e !== "no play open" || !openPath || name === "open") throw e;
-    await post("/api/call/open", { path: openPath });
-    return send();
-  }
-}
+/// The site's commands, sent from this page with its cookie.
+const site = siteCommands((method, path, body, outlive) =>
+  method === "GET" ? fetch(path).then(answer) : post(path, body, outlive),
+);
 
 export async function invoke<T>(cmd: string, args: Args = {}): Promise<T> {
   const done = (v?: unknown) => v as T;
@@ -157,14 +144,10 @@ export async function invoke<T>(cmd: string, args: Args = {}): Promise<T> {
         const answer = local<T>(args.name, args.args);
         if (answer !== undefined) return answer;
       }
-      return call<T>(args.name, args.args).then(async (v) => {
-        if (args.name === "open") openPath = (v as { path: string }).path;
-        if (args.name === "close") openPath = null;
+      return site.call<T>(args.name, args.args).then(async (v) => {
         if (SPEAKS.has(args.name)) await follow();
         return v;
       });
-    case "import_read":
-      return post<T>("/api/import_read", args);
     case "startup":
       return done(null);
     case "pick":
@@ -192,46 +175,6 @@ export async function invoke<T>(cmd: string, args: Args = {}): Promise<T> {
       return done();
     case "log":
       return post<T>("/api/log", args).catch(() => done());
-    case "door": {
-      const me = await fetch("/api/me").then(answer<{ name: string | null; role?: string }>);
-      return done({ name: me.name, owner: me.role === "owner" });
-    }
-    case "people":
-      return fetch("/api/people").then(answer<T>);
-    case "person_invite":
-      return post<T>("/api/people/davet", { mail: args.mail, name: args.name });
-    case "person_uninvite":
-      return post<T>("/api/people/davet/geri", { mail: args.mail });
-    case "person_reset":
-      return post<T>(`/api/people/${encodeURIComponent(args.id)}/reset`, {});
-    case "person_remove":
-      return post<T>(`/api/people/${encodeURIComponent(args.id)}/remove`, {});
-    case "projects":
-      return fetch("/api/projects").then(answer<T>);
-    case "project_people":
-      return fetch("/api/projects/people").then(answer<T>);
-    case "project_create":
-      return post<T>("/api/projects", { name: args.name });
-    case "project_member":
-      return post<T>(`/api/projects/${encodeURIComponent(args.id)}/member`, { who: args.who, role: args.role });
-    case "project_mode":
-      return post<T>(`/api/projects/${encodeURIComponent(args.id)}/mode`, { mode: args.mode });
-    case "project_rename":
-      return post<T>(`/api/projects/${encodeURIComponent(args.id)}/name`, { name: args.name });
-    case "project_leave":
-      return post<T>(`/api/projects/${encodeURIComponent(args.id)}/leave`, {});
-    case "account":
-      return fetch("/api/hesap").then(answer<T>);
-    case "account_name":
-      return post<T>("/api/hesap", { name: args.name });
-    case "account_password":
-      return post<T>("/api/hesap/parola", { old: args.old, new: args.new });
-    case "account_mail":
-      return post<T>("/api/hesap/eposta", { mail: args.mail });
-    case "devices":
-      return fetch("/api/cihazlar").then(answer<T>);
-    case "device_off":
-      return post<T>(`/api/cihazlar/${encodeURIComponent(args.id)}/kaldir`, {});
     case "account_out":
       await post("/api/hesap/cik", {});
       location.href = "/";
@@ -240,7 +183,10 @@ export async function invoke<T>(cmd: string, args: Args = {}): Promise<T> {
       await post("/api/logout", {});
       location.reload();
       return done();
-    default:
+    default: {
+      const answer = site.route<T>(cmd, args);
+      if (answer) return answer;
       throw `${cmd}: not in the browser`;
+    }
   }
 }

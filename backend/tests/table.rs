@@ -29,6 +29,8 @@ const DESKTOP: &[&str] = &[
     "account_password",
     "account_mail",
     "account_out",
+    "devices",
+    "device_off",
     "projects",
     "project_create",
     "project_people",

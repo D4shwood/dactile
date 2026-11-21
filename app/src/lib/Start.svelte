@@ -13,6 +13,7 @@
   import People from "./People.svelte";
   import AccountForm from "./AccountForm.svelte";
   import Projects from "./Projects.svelte";
+  import SiteShelf from "./SiteShelf.svelte";
   import { applyLook, pickLook } from "./look";
   import Temporary from "./Temporary.svelte";
   import { getVersion } from "@tauri-apps/api/app";
@@ -20,7 +21,7 @@
   let { home, tr, open, reload }: { home: Home; tr: boolean; open: (path: string) => void; reload: () => Promise<void> } =
     $props();
 
-  type Section = "home" | "new" | "open" | "projects" | "settings" | "keys";
+  type Section = "home" | "new" | "open" | "projects" | "site" | "settings" | "keys";
   let section = $state<Section>("home");
   let version = $state("");
   void getVersion().then((v) => (version = v));
@@ -397,6 +398,7 @@
     ["new", "✚", "Yeni", "New"],
     ["open", "▤", "Aç", "Open"],
     ["projects", "◫", "Projeler", "Projects"],
+    ["site", "☁", "Sitede", "On the site"],
     ["settings", "⚙", "Ayarlar", "Settings"],
     ["keys", "⌨", "Tuşlar", "Keys"],
   ];
@@ -410,7 +412,9 @@
       <div class="name">D A C T I L E<span class="caret"></span></div>
       <div class="what">Dynamic Stagewright</div>
     </div>
-    {#each SIDE.filter(([id]) => id !== "projects" || door) as [id, icon, t, e]}
+    <!-- Projects are the site's: in the browser. The desktop reaches a
+         site's through "On the site". -->
+    {#each SIDE.filter(([id]) => (id !== "projects" || door) && (id !== "site" || !door)) as [id, icon, t, e]}
       <button class:on={section === id} onclick={() => (section = id)}>
         <span class="icon">{icon}</span>{tr ? t : e}
       </button>
@@ -719,6 +723,10 @@
 
     {#if section === "projects"}
       <Projects {tr} changed={() => void reload()} />
+    {/if}
+
+    {#if section === "site"}
+      <SiteShelf {tr} {open} />
     {/if}
 
     {#if section === "settings"}

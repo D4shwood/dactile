@@ -173,8 +173,8 @@
     {:else}
       <p class="muted none">
         {l(
-          "Bağlı bilgisayar yok. Masaüstündeki Dactile'da Ayarlar > Site'den bağlanır.",
-          "No computer is linked. Dactile on a desktop links from Settings > Site.",
+          "Bağlı bilgisayar yok. Masaüstündeki Dactile, Sitede bölümünden bağlanır.",
+          "No computer is linked. Dactile on a desktop links from On the site.",
         )}
       </p>
     {/if}

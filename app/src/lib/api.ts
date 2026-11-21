@@ -4,6 +4,7 @@
 import { invoke as tauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { onSiteInvoke } from "./site/desk";
 
 const DESKTOP = new Set([
   "import_read",
@@ -31,6 +32,8 @@ const DESKTOP = new Set([
   "account_password",
   "account_mail",
   "account_out",
+  "devices",
+  "device_off",
   "projects",
   "project_create",
   "project_people",
@@ -41,7 +44,11 @@ const DESKTOP = new Set([
 ]);
 
 function invoke<T>(name: string, args?: Record<string, unknown>): Promise<T> {
-  return DESKTOP.has(name) ? tauri<T>(name, args) : tauri<T>("call", { name, args: args ?? {} });
+  const desktop = DESKTOP.has(name);
+  // A linked site's play: to the site (site/desk.ts).
+  const there = onSiteInvoke<T>(name, args ?? {}, desktop);
+  if (there) return there;
+  return desktop ? tauri<T>(name, args) : tauri<T>("call", { name, args: args ?? {} });
 }
 
 export interface PlayCard {

@@ -55,6 +55,16 @@ Proje oyunları canlı yazılır (`server/src/room.rs`, tarayıcıda `app/src/li
 
 Oyun `.tex` olarak kalır: oda onu yazma durduktan 2 saniye sonra, Ctrl+S'te, kişinin sunucusuna bir komut gitmeden önce (PDF diskten okunur), son kişi çıkınca ve kapı kapanırken yazar. Geçmiş projenin kendi klasöründedir (`<proje>/history`, `.dactile-project` işaretiyle). Yanında `.<ad>.dactile-y` belgenin Yjs halini tutar: kapı yeniden başlayınca kopan editörler dönüp birleşir. Dosya odanın dışında değiştiyse belge yeni bir adla (epoch) baştan kurulur; eski editör birleştirmez, kopukken yazdıklarını gösterip oyunu yeniden açar. Kişilerin sunucuları proje oyunlarında kilit almaz ve onları kaydetmez. Oyun silinir ya da taşınırsa oda kapanır.
 
+## Masaüstü siteye bağlanır
+
+Masaüstündeki Dactile bir siteye bağlanabilir; sitedeki oyunlar ve projeler orada da açılır, canlı yazma dahil. Yerel oyunlar ve çevrimdışı yazma olduğu gibi kalır.
+
+- **Bağlama:** Masaüstü "Sitede" bölümünde adresi alır, kapıdan bir kod ister (`POST /api/cihaz`) ve tarayıcıda `/cihaz/<kod>` sayfasını açar. Orada girişli kişi aynı kodu görüp onaylar; masaüstü bu arada yalnızca kendisinin bildiği bir sözle bekler (`GET /api/cihaz/<söz>`) ve onaydan sonra kendi anahtarını alır. Masaüstüne parola yazılmaz; Google ile girenler de bağlar.
+- **Anahtar:** Bir yıl süren bir oturum, `Authorization: Bearer` ile gider; çerez gibi kendiliğinden gitmediği için başka bir site onu kullanamaz. Masaüstünde `site.toml` dosyasında, ayarların yanında ve yalnızca kişinin okuyabileceği haliyle durur. Kişi listeden çıkarılınca ya da parolası değişince biter. Ayarlar > Hesabım'da bağlı bilgisayarlar listelenir ve kaldırılır.
+- **Komutlar:** Tarayıcının komutları HTTP'ye çeviren katmanı ortaktır (`app/src/lib/site/commands.ts`). Tarayıcı onu `fetch` ile, masaüstü Rust tarafından (`app/src-tauri/src/site.rs`) anahtarıyla kullanır. Bir site oyunu açıkken masaüstünün komutları siteye gider (`app/src/lib/site/desk.ts`); yalnızca metin okuyan komutlar ve ayarlar bilgisayarda kalır.
+- **Canlı oda:** WebSocket anahtarı taşıyamadığı için masaüstü otuz saniyelik, tek kullanımlık bir bilet ister (`/api/oda/bilet`).
+- **Sürüm:** `/api/door` ve `/api/version` sitenin sürümünü ve API numarasını söyler. Masaüstünün numarası farklıysa sitedeki oyunları açmaz, sürümlerin uyuşmadığını söyler. Numara (`API`) sunucuda ve `commands.ts`'te aynıdır; bir test bunu denetler.
+
 ## Sıra
 
 1. **Tek kişilik kurulum.** Bugünkü haliyle bir sunucuya; kurulum betikleri gerçek makinede sınanır.

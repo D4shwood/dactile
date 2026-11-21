@@ -243,3 +243,13 @@ async fn a_desktop_is_linked_by_a_yes_in_the_browser() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn the_desktop_knows_the_same_api_number() {
+    let ts = include_str!("../../app/src/lib/site/commands.ts");
+    let said = ts
+        .lines()
+        .find_map(|l| l.strip_prefix("export const API = "))
+        .and_then(|v| v.trim_end_matches(';').parse::<u32>().ok());
+    assert_eq!(said, Some(dactile_server::API));
+}
