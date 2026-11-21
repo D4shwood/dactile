@@ -213,17 +213,17 @@
       </div>
 
       <div class="controls">
-        <div class="seg" role="radiogroup" aria-label={l("Uyum", "Harmony")}>
+        <div class="ui-seg" role="radiogroup" aria-label={l("Uyum", "Harmony")}>
           {#each HARMONIES as [h, t, e] (h)}
             <button class:on={seed.harmony === h} role="radio" aria-checked={seed.harmony === h} onclick={() => change({ harmony: h })}>{l(t, e)}</button>
           {/each}
         </div>
         <div class="row">
-          <div class="seg two" role="radiogroup" aria-label={l("Açık ya da koyu", "Light or dark")}>
+          <div class="ui-seg two" role="radiogroup" aria-label={l("Açık ya da koyu", "Light or dark")}>
             <button class:on={seed.mode === "light"} role="radio" aria-checked={seed.mode === "light"} onclick={() => change({ mode: "light" })}>{l("Açık", "Light")}</button>
             <button class:on={seed.mode === "dark"} role="radio" aria-checked={seed.mode === "dark"} onclick={() => change({ mode: "dark" })}>{l("Koyu", "Dark")}</button>
           </div>
-          <label class="tick">
+          <label class="ui-tick">
             <input type="checkbox" checked={seed.contrast === "high"} onchange={(e) => change({ contrast: e.currentTarget.checked ? "high" : "normal" })} />
             {l("Yüksek kontrast", "High contrast")}
           </label>
@@ -431,36 +431,6 @@
     flex-wrap: wrap;
     gap: 8px;
     align-items: center;
-  }
-  .seg {
-    display: flex;
-    flex-wrap: wrap;
-    overflow: hidden;
-    border: 1px solid var(--chrome-line);
-    border-radius: var(--r-md);
-  }
-  .seg button {
-    flex: 1 1 auto;
-    padding: 4px 8px;
-    color: var(--chrome-fg);
-    font-size: 12px;
-    background: none;
-    border: 0;
-    cursor: pointer;
-  }
-  .seg button + button {
-    border-left: 1px solid var(--chrome-line);
-  }
-  .seg button.on {
-    color: var(--accent-ink);
-    font-weight: 600;
-    background: var(--raised);
-  }
-  .tick {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    font-size: 12px;
   }
   .slider {
     display: grid;

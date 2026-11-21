@@ -21,10 +21,10 @@
   let text = $state(untrack(() => start));
 </script>
 
-<div class="veil" role="presentation" onmousedown={(e) => e.target === e.currentTarget && cancel()}>
+<div class="ui-veil" role="presentation" onmousedown={(e) => e.target === e.currentTarget && cancel()}>
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <form
-    class="dialog"
+    class="ui-dialog"
     onsubmit={(e) => {
       e.preventDefault();
       done(text);
@@ -45,69 +45,16 @@
     <h3>{title}</h3>
     <p class="hint">{l("Sahnenin özeti: panoda ve sayfada soluk görünür, PDF'e girmez.", "The scene's summary: faint on the board and the page, never printed.")}</p>
     <!-- svelte-ignore a11y_autofocus -->
-    <textarea bind:value={text} rows="3" autofocus placeholder={l("Ne olur bu sahnede?", "What happens in this scene?")}></textarea>
-    <div class="row">
-      <button class="primary">{l("Kaydet", "Save")}</button>
-      <button type="button" onclick={cancel}>{l("Vazgeç", "Cancel")}</button>
+    <textarea class="ui-field" bind:value={text} rows="3" autofocus placeholder={l("Ne olur bu sahnede?", "What happens in this scene?")}></textarea>
+    <div class="ui-actions">
+      <button class="ui-btn primary">{l("Kaydet", "Save")}</button>
+      <button type="button" class="ui-btn" onclick={cancel}>{l("Vazgeç", "Cancel")}</button>
     </div>
   </form>
 </div>
 
 <style>
-  .veil {
-    position: fixed;
-    inset: 0;
-    z-index: 40;
-    display: grid;
-    place-items: center;
-    background: rgba(0, 0, 0, 0.18);
-  }
-  .dialog {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    width: 440px;
-    padding: 16px 18px;
-    background: var(--chrome);
-    color: var(--chrome-fg);
-    border: 1px solid var(--chrome-line);
-    border-radius: 8px;
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
-  }
-  h3 {
-    margin: 0;
-    font: 600 16px var(--serif);
-    color: var(--accent-ink);
-  }
-  .hint {
-    margin: 0;
-    font-size: 12px;
-    color: var(--chrome-muted);
-  }
   textarea {
-    border: 1px solid var(--chrome-line);
-    border-radius: 4px;
-    padding: 8px;
-    background: var(--chrome);
-    color: var(--chrome-fg);
     font: italic 15px var(--serif);
-    resize: vertical;
-  }
-  .row {
-    display: flex;
-    gap: 8px;
-    justify-content: flex-end;
-  }
-  button {
-    border: 1px solid var(--chrome-line);
-    background: var(--chrome);
-    border-radius: 4px;
-    padding: 4px 12px;
-    cursor: pointer;
-  }
-  .primary {
-    background: var(--claret);
-    color: var(--on-claret);
-    border-color: var(--claret);
   }
 </style>

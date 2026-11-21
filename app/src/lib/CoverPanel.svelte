@@ -102,32 +102,32 @@
   }
 </script>
 
-<aside class="cover" aria-label={l("Kapak", "Cover")}>
-  <div class="head">
+<aside class="cover ui-panel" aria-label={l("Kapak", "Cover")}>
+  <div class="ui-panel-head">
     <strong>{l("Kapak", "Cover")}</strong>
     <span class="grow"></span>
-    <button title={l("Kapat (Esc)", "Close (Esc)")} onclick={close}>✕</button>
+    <button class="ui-btn ghost icon" title={l("Kapat (Esc)", "Close (Esc)")} onclick={close}>✕</button>
   </div>
   <!-- Every change shows on the page at once: inputs and choices alike. -->
   <fieldset class="list" disabled={readOnly} oninput={changed} onchange={changed}>
     <section>
-      <h4>{l("Bilgiler", "Details")}</h4>
+      <h4 class="ui-eyebrow">{l("Bilgiler", "Details")}</h4>
       {#each FIELDS as [f, p, t, e]}
-        <label class:on={part === `coverstyle/${p}`}>
+        <label class="ui-label" class:on={part === `coverstyle/${p}`}>
           {l(t, e)}
-          <input bind:value={form.fields[f]} onfocus={() => (part = `coverstyle/${p}`)} />
+          <input class="ui-field" bind:value={form.fields[f]} onfocus={() => (part = `coverstyle/${p}`)} />
         </label>
       {/each}
       {#if hasLast}
-        <button type="button" class="link" onclick={useLast}>{l("Son girilenleri kullan", "Use the last ones")}</button>
+        <button type="button" class="ui-link" onclick={useLast}>{l("Son girilenleri kullan", "Use the last ones")}</button>
       {/if}
-      <label class="tick"><input type="checkbox" bind:checked={form.final_copy} /> {l("Son hâl (taslak yazmaz)", "Final copy (no draft line)")}</label>
-      <label class="tick"><input type="checkbox" bind:checked={form.own_page} /> {l("Kişiler ayrı sayfada", "Cast on a page of its own")}</label>
-      <label class="tick"><input type="checkbox" bind:checked={form.contents} /> {l("Kapaktan sonra içindekiler", "Contents after the cover")}</label>
-      <label class="tick"><input type="checkbox" bind:checked={form.latin} /> {l("Latince başlık: Dramatis Personae", "Latin title: Dramatis Personae")}</label>
-      <label>
+      <label class="ui-tick"><input type="checkbox" bind:checked={form.final_copy} /> {l("Son hâl (taslak yazmaz)", "Final copy (no draft line)")}</label>
+      <label class="ui-tick"><input type="checkbox" bind:checked={form.own_page} /> {l("Kişiler ayrı sayfada", "Cast on a page of its own")}</label>
+      <label class="ui-tick"><input type="checkbox" bind:checked={form.contents} /> {l("Kapaktan sonra içindekiler", "Contents after the cover")}</label>
+      <label class="ui-tick"><input type="checkbox" bind:checked={form.latin} /> {l("Latince başlık: Dramatis Personae", "Latin title: Dramatis Personae")}</label>
+      <label class="ui-label">
         {l("Sahne başlıkları", "Scene headings")}
-        <select bind:value={form.side}>
+        <select class="ui-field" bind:value={form.side}>
           {#each ALIGN.slice(1) as [v, t, e]}<option value={v}>{l(t, e)}</option>{/each}
         </select>
       </label>
@@ -135,44 +135,44 @@
 
     {#if look}
       <section>
-        <h4>{l("Görünüş", "Look")}</h4>
-        <label>
+        <h4 class="ui-eyebrow">{l("Görünüş", "Look")}</h4>
+        <label class="ui-label">
           {l("Öğe", "Part")}
-          <select value={key(form.parts[at])} onchange={(e) => (part = e.currentTarget.value)}>
+          <select class="ui-field" value={key(form.parts[at])} onchange={(e) => (part = e.currentTarget.value)}>
             {#each form.parts as p}<option value={key(p)}>{name(key(p))}{touched(p.look) ? " •" : ""}</option>{/each}
           </select>
         </label>
-        <div class="seg" role="group" aria-label={l("Hiza", "Alignment")}>
+        <div class="ui-seg" role="group" aria-label={l("Hiza", "Alignment")}>
           {#each ALIGN as [v, t, e]}
             <button type="button" class:on={look.align === v} onclick={() => ((look.align = v), changed())}>{l(t, e)}</button>
           {/each}
         </div>
         <div class="two">
-          <label>
+          <label class="ui-label">
             {l("Boyut", "Size")}
-            <select bind:value={look.size}>
+            <select class="ui-field" bind:value={look.size}>
               <option value="">{l("Sınıfın", "The class's")}</option>
               {#each SIZES as [v, t, e]}<option value={v}>{l(t, e)}</option>{/each}
             </select>
           </label>
-          <label>
+          <label class="ui-label">
             {l("Yazı stili", "Font style")}
-            <select bind:value={look.style}>
+            <select class="ui-field" bind:value={look.style}>
               <option value="">{l("Sınıfın", "The class's")}</option>
               {#each STYLES as [v, t, e]}<option value={v}>{l(t, e)}</option>{/each}
             </select>
           </label>
-          <label>
+          <label class="ui-label">
             {l("Üst boşluk", "Space before")}
-            <input bind:value={look.before} placeholder="1cm" />
+            <input class="ui-field" bind:value={look.before} placeholder="1cm" />
           </label>
-          <label>
+          <label class="ui-label">
             {l("Alt boşluk", "Space after")}
-            <input bind:value={look.after} placeholder="0.5cm" />
+            <input class="ui-field" bind:value={look.after} placeholder="0.5cm" />
           </label>
         </div>
         {#if touched(look)}
-          <button type="button" class="link" onclick={reset}>{l("Bu öğeyi sınıfınkine döndür", "Back to the class's look")}</button>
+          <button type="button" class="ui-link" onclick={reset}>{l("Bu öğeyi sınıfınkine döndür", "Back to the class's look")}</button>
         {/if}
         {#if part?.startsWith("caststyle/")}
           <p class="muted">{l("Kişiler sayfasının görünüşü PDF'te görünür.", "The cast page's look shows in the PDF.")}</p>
@@ -180,41 +180,14 @@
       </section>
     {/if}
   </fieldset>
-  <div class="foot">
-    <button type="button" class="link" onclick={source}>{l("Kaynakta aç", "Open in source")}</button>
+  <div class="ui-panel-foot">
+    <button type="button" class="ui-link" onclick={source}>{l("Kaynakta aç", "Open in source")}</button>
     <span class="grow"></span>
-    <button type="button" onclick={pdf}>{l("PDF'te gör", "See it in the PDF")}</button>
+    <button type="button" class="ui-btn small" onclick={pdf}>{l("PDF'te gör", "See it in the PDF")}</button>
   </div>
 </aside>
 
 <style>
-  .cover {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-    background: var(--chrome);
-    border-left: 1px solid var(--chrome-line);
-    font: 13px var(--sans);
-  }
-  .head,
-  .foot {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    padding: 6px 10px;
-  }
-  .head {
-    border-bottom: 1px solid var(--chrome-line);
-  }
-  .foot {
-    border-top: 1px solid var(--chrome-line);
-  }
-  .head button {
-    width: 28px;
-    height: 24px;
-    padding: 0;
-  }
   .grow {
     flex: 1;
   }
@@ -231,82 +204,17 @@
   section {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 10px 12px 14px;
+    gap: 10px;
+    padding: 12px 12px 16px;
     border-bottom: 1px solid var(--chrome-line);
-  }
-  h4 {
-    margin: 0;
-    color: var(--chrome-muted);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-  }
-  label {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    color: var(--chrome-muted);
-    font-size: 12px;
   }
   label.on {
     color: var(--accent-ink);
-  }
-  label.tick {
-    flex-direction: row;
-    gap: 6px;
-    align-items: center;
-    color: var(--chrome-fg);
-  }
-  input:not([type="checkbox"]),
-  select {
-    box-sizing: border-box;
-    width: 100%;
-    min-width: 0;
-    padding: 4px 6px;
-    color: var(--chrome-fg);
-    font: 13px var(--sans);
-    /* The panel's own colours, as the other panels', in every theme. */
-    background: var(--chrome);
-    border: 1px solid var(--chrome-line);
-    border-radius: 4px;
   }
   .two {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 8px;
-  }
-  .seg {
-    display: flex;
-    border: 1px solid var(--chrome-line);
-    border-radius: 4px;
-    overflow: hidden;
-  }
-  .seg button {
-    flex: 1;
-    padding: 4px 0;
-    color: var(--chrome-fg);
-    font-size: 12px;
-    background: none;
-    border: 0;
-    border-radius: 0;
-  }
-  .seg button + button {
-    border-left: 1px solid var(--chrome-line);
-  }
-  .seg button.on {
-    color: var(--accent-ink);
-    font-weight: 600;
-    background: var(--chrome-2, var(--chrome));
-  }
-  .link {
-    align-self: flex-start;
-    padding: 0;
-    color: var(--accent-ink);
-    background: none;
-    border: 0;
-    cursor: pointer;
   }
   .muted {
     margin: 0;

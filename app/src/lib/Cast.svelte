@@ -52,15 +52,15 @@
   }
 </script>
 
-<aside class="cast">
-  <div class="head">
+<aside class="cast ui-panel">
+  <div class="ui-panel-head">
     <strong>{l("Kişiler", "Cast")}</strong>
     <span class="muted">{people.length}</span>
     <span class="grow"></span>
-    <button title={l("Yeni karakter", "New character")} onclick={add}>✚</button>
-    <button title={l("Kapat (Ctrl+O)", "Close (Ctrl+O)")} onclick={close}>✕</button>
+    <button class="ui-btn ghost icon" title={l("Yeni karakter", "New character")} onclick={add}>✚</button>
+    <button class="ui-btn ghost icon" title={l("Kapat (Ctrl+O)", "Close (Ctrl+O)")} onclick={close}>✕</button>
   </div>
-  <nav class="filter">
+  <nav class="filter ui-pills">
     <button class:on={!byLines} onclick={() => (byLines = false)}>{l("Tablo sırası", "Table order")}</button>
     <button class:on={byLines} onclick={() => (byLines = true)}>{l("En çok konuşan", "Most lines")}</button>
   </nav>
@@ -72,12 +72,12 @@
     {#each rows as r (r.alias)}
       {#if r.group}
         <div class="group" class:picked={picked === r.alias} role="button" tabindex="0" onclick={() => pick(r)} onkeydown={(e) => e.key === "Enter" && pick(r)}>
-          <span class="gname">{r.name || l("(adsız grup)", "(unnamed group)")}</span>
+          <span class="gname" title={r.name}>{r.name || l("(adsız grup)", "(unnamed group)")}</span>
           <span class="nums">{r.lines}</span>
           {#if picked === r.alias && !byLines}
             <span class="moves">
-              <button title={l("Yukarı", "Up")} onclick={(e) => (e.stopPropagation(), shift(r.alias, true))}>↑</button>
-              <button title={l("Aşağı", "Down")} onclick={(e) => (e.stopPropagation(), shift(r.alias, false))}>↓</button>
+              <button class="ui-btn small" title={l("Yukarı", "Up")} onclick={(e) => (e.stopPropagation(), shift(r.alias, true))}>↑</button>
+              <button class="ui-btn small" title={l("Aşağı", "Down")} onclick={(e) => (e.stopPropagation(), shift(r.alias, false))}>↓</button>
             </span>
           {/if}
         </div>
@@ -93,7 +93,7 @@
           onkeydown={(e) => e.key === "Enter" && edit(r)}
         >
           <div class="top">
-            <span class="name">{r.star ? "★ " : ""}{r.name}</span>
+            <span class="name" title={r.name}>{r.star ? "★ " : ""}{r.name}</span>
             <code>\{r.alias}</code>
             <span class="grow"></span>
             <span class="nums" title={l(`${r.lines} replik, ${r.words} söz`, `${r.lines} lines, ${r.words} words`)}>
@@ -110,15 +110,15 @@
           {/if}
           {#if picked === r.alias}
             <div class="actions">
-              <button class="primary" onclick={(e) => (e.stopPropagation(), edit(r))}>{l("Düzenle", "Edit")}</button>
-              <button onclick={(e) => (e.stopPropagation(), find(r.alias))}>{l("İlk repliği", "First line")}</button>
+              <button class="ui-btn small primary" onclick={(e) => (e.stopPropagation(), edit(r))}>{l("Düzenle", "Edit")}</button>
+              <button class="ui-btn small" onclick={(e) => (e.stopPropagation(), find(r.alias))}>{l("İlk repliği", "First line")}</button>
               {#if !byLines}
-                <button title={l("Tabloda yukarı", "Up in the table")} onclick={(e) => (e.stopPropagation(), shift(r.alias, true))}>↑</button>
-                <button title={l("Tabloda aşağı", "Down in the table")} onclick={(e) => (e.stopPropagation(), shift(r.alias, false))}>↓</button>
+                <button class="ui-btn small" title={l("Tabloda yukarı", "Up in the table")} onclick={(e) => (e.stopPropagation(), shift(r.alias, true))}>↑</button>
+                <button class="ui-btn small" title={l("Tabloda aşağı", "Down in the table")} onclick={(e) => (e.stopPropagation(), shift(r.alias, false))}>↓</button>
               {/if}
-              <button onclick={(e) => (e.stopPropagation(), (merging = !merging), (into = ""))}>{l("Birleştir…", "Merge…")}</button>
+              <button class="ui-btn small" onclick={(e) => (e.stopPropagation(), (merging = !merging), (into = ""))}>{l("Birleştir…", "Merge…")}</button>
               <button
-                class="danger"
+                class="ui-btn small danger"
                 onclick={async (e) => {
                   e.stopPropagation();
                   const yes = await ask({
@@ -143,13 +143,13 @@
                 }}
               >
                 <span>{l(`\\${r.alias} şununla birleşsin:`, `Merge \\${r.alias} into:`)}</span>
-                <select bind:value={into} onclick={(e) => e.stopPropagation()}>
+                <select class="ui-field" bind:value={into} onclick={(e) => e.stopPropagation()}>
                   <option value="" disabled>…</option>
                   {#each people.filter((p) => p.alias !== r.alias) as p}
                     <option value={p.alias}>{p.name} (\{p.alias})</option>
                   {/each}
                 </select>
-                <button class="primary" disabled={!into}>{l("Birleştir", "Merge")}</button>
+                <button class="ui-btn small primary" disabled={!into}>{l("Birleştir", "Merge")}</button>
               </form>
             {/if}
           {/if}
@@ -157,38 +157,26 @@
       {/if}
     {/each}
   </div>
-  <label class="others">
+  <label class="others ui-label">
     {l("Diğer kişiler", "Others")}
     <textarea
+      class="ui-field"
       rows="2"
       value={others}
       placeholder={l("Köylüler, müzisyenler…", "Villagers, musicians…")}
       onchange={(e) => setOthers(e.currentTarget.value)}
     ></textarea>
   </label>
-  <p class="foot">{l(`${total} replik · çift tık düzenler`, `${total} lines · double-click edits`)}</p>
+  <p class="foot ui-panel-foot">{l(`${total} replik · çift tık düzenler`, `${total} lines · double-click edits`)}</p>
 </aside>
 
 <style>
-  .cast {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-    background: var(--chrome);
-    border-left: 1px solid var(--chrome-line);
+  .others {
+    padding: 8px 10px;
+    border-top: 1px solid var(--chrome-line);
   }
-  .head {
-    display: flex;
-    gap: 6px;
-    align-items: center;
+  .filter {
     padding: 6px 10px;
-    border-bottom: 1px solid var(--chrome-line);
-  }
-  .head button {
-    width: 28px;
-    height: 24px;
-    padding: 0;
   }
   .grow {
     flex: 1;
@@ -198,45 +186,6 @@
   .foot {
     color: var(--chrome-muted);
     font-size: 12px;
-  }
-  .foot {
-    margin: 0;
-    padding: 6px 10px;
-    border-top: 1px solid var(--chrome-line);
-  }
-  .others {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 6px 10px;
-    border-top: 1px solid var(--chrome-line);
-    color: var(--chrome-muted);
-    font-size: 12px;
-  }
-  .others textarea {
-    resize: vertical;
-    font: inherit;
-    color: var(--chrome-fg);
-    background: transparent;
-    border: 1px solid var(--chrome-line);
-    border-radius: 4px;
-    padding: 4px 6px;
-  }
-  .filter {
-    display: flex;
-    gap: 4px;
-    padding: 6px 10px;
-  }
-  .filter button {
-    border: 0;
-    background: none;
-    padding: 3px 8px;
-    border-radius: 10px;
-    color: var(--chrome-muted);
-  }
-  .filter button.on {
-    background: var(--claret);
-    color: var(--on-claret);
   }
   .list {
     flex: 1;
@@ -257,20 +206,32 @@
   }
   .group .gname {
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .person {
-    padding: 7px 10px;
+    min-width: 0;
     margin: 5px 0;
-    border-radius: 6px;
-    background: var(--chrome-2);
+    padding: 7px 10px;
+    overflow-wrap: anywhere;
+    background: var(--raised);
+    border: 1px solid var(--chrome-line);
     border-left: 3px solid var(--accent-ink);
+    border-radius: var(--r-md);
     cursor: pointer;
+  }
+  .person:hover {
+    border-color: color-mix(in srgb, var(--chrome-fg) 25%, var(--chrome-line));
+    border-left-color: var(--accent-ink);
   }
   .person.member {
     margin-left: 14px;
   }
   .picked {
-    outline: 2px solid var(--accent-ink);
+    border-color: var(--accent-ink);
+    box-shadow: 0 0 0 2px var(--on);
   }
   .top {
     display: flex;
@@ -278,6 +239,10 @@
     gap: 8px;
   }
   .name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-weight: 700;
     letter-spacing: 0.03em;
   }
@@ -330,32 +295,5 @@
     gap: 6px;
     margin-top: 8px;
     font-size: 12.5px;
-  }
-  select {
-    border: 1px solid var(--chrome-line);
-    border-radius: 4px;
-    padding: 3px 6px;
-    background: var(--chrome);
-    color: var(--chrome-fg);
-  }
-  button {
-    border: 1px solid var(--chrome-line);
-    background: var(--chrome);
-    border-radius: 4px;
-    padding: 3px 9px;
-    cursor: pointer;
-    font-size: 12px;
-    color: var(--chrome-fg);
-  }
-  .primary {
-    background: var(--claret);
-    color: var(--on-claret);
-    border-color: var(--claret);
-  }
-  .primary:disabled {
-    opacity: 0.5;
-  }
-  .danger {
-    color: var(--accent-ink);
   }
 </style>

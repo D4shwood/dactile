@@ -140,7 +140,7 @@ textarea {
   cursor: default;
 }
 .ui-btn.primary {
-  color: #fbf6ee;
+  color: var(--on-claret);
   background: var(--claret);
   border-color: var(--claret);
 }
@@ -164,6 +164,86 @@ textarea {
 .ui-btn.wide {
   width: 100%;
 }
+/* A one-glyph button in a panel's head: ✚, ✕. */
+.ui-btn.icon {
+  min-width: 28px;
+  min-height: 26px;
+  padding: 0 6px;
+}
+/* It takes something away; its question says so too. */
+.ui-btn.danger {
+  color: var(--danger);
+}
+.ui-btn.danger:hover:not(:disabled) {
+  border-color: var(--danger);
+}
+/* A quiet action written as a line of text. */
+.ui-link {
+  align-self: flex-start;
+  padding: 0;
+  color: var(--accent-ink);
+  font: inherit;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.ui-link:hover {
+  text-decoration: underline;
+}
+
+/* One of a few: buttons side by side in one frame. */
+.ui-seg {
+  display: flex;
+  flex-wrap: wrap;
+  overflow: hidden;
+  border: 1px solid var(--chrome-line);
+  border-radius: var(--r-md);
+}
+.ui-seg button {
+  flex: 1 1 auto;
+  padding: 4px 8px;
+  color: var(--chrome-fg);
+  font: 12px var(--sans);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.ui-seg button + button {
+  border-left: 1px solid var(--chrome-line);
+}
+.ui-seg button:hover:not(.on) {
+  background: var(--hover);
+}
+.ui-seg button.on {
+  color: var(--accent-ink);
+  font-weight: 600;
+  background: var(--raised);
+}
+
+/* What a list shows: Open, All, Archive. */
+.ui-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.ui-pills button {
+  padding: 3px 9px;
+  color: var(--chrome-muted);
+  font: 12px var(--sans);
+  background: none;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.ui-pills button:hover:not(.on) {
+  color: var(--chrome-fg);
+  background: var(--hover);
+}
+.ui-pills button.on {
+  color: var(--on-claret);
+  background: var(--claret);
+}
 
 .ui-field {
   box-sizing: border-box;
@@ -181,6 +261,32 @@ textarea {
   border-color: var(--accent-ink);
   outline: none;
   box-shadow: 0 0 0 3px var(--on);
+}
+
+/* A field's name above it; a tick's beside it. */
+.ui-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  color: var(--chrome-muted);
+  font: 12px var(--sans);
+}
+.ui-label .ui-field {
+  width: 100%;
+}
+.ui-tick {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--chrome-fg);
+  font: 13px var(--sans);
+}
+.ui-tick input {
+  accent-color: var(--accent-ink);
+}
+textarea.ui-field {
+  resize: vertical;
 }
 
 /* Long text never leaves its box: names, titles and drafts are the user's,
@@ -231,4 +337,86 @@ body {
   font: 600 11px var(--sans);
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+/* A side panel beside the page: a head, what scrolls, sometimes a foot. */
+.ui-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  color: var(--chrome-fg);
+  font: 13px var(--sans);
+  background: var(--chrome);
+  border-left: 1px solid var(--chrome-line);
+}
+.ui-panel-head,
+.ui-panel-foot {
+  display: flex;
+  flex: none;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  padding: 6px 10px;
+}
+.ui-panel-head {
+  border-bottom: 1px solid var(--chrome-line);
+}
+.ui-panel-head > :first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-panel-foot {
+  border-top: 1px solid var(--chrome-line);
+}
+
+/* A form over the page: what it asks for, then Add and Cancel. */
+.ui-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.22);
+}
+.ui-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-sizing: border-box;
+  width: min(420px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  padding: 18px 20px 16px;
+  color: var(--chrome-fg);
+  font: 13px var(--sans);
+  overflow-wrap: anywhere;
+  background: var(--raised);
+  border: 1px solid var(--chrome-line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-2);
+}
+.ui-dialog h3 {
+  margin: 0;
+  color: var(--accent-ink);
+  font: 600 17px var(--serif);
+}
+.ui-dialog .hint {
+  margin: -6px 0 0;
+  color: var(--chrome-muted);
+  font-size: 12px;
+}
+.ui-dialog .error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12.5px;
+}
+.ui-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }

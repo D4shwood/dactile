@@ -117,16 +117,16 @@
   {#each authors as a}<option value={a}></option>{/each}
 </datalist>
 
-<aside class="notes">
-  <div class="head">
+<aside class="notes ui-panel">
+  <div class="ui-panel-head">
     <strong>{l("Notlar", "Notes")}</strong>
     <span class="grow"></span>
-    <button title={l("Buraya not (Alt+N)", "Note here (Alt+N)")} onclick={() => (draft = draft ?? "")}>✚</button>
-    <button title={l("Panodan yapıştır", "Paste a reply")} onclick={() => (pasting = pasting ?? "")}>⎗</button>
-    <button title={l("Dosyadan", "From a file")} onclick={fromFile}>⇲</button>
-    <button title={l("Kapat", "Close")} onclick={close}>✕</button>
+    <button class="ui-btn ghost icon" title={l("Buraya not (Alt+N)", "Note here (Alt+N)")} onclick={() => (draft = draft ?? "")}>✚</button>
+    <button class="ui-btn ghost icon" title={l("Panodan yapıştır", "Paste a reply")} onclick={() => (pasting = pasting ?? "")}>⎗</button>
+    <button class="ui-btn ghost icon" title={l("Dosyadan", "From a file")} onclick={fromFile}>⇲</button>
+    <button class="ui-btn ghost icon" title={l("Kapat", "Close")} onclick={close}>✕</button>
   </div>
-  <nav class="filter">
+  <nav class="filter ui-pills">
     <button class:on={show === "open"} onclick={() => (show = "open")}>{l("Açık", "Open")} {counts.open}</button>
     <button class:on={show === "all"} onclick={() => (show = "all")}>{l("Hepsi", "All")} {counts.all}</button>
     <button class:on={show === "archive"} onclick={() => (show = "archive")}>{l("Arşiv", "Archive")} {counts.archive}</button>
@@ -134,7 +134,7 @@
 
   {#if fixableAll.length}
     <div class="applyall">
-      <button onclick={() => fixMany(fixableAll.map((x) => x.i))}>
+      <button class="ui-btn small" onclick={() => fixMany(fixableAll.map((x) => x.i))}>
         {l(`Tümünü uygula (${fixableAll.length})`, `Apply all (${fixableAll.length})`)}
       </button>
       <kbd>U</kbd>
@@ -149,12 +149,12 @@
         add(me, draft ?? "");
       }}
     >
-      <input bind:value={me} list="note-authors" placeholder={l("Kimden", "From")} />
+      <input class="ui-field" bind:value={me} list="note-authors" placeholder={l("Kimden", "From")} />
       <!-- svelte-ignore a11y_autofocus -->
-      <textarea bind:value={draft} rows="3" autofocus placeholder={l("“alıntı” ve not", "“quote” and the note")}></textarea>
+      <textarea class="ui-field" bind:value={draft} rows="3" autofocus placeholder={l("“alıntı” ve not", "“quote” and the note")}></textarea>
       <div class="row">
-        <button class="primary">{l("Ekle", "Add")}</button>
-        <button type="button" onclick={() => (draft = null)}>{l("Vazgeç", "Cancel")}</button>
+        <button class="ui-btn small primary">{l("Ekle", "Add")}</button>
+        <button class="ui-btn small" type="button" onclick={() => (draft = null)}>{l("Vazgeç", "Cancel")}</button>
       </div>
     </form>
   {/if}
@@ -173,11 +173,11 @@
           "Numbered items become notes: “139: …” or “- 20: …”. From an AI, a workshop, a reader.",
         )}
       </p>
-      <input bind:value={pasteFrom} list="note-authors" placeholder={l("Kimden (Claude, Atölye…)", "From (Claude, Workshop…)")} />
-      <textarea bind:value={pasting} rows="7"></textarea>
+      <input class="ui-field" bind:value={pasteFrom} list="note-authors" placeholder={l("Kimden (Claude, Atölye…)", "From (Claude, Workshop…)")} />
+      <textarea class="ui-field" bind:value={pasting} rows="7"></textarea>
       <div class="row">
-        <button class="primary" disabled={!pasteFrom.trim() || !pasting?.trim()}>{l("Notlara çevir", "Make notes")}</button>
-        <button type="button" onclick={() => (pasting = null)}>{l("Vazgeç", "Cancel")}</button>
+        <button class="ui-btn small primary" disabled={!pasteFrom.trim() || !pasting?.trim()}>{l("Notlara çevir", "Make notes")}</button>
+        <button class="ui-btn small" type="button" onclick={() => (pasting = null)}>{l("Vazgeç", "Cancel")}</button>
       </div>
     </form>
   {/if}
@@ -193,10 +193,10 @@
     {/if}
     {#each shown as c, k (c.i)}
       {#if c.group && c.group !== shown[k - 1]?.group}
-        <h4>
+        <h4 class="ui-eyebrow">
           <span>{c.group}</span>
           {#if inGroup(c.group).length}
-            <button onclick={() => fixMany(inGroup(c.group).map((x) => x.i))}>
+            <button class="ui-btn small" onclick={() => fixMany(inGroup(c.group).map((x) => x.i))}>
               {l(`Bu kısmı uygula (${inGroup(c.group).length})`, `Apply this part (${inGroup(c.group).length})`)}
             </button>
           {/if}
@@ -221,7 +221,7 @@
               set(c.i, c.state === "done" ? "open" : "done");
             }}
           />
-          <span class="author">{c.author || "—"}</span>
+          <span class="author" title={c.author}>{c.author || "—"}</span>
           {#if c.line}<span class="line">{c.line}</span>{/if}
           {#if c.gone && c.state === "open"}<span class="gone" title={l("Gösterdiği yer değişmiş: düzeltilmiş olabilir.", "What it points at changed: maybe put right.")}>✓?</span>{/if}
           {#if c.from === null}<span class="lost" title={l("Metinde yeri bulunamadı", "Its place wasn't found")}>?</span>{/if}
@@ -233,17 +233,17 @@
         {#if picked === c.i}
           <div class="actions">
             {#if c.fixable && c.state === "open"}
-              <button class="primary" onclick={(e) => (e.stopPropagation(), fix(c.i))}>{l("Uygula", "Apply")}</button>
+              <button class="ui-btn small primary" onclick={(e) => (e.stopPropagation(), fix(c.i))}>{l("Uygula", "Apply")}</button>
             {/if}
-            <button onclick={(e) => (e.stopPropagation(), (replying = c.i), (replyText = ""))}>{l("Cevap", "Reply")}</button>
-            <button onclick={(e) => (e.stopPropagation(), set(c.i, c.archived ? "unarchive" : "archive"))}>
+            <button class="ui-btn small" onclick={(e) => (e.stopPropagation(), (replying = c.i), (replyText = ""))}>{l("Cevap", "Reply")}</button>
+            <button class="ui-btn small" onclick={(e) => (e.stopPropagation(), set(c.i, c.archived ? "unarchive" : "archive"))}>
               {c.archived ? l("Arşivden çıkar", "Unarchive") : l("Arşivle", "Archive")}
             </button>
-            <button onclick={(e) => (e.stopPropagation(), set(c.i, c.state === "hidden" ? "open" : "hidden"))}>
+            <button class="ui-btn small" onclick={(e) => (e.stopPropagation(), set(c.i, c.state === "hidden" ? "open" : "hidden"))}>
               {c.state === "hidden" ? l("Göster", "Show") : l("Gizle", "Hide")}
             </button>
             <button
-              class="danger"
+              class="ui-btn small danger"
               onclick={async (e) => {
                 e.stopPropagation();
                 if (await ask({ title: l("Bu not silinsin mi?", "Delete this note?"), yes: l("Sil", "Delete"), no: l("Vazgeç", "Cancel"), danger: true, at: e }))
@@ -261,8 +261,8 @@
               }}
             >
               <!-- svelte-ignore a11y_autofocus -->
-              <textarea bind:value={replyText} rows="2" autofocus></textarea>
-              <button class="primary" disabled={!replyText.trim()}>{l("Gönder", "Reply")}</button>
+              <textarea class="ui-field" bind:value={replyText} rows="2" autofocus></textarea>
+              <button class="ui-btn small primary" disabled={!replyText.trim()}>{l("Gönder", "Reply")}</button>
             </form>
           {/if}
         {/if}
@@ -272,49 +272,11 @@
 </aside>
 
 <style>
-  .notes {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-    background: var(--chrome);
-    border-left: 1px solid var(--chrome-line);
-  }
-  .head {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    padding: 6px 10px;
-    border-bottom: 1px solid var(--chrome-line);
-  }
-  .head button {
-    border: 1px solid var(--chrome-line);
-    background: var(--chrome);
-    border-radius: 4px;
-    width: 28px;
-    height: 24px;
-    cursor: pointer;
-  }
   .grow {
     flex: 1;
   }
   .filter {
-    display: flex;
-    gap: 4px;
     padding: 6px 10px;
-  }
-  .filter button {
-    border: 0;
-    background: none;
-    padding: 3px 8px;
-    border-radius: 10px;
-    cursor: pointer;
-    color: var(--chrome-muted);
-    font-size: 12px;
-  }
-  .filter button.on {
-    background: var(--claret);
-    color: var(--on-claret);
   }
   .list {
     flex: 1;
@@ -322,42 +284,70 @@
     padding: 4px 10px 20px;
     user-select: text;
   }
+  .list:focus {
+    outline: none;
+    box-shadow: inset 0 0 0 1px var(--accent-ink);
+  }
   .empty,
   .hint {
+    margin: 0;
     color: var(--chrome-muted);
     font-size: 12px;
   }
+  .empty {
+    margin: 8px 0;
+  }
   h4 {
-    margin: 12px 0 4px;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--chrome-muted);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
+    margin: 14px 0 4px;
+  }
+  h4 button {
+    text-transform: none;
+    letter-spacing: 0;
   }
   .note {
-    padding: 8px 10px;
+    min-width: 0;
     margin: 6px 0;
-    border-radius: 6px;
-    background: var(--chrome-2);
+    padding: 8px 10px;
+    overflow-wrap: anywhere;
+    background: var(--raised);
+    border: 1px solid var(--chrome-line);
     border-left: 3px solid var(--accent-ink);
+    border-radius: var(--r-md);
     cursor: pointer;
+  }
+  .note:hover {
+    border-color: color-mix(in srgb, var(--chrome-fg) 25%, var(--chrome-line));
+    border-left-color: var(--accent-ink);
   }
   .note.done {
     opacity: 0.55;
     border-left-color: var(--chrome-line);
   }
   .note.picked {
-    outline: 2px solid var(--accent-ink);
     opacity: 1;
+    box-shadow: 0 0 0 2px var(--on);
+    border-color: var(--accent-ink);
   }
   .meta {
     display: flex;
     gap: 8px;
     align-items: center;
+    min-width: 0;
     font-size: 12px;
   }
+  .meta input {
+    accent-color: var(--accent-ink);
+  }
   .author {
+    min-width: 0;
+    overflow: hidden;
     font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .line,
   .gone,
@@ -366,9 +356,8 @@
   }
   .text {
     margin-top: 3px;
+    font: 14px var(--serif);
     white-space: pre-wrap;
-    font-family: var(--serif);
-    font-size: 14px;
   }
   .reply {
     margin: 4px 0 0 12px;
@@ -380,83 +369,38 @@
     gap: 6px;
     margin-top: 8px;
   }
-  button {
-    border: 1px solid var(--chrome-line);
-    background: var(--chrome);
-    border-radius: 4px;
-    padding: 3px 9px;
-    cursor: pointer;
-    font-size: 12px;
-  }
-  .primary {
-    background: var(--claret);
-    color: var(--on-claret);
-    border-color: var(--claret);
-  }
-  .primary:disabled {
-    opacity: 0.5;
-  }
-  .danger {
-    color: var(--accent-ink);
-  }
   .form {
     display: flex;
     flex-direction: column;
     gap: 6px;
     margin: 6px 10px;
-    padding: 8px;
-    background: var(--chrome-2);
-    border-radius: 6px;
+    padding: 10px;
+    background: var(--raised);
+    border: 1px solid var(--chrome-line);
+    border-radius: var(--r-md);
   }
   .form.inline {
     margin: 6px 0 0;
+    padding: 0;
+    background: none;
+    border: 0;
   }
-  .form input,
-  .form textarea {
-    border: 1px solid var(--chrome-line);
-    border-radius: 4px;
-    padding: 5px 8px;
-    background: var(--chrome);
-    color: var(--chrome-fg);
-    resize: vertical;
+  .form.inline button {
+    align-self: flex-end;
   }
   .row {
     display: flex;
     gap: 6px;
   }
-  h4 {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-  h4 button,
-  .applyall button {
-    padding: 2px 8px;
-    font: inherit;
-    font-size: 11.5px;
-    font-weight: 400;
-    text-transform: none;
-    letter-spacing: 0;
-    color: var(--chrome-fg);
-    background: var(--chrome-2);
-    border: 1px solid var(--chrome-line);
-    border-radius: 4px;
-    cursor: pointer;
-  }
   .applyall {
     display: flex;
-    align-items: center;
     gap: 8px;
+    align-items: center;
     padding: 6px 12px;
     border-bottom: 1px solid var(--chrome-line);
   }
   .applyall kbd {
-    font-size: 11px;
     color: var(--chrome-muted);
-  }
-  .list:focus {
-    outline: none;
-    box-shadow: inset 0 0 0 1px var(--accent-ink);
+    font-size: 11px;
   }
 </style>
