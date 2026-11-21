@@ -5,7 +5,8 @@
   import Start from "./lib/Start.svelte";
   import Writer from "./lib/Writer.svelte";
   import Ask from "./lib/Ask.svelte";
-  import { isOnSite, SITE_OUT, useSite } from "./lib/site/desk";
+  import { isOnSite, SITE_OUT, siteUpdate, siteUpdateInstall, useSite } from "./lib/site/desk";
+  import { notify } from "./lib/ask.svelte";
 
   let home = $state<Home | null>(null);
   let opened = $state<Opened | null>(null);
@@ -43,6 +44,24 @@
         : "The site no longer knows this computer: link it again from On the site.";
     });
     await reload();
+    // A linked site's desktop, newer than this one: offered once, quietly.
+    // (In the browser, and with no site linked, nothing.)
+    void siteUpdate()
+      .then((v) => {
+        if (!v) return;
+        notify({
+          text: tr ? "Sitenin Dactile'ı daha yeni: güncellensin mi?" : "The site's Dactile is newer: update?",
+          action: {
+            label: tr ? "Güncelle" : "Update",
+            run: () =>
+              void siteUpdateInstall().catch(
+                (e) => (error = (tr ? "Güncelleme olmadı: " : "The update didn't go through: ") + String(e)),
+              ),
+          },
+          ms: 60_000,
+        });
+      })
+      .catch(() => {});
     const first = await api.startup();
     if (first) open(first);
   });

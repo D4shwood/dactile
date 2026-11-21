@@ -64,6 +64,7 @@ Masaüstündeki Dactile bir siteye bağlanabilir; sitedeki oyunlar ve projeler o
 - **Komutlar:** Tarayıcının komutları HTTP'ye çeviren katmanı ortaktır (`app/src/lib/site/commands.ts`). Tarayıcı onu `fetch` ile, masaüstü Rust tarafından (`app/src-tauri/src/site.rs`) anahtarıyla kullanır. Bir site oyunu açıkken masaüstünün komutları siteye gider (`app/src/lib/site/desk.ts`); yalnızca metin okuyan komutlar ve ayarlar bilgisayarda kalır.
 - **Canlı oda:** WebSocket anahtarı taşıyamadığı için masaüstü otuz saniyelik, tek kullanımlık bir bilet ister (`/api/oda/bilet`).
 - **Sürüm:** `/api/door` ve `/api/version` sitenin sürümünü ve API numarasını söyler. Masaüstünün numarası farklıysa sitedeki oyunları açmaz, sürümlerin uyuşmadığını söyler. Numara (`API`) sunucuda ve `commands.ts`'te aynıdır; bir test bunu denetler.
+- **Güncelleme:** `deploy.sh` siteyi kurarken aynı commit'in masaüstünü de derler, depo dışındaki anahtarla (`~/.config/dactile-release/updater.key`) imzalar ve sitenin `/indir/` yoluna `latest.json` ile koyar. Bağlı bir masaüstü (yalnızca AppImage) açılışta oraya bakar; sürümün `+` sonrası commit zamanıdır ve kendi zamanından yeniyse güncellemeyi önerir. İmzası tutmayan indirme kurulmaz. Açık anahtar `tauri.conf.json`'dadır.
 
 ## Sıra
 

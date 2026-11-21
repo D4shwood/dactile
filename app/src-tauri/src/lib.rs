@@ -207,6 +207,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(Ctx::default())
         .manage(site::Linking::default())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             dactile_backend::spell::load(app.state::<Ctx>().spell.clone());
             dev_eval(app.handle().clone());
@@ -239,6 +240,8 @@ pub fn run() {
             site::site_fetch,
             site::site_upload,
             site::site_room,
+            site::site_update,
+            site::site_update_install,
         ])
         .run(tauri::generate_context!())
         .expect("the window could not open");

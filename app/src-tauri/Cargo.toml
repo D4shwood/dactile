@@ -32,6 +32,9 @@ rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
 # A linked site's requests (site.rs): blocking, off the main thread.
 ureq = "3"
 toml = "1"
+# A linked site hands out the desktop built with it (site.rs, "update").
+tauri-plugin-updater = "2"
+semver = "1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Names the window after the menu entry, so the desktop finds its icon.

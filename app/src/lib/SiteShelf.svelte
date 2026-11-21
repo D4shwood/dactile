@@ -8,7 +8,19 @@
   import type { Home, PlayCard } from "./api";
   import { ask, notify } from "./ask.svelte";
   import { API, SignedOut } from "./site/commands";
-  import { site, siteConnect, siteDoor, siteForget, siteLink, siteWait, useSite, type SiteDoor, type SiteLink } from "./site/desk";
+  import {
+    site,
+    siteConnect,
+    siteDoor,
+    siteForget,
+    siteLink,
+    siteUpdate,
+    siteUpdateInstall,
+    siteWait,
+    useSite,
+    type SiteDoor,
+    type SiteLink,
+  } from "./site/desk";
 
   let { tr, open }: { tr: boolean; open: (path: string) => void } = $props();
   const l = (t: string, e: string) => (tr ? t : e);
@@ -28,6 +40,18 @@
   /// The site's version and API: a site that speaks another API is not
   /// opened from here until one of them is updated.
   const fits = $derived(door?.api === API);
+  /// The site's own desktop, when it is newer than this one.
+  let newer = $state<string | null>(null);
+  let updating = $state(false);
+  async function update() {
+    updating = true;
+    try {
+      await siteUpdateInstall();
+    } catch (e) {
+      trouble = l("Güncelleme olmadı: ", "The update didn't go through: ") + String(e);
+      updating = false;
+    }
+  }
 
   async function load() {
     loading = true;
@@ -36,6 +60,7 @@
       link = await siteLink();
       if (!link) return;
       door = await siteDoor(link.url);
+      newer = await siteUpdate().catch(() => null);
       if (door.api !== API) return;
       home = await site.call<Home>("home", {});
     } catch (e) {
@@ -156,6 +181,11 @@
       {#if door}<span class="muted">· {l("site", "site")} {door.version}</span>{/if}
     </span>
     <span class="grow"></span>
+    {#if newer && fits}
+      <button class="ui-btn small primary" disabled={updating} onclick={update}>
+        {updating ? l("Güncelleniyor…", "Updating…") : l("Yeni sürüm: güncelle", "New version: update")}
+      </button>
+    {/if}
     <button class="ui-btn small" onclick={load}>{l("Yenile", "Refresh")}</button>
     <button class="ui-btn small danger" onclick={forget}>{l("Bağlantıyı kaldır", "Unlink")}</button>
   </div>
@@ -170,6 +200,11 @@
           `The site is ${door.version}, this Dactile another version. The site's plays open here once both are the same.`,
         )}
       </p>
+      {#if newer}
+        <button class="ui-btn primary" disabled={updating} onclick={update}>
+          {updating ? l("Güncelleniyor…", "Updating…") : l("Sitenin sürümüne güncelle", "Update to the site's version")}
+        </button>
+      {/if}
     </div>
   {:else if home}
     {@render shelf(l("Oyunlarım", "My plays"), home.plays, "")}

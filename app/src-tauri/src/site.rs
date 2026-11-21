@@ -420,6 +420,73 @@ pub async fn site_room(path: String) -> Res<String> {
     .await
 }
 
+// ------------------------------------------------------------- updating
+//
+// A site hands out the desktop built from the same commit as itself
+// (deploy/deploy.sh puts it in the site's /indir/, signed with a key kept
+// off the repository; tauri.conf.json has its public half). A desktop
+// linked to the site takes it when its own is older: so the two stay the
+// same version without anyone carrying the AppImage by hand.
+
+/// When this desktop's commit was made (build.rs).
+const STAMP: &str = env!("DACTILE_STAMP");
+
+/// A release's stamp: the build part of its version (`0.3.0+1795…`).
+fn stamp_of(v: &semver::Version) -> u64 {
+    v.build.as_str().parse().unwrap_or(0)
+}
+
+fn updater(app: &tauri::AppHandle) -> Result<Option<tauri_plugin_updater::Updater>, String> {
+    use tauri_plugin_updater::UpdaterExt;
+    // Only an AppImage can put a new one in its own place.
+    if std::env::var_os("APPIMAGE").is_none() {
+        return Ok(None);
+    }
+    let Some(link) = read() else {
+        return Ok(None);
+    };
+    let url =
+        tauri::Url::parse(&format!("{}/indir/latest.json", link.url)).map_err(|e| e.to_string())?;
+    let mine: u64 = STAMP.parse().unwrap_or(0);
+    app.updater_builder()
+        .endpoints(vec![url])
+        .map_err(|e| e.to_string())?
+        .version_comparator(move |_, release| stamp_of(&release.version) > mine)
+        .build()
+        .map(Some)
+        .map_err(|e| e.to_string())
+}
+
+/// The site's desktop, if it is newer than this one: its version.
+#[tauri::command]
+pub async fn site_update(app: tauri::AppHandle) -> Res<Option<String>> {
+    let Some(u) = updater(&app)? else {
+        return Ok(None);
+    };
+    let found = u.check().await.map_err(|e| e.to_string())?;
+    Ok(found.map(|r| r.version))
+}
+
+/// The site's desktop in this one's place, and the window opened anew.
+#[tauri::command]
+pub async fn site_update_install(app: tauri::AppHandle) -> Res<()> {
+    let Some(u) = updater(&app)? else {
+        return Err(l(
+            "Bu Dactile kendini güncelleyemiyor.",
+            "This Dactile can't update itself.",
+        )
+        .into());
+    };
+    let Some(release) = u.check().await.map_err(|e| e.to_string())? else {
+        return Ok(());
+    };
+    release
+        .download_and_install(|_, _| {}, || {})
+        .await
+        .map_err(|e| e.to_string())?;
+    app.restart()
+}
+
 /// Percent-encoding for a path's query or a header: all but the plainest.
 fn encode(s: &str) -> String {
     s.bytes()
@@ -455,6 +522,13 @@ mod tests {
         assert!(address("").is_err());
         assert!(address("oyun example").is_err());
         assert!(address("https://oyun.example/yol").is_err());
+    }
+
+    #[test]
+    fn a_release_is_newer_by_its_stamp() {
+        let v = |s: &str| semver::Version::parse(s).unwrap();
+        assert_eq!(stamp_of(&v("0.3.0-beta.2+1795258000")), 1_795_258_000);
+        assert_eq!(stamp_of(&v("0.3.0-beta.2")), 0);
     }
 
     #[test]
