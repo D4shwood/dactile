@@ -47,8 +47,11 @@ for o in "${@:2}"; do
     *) echo "No such option: $o" >&2; exit 1 ;;
   esac
 done
-if [ -n "$windows" ] && ! { command -v cargo-xwin && command -v makensis; } >/dev/null; then
-  echo "Windows's desktop needs cargo-xwin and makensis (deploy/kurulum.md), or add --no-windows."
+# Tauri's installer is a 32-bit one: makensis with NSIS's 32-bit stubs
+# (deploy/nsis-x86.sh).
+nsis="$HOME/.cache/dactile-nsis/bin"
+if [ -n "$windows" ] && ! { command -v cargo-xwin && [ -x "$nsis/makensis" ]; } >/dev/null; then
+  echo "Windows's desktop needs cargo-xwin and deploy/nsis-x86.sh run once (deploy/kurulum.md), or add --no-windows."
   exit 1
 fi
 key="$HOME/.config/dactile-release/updater.key"
@@ -127,7 +130,7 @@ if [ -n "$desktop" ]; then
   platforms=$(printf '"linux-x86_64":{"url":"https://%s/indir/Dactile.AppImage","signature":"%s"}' "$domain" "$(cat "$image.sig")")
   if [ -n "$windows" ]; then
     echo "== Windows's desktop"
-    (cd "$repo/app" && TAURI_SIGNING_PRIVATE_KEY="$(cat "$key")" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
+    (cd "$repo/app" && PATH="$nsis:$PATH" TAURI_SIGNING_PRIVATE_KEY="$(cat "$key")" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
       flock "$HOME/.cache/dactile-team/build.lock" npm run --silent tauri build -- \
       --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles nsis \
       --config '{"bundle":{"createUpdaterArtifacts":true}}' >/dev/null)
