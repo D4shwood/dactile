@@ -17,7 +17,10 @@
     setFont,
     size,
     setSize,
+    counts = {},
   }: {
+    /// A number on a key's buttons (new notes: `{ notes: 2 }`).
+    counts?: Record<string, number>;
     tr: boolean;
     folded: boolean;
     /// One row, the tabs as menus, instead of the ribbon.
@@ -37,6 +40,8 @@
     size: string;
     setSize: (s: string) => void;
   } = $props();
+
+  const count = (b: Btn) => (b.act.do === "key" ? (counts[b.act.id] ?? 0) : 0);
 
   const LOW = 58;
   const HIGH = 132;
@@ -275,6 +280,7 @@
                   onclick={() => press(btn)}
                 >
                   <span class="icon">{btn.icon}</span>
+                  {#if count(btn)}<span class="count">{count(btn)}</span>{/if}
                   {#if !grp.icons}<span class="label">{name(btn)}</span>{#if btn.key}<kbd>{btn.key}</kbd>{/if}{/if}
                   {#if tipMode === "btns"}<span class="tip">{btnTips[n]}</span>{/if}
                 </button>
@@ -335,6 +341,7 @@
                 onclick={() => press(btn)}
               >
                 <span class="icon">{btn.icon}</span>
+                {#if count(btn)}<span class="count">{count(btn)}</span>{/if}
                 {#if !grp.icons}<span class="label">{name(btn)}</span>{/if}
                 {#if tipMode === "btns"}<span class="tip">{btnTips[n]}</span>{/if}
               </button>
@@ -724,6 +731,23 @@
   }
   .size {
     width: 58px;
+  }
+  .count {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    min-width: 1.4em;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--claret);
+    color: #f6efe4;
+    font-size: 10px;
+    line-height: 1.4em;
+    text-align: center;
+    pointer-events: none;
+  }
+  button:has(> .count) {
+    position: relative;
   }
   .btn {
     position: relative;

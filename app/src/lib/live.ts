@@ -17,6 +17,8 @@ const INFO = 101;
 const SAVED = 102;
 const BYE = 103;
 const REFUSED = 104;
+/// Someone else changed the play's notes: `{"by": "Ada"}`.
+const NOTES = 105;
 
 /// Where a play's room is. In the browser, this site's, with the page's
 /// cookie; a desktop linked to a site puts its own here (a ticket's
@@ -62,6 +64,8 @@ export interface Hooks {
   /// The play changed outside the room meanwhile: this copy is no longer
   /// its, and what was written here offline didn't get there.
   lost: (text: string) => void;
+  /// Someone else changed the notes: they are read again.
+  notes?: (by: string) => void;
 }
 
 export class Live {
@@ -202,6 +206,11 @@ export class Live {
         // room has it.
         this.destroy();
         this.hooks.lost("");
+        break;
+      }
+      case NOTES: {
+        const r = JSON.parse(new TextDecoder().decode(decoding.readVarUint8Array(d)));
+        this.hooks.notes?.(r.by ?? "");
         break;
       }
       case BYE: {

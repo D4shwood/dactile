@@ -55,13 +55,32 @@ düzenleyicilerle de açılır:
 ```text
 ## Yazım
 
-- [ ] 139 · **Atölye** · “Gaztesi” → Gazetesi
+- [ ] 139 · **Atölye** · “Gaztesi” → Gazetesi ^k2m9qa
   - **Deniz**: ikinci perdede de aynısı
-- [x] 20 · **Okur** · “loş bir bir ışığın”: “bir” iki kez
+- [x] 20 · **Okur** · “loş bir bir ışığın”: “bir” iki kez ^7d0xre
 ```
 
 `[ ]` açık, `[x]` tamam, `[-]` gizli demektir. Not, alıntıladığı metne bakarak
-yerini bulur; üstüne satır eklemek notu kaybettirmez.
+yerini bulur; üstüne satır eklemek notu kaybettirmez. Sondaki `^k2m9qa` notun
+kimliğidir: Obsidian onu gizler, Dactile notu onunla tanır. Elle yazılan nota
+Dactile kendisi verir.
+
+Notlu satırların kenarında küçük bir nokta durur. Üzerine gelince not görünür,
+tıklayınca panel o notla açılır.
+
+### Sitede birlikte
+
+Bir projenin oyununda notlar herkesindir, dosya taşımaya gerek kalmaz:
+
+- Not ve cevap, giriş yapan kişinin adıyla düşer.
+- Biri not düşünce oyunu açık olan herkes anında görür. Panel kapalıysa Notlar
+  düğmesinde yeni notların sayısı çıkar.
+- **Okurlar** da not düşer ve cevap yazar; kendi notlarını silebilirler. Notu
+  kapatmak, gizlemek, arşivlemek ve düzeltmeyi uygulamak oyunu yazanlarındır.
+
+Dışarıdan gelen bir not dosyasını yüklemek (⇲) notları **birleştirir**: zaten
+olan not ikinci kez gelmez, yalnızca yeni cevapları eklenir. Aynı dosyayı iki
+kez yüklemek bir şey bozmaz.
 
 **Ctrl+N** paneli açar. Dactile Light'ta panelde:
 

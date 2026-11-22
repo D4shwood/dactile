@@ -12,6 +12,8 @@
     draft = $bindable(),
     pasting = $bindable(),
     me = $bindable(),
+    signedIn = false,
+    reader = false,
     pick,
     set,
     add,
@@ -32,6 +34,10 @@
     /// A reply being pasted: its text, or null.
     pasting: string | null;
     me: string;
+    /// On a site, signed in: the notes are `me`'s, no name to type.
+    signedIn?: boolean;
+    /// One who only reads the play: notes and replies, and deleting their own.
+    reader?: boolean;
     pick: (i: number) => void;
     set: (i: number, state: string) => void;
     add: (author: string, body: string) => void;
@@ -46,6 +52,9 @@
   } = $props();
 
   const l = (t: string, e: string) => (tr ? t : e);
+  /// Each name its own colour, the same everywhere.
+  const hue = (name: string) => [...name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+  const mayDelete = (c: NoteCard) => !reader || (signedIn && c.author === me);
   let show = $state<"open" | "all" | "archive">("open");
   let replying = $state<number | null>(null);
   let replyText = $state("");
@@ -85,15 +94,15 @@
       Escape: back,
       Enter: back,
       n: () => (draft = draft ?? ""),
-      U: () => fixableAll.length && fixMany(fixableAll.map((x) => x.i)),
+      U: () => !reader && fixableAll.length && fixMany(fixableAll.map((x) => x.i)),
     };
-    if (c) {
+    if (c) acts.r = () => ((replying = c.i), (replyText = ""));
+    if (c && !reader) {
       acts.u = () => c.fixable && c.state === "open" && fix(c.i);
       acts.g = () => {
         const part = inGroup(c.group);
         if (part.length) fixMany(part.map((x) => x.i));
       };
-      acts.r = () => ((replying = c.i), (replyText = ""));
       acts.a = () => set(c.i, c.archived ? "unarchive" : "archive");
       acts.h = () => set(c.i, c.state === "hidden" ? "open" : "hidden");
       acts[" "] = () => set(c.i, c.state === "done" ? "open" : "done");
@@ -122,8 +131,10 @@
     <strong>{l("Notlar", "Notes")}</strong>
     <span class="grow"></span>
     <button class="ui-btn ghost icon" title={l("Buraya not (Alt+N)", "Note here (Alt+N)")} onclick={() => (draft = draft ?? "")}>✚</button>
-    <button class="ui-btn ghost icon" title={l("Panodan yapıştır", "Paste a reply")} onclick={() => (pasting = pasting ?? "")}>⎗</button>
-    <button class="ui-btn ghost icon" title={l("Dosyadan", "From a file")} onclick={fromFile}>⇲</button>
+    {#if !reader}
+      <button class="ui-btn ghost icon" title={l("Panodan yapıştır", "Paste a reply")} onclick={() => (pasting = pasting ?? "")}>⎗</button>
+      <button class="ui-btn ghost icon" title={l("Dosyadan birleştir: olan notlar iki kez gelmez", "Merge from a file: notes already here don't come twice")} onclick={fromFile}>⇲</button>
+    {/if}
     <button class="ui-btn ghost icon" title={l("Kapat", "Close")} onclick={close}>✕</button>
   </div>
   <nav class="filter ui-pills">
@@ -132,7 +143,7 @@
     <button class:on={show === "archive"} onclick={() => (show = "archive")}>{l("Arşiv", "Archive")} {counts.archive}</button>
   </nav>
 
-  {#if fixableAll.length}
+  {#if fixableAll.length && !reader}
     <div class="applyall">
       <button class="ui-btn small" onclick={() => fixMany(fixableAll.map((x) => x.i))}>
         {l(`Tümünü uygula (${fixableAll.length})`, `Apply all (${fixableAll.length})`)}
@@ -149,7 +160,9 @@
         add(me, draft ?? "");
       }}
     >
-      <input class="ui-field" bind:value={me} list="note-authors" placeholder={l("Kimden", "From")} />
+      {#if !signedIn}
+        <input class="ui-field" bind:value={me} list="note-authors" placeholder={l("Kimden", "From")} />
+      {/if}
       <!-- svelte-ignore a11y_autofocus -->
       <textarea class="ui-field" bind:value={draft} rows="3" autofocus placeholder={l("“alıntı” ve not", "“quote” and the note")}></textarea>
       <div class="row">
@@ -195,7 +208,7 @@
       {#if c.group && c.group !== shown[k - 1]?.group}
         <h4 class="ui-eyebrow">
           <span>{c.group}</span>
-          {#if inGroup(c.group).length}
+          {#if inGroup(c.group).length && !reader}
             <button class="ui-btn small" onclick={() => fixMany(inGroup(c.group).map((x) => x.i))}>
               {l(`Bu kısmı uygula (${inGroup(c.group).length})`, `Apply this part (${inGroup(c.group).length})`)}
             </button>
@@ -215,13 +228,14 @@
           <input
             type="checkbox"
             checked={c.state === "done"}
+            disabled={reader}
             title={l("Yapıldı", "Done")}
             onclick={(e) => {
               e.stopPropagation();
               set(c.i, c.state === "done" ? "open" : "done");
             }}
           />
-          <span class="author" title={c.author}>{c.author || "—"}</span>
+          <span class="author" title={c.author} style:--who={c.author ? `hsl(${hue(c.author)} 55% 45%)` : "transparent"}>{c.author || "—"}</span>
           {#if c.line}<span class="line">{c.line}</span>{/if}
           {#if c.gone && c.state === "open"}<span class="gone" title={l("Gösterdiği yer değişmiş: düzeltilmiş olabilir.", "What it points at changed: maybe put right.")}>✓?</span>{/if}
           {#if c.from === null}<span class="lost" title={l("Metinde yeri bulunamadı", "Its place wasn't found")}>?</span>{/if}
@@ -232,16 +246,19 @@
         {/each}
         {#if picked === c.i}
           <div class="actions">
-            {#if c.fixable && c.state === "open"}
+            {#if c.fixable && c.state === "open" && !reader}
               <button class="ui-btn small primary" onclick={(e) => (e.stopPropagation(), fix(c.i))}>{l("Uygula", "Apply")}</button>
             {/if}
             <button class="ui-btn small" onclick={(e) => (e.stopPropagation(), (replying = c.i), (replyText = ""))}>{l("Cevap", "Reply")}</button>
+            {#if !reader}
             <button class="ui-btn small" onclick={(e) => (e.stopPropagation(), set(c.i, c.archived ? "unarchive" : "archive"))}>
               {c.archived ? l("Arşivden çıkar", "Unarchive") : l("Arşivle", "Archive")}
             </button>
             <button class="ui-btn small" onclick={(e) => (e.stopPropagation(), set(c.i, c.state === "hidden" ? "open" : "hidden"))}>
               {c.state === "hidden" ? l("Göster", "Show") : l("Gizle", "Hide")}
             </button>
+            {/if}
+            {#if mayDelete(c)}
             <button
               class="ui-btn small danger"
               onclick={async (e) => {
@@ -250,6 +267,7 @@
                   set(c.i, "delete");
               }}>{l("Sil", "Delete")}</button
             >
+            {/if}
           </div>
           {#if replying === c.i}
             <form
@@ -341,6 +359,16 @@
   }
   .meta input {
     accent-color: var(--accent-ink);
+  }
+  .author::before {
+    content: "";
+    display: inline-block;
+    width: 0.55em;
+    height: 0.55em;
+    margin-right: 0.35em;
+    border-radius: 50%;
+    background: var(--who);
+    vertical-align: 0.08em;
   }
   .author {
     min-width: 0;

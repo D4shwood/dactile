@@ -3,7 +3,7 @@
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
-use dactile_server::room::{ASK, BYE, INFO, REFUSED, TEXT};
+use dactile_server::room::{ASK, BYE, INFO, NOTES, REFUSED, TEXT};
 use dactile_server::{gate, people, projects};
 use futures_util::{SinkExt, StreamExt};
 use http_body_util::BodyExt;
@@ -54,6 +54,20 @@ async fn post(app: &axum::Router, uri: &str, cookie: &str, body: Value) -> Statu
     s
 }
 
+/// One of the backend's commands, through the gate: its status and answer.
+async fn call(app: &axum::Router, cookie: &str, name: &str, args: Value) -> (StatusCode, Value) {
+    let r = Request::post(format!("/api/call/{name}"))
+        .header(header::COOKIE, cookie)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("x-dactile", "1")
+        .body(Body::from(args.to_string()))
+        .unwrap();
+    let r = app.clone().oneshot(r).await.unwrap();
+    let s = r.status();
+    let b = r.into_body().collect().await.unwrap().to_bytes();
+    (s, serde_json::from_slice(&b).unwrap_or(Value::Null))
+}
+
 /// A page with the play open: its own copy of the document.
 struct Page {
     doc: Doc,
@@ -64,6 +78,8 @@ struct Page {
     names: Vec<String>,
     bye: Option<String>,
     refused: bool,
+    /// Who changed the notes, each time the room said so.
+    notes: Vec<String>,
 }
 
 impl Page {
@@ -84,6 +100,7 @@ impl Page {
             names: vec![],
             bye: None,
             refused: false,
+            notes: vec![],
         };
         let sv = page.doc.transact().state_vector();
         page.send(Message::Sync(SyncMessage::SyncStep1(sv))).await;
@@ -129,6 +146,10 @@ impl Page {
                     }
                 }
                 Message::Custom(REFUSED, _) => self.refused = true,
+                Message::Custom(NOTES, d) => {
+                    let v: Value = serde_json::from_slice(&d).unwrap();
+                    self.notes.push(v["by"].as_str().unwrap_or("").to_string());
+                }
                 Message::Custom(INFO, d) => self.info = serde_json::from_slice(&d).unwrap(),
                 Message::Custom(BYE, d) => {
                     let v: Value = serde_json::from_slice(&d).unwrap();
@@ -419,4 +440,131 @@ async fn a_play_is_written_live_by_those_who_may() {
 
     drop((app, app2, g, g2));
     std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn notes_are_everyones_and_live() {
+    let dir = std::env::temp_dir().join(format!("dactile-room-notes-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let home = dir.canonicalize().unwrap();
+    for (id, name, owner) in [
+        ("ada", "Ada Yıldız", true),
+        ("baran", "Baran Deniz", false),
+        ("cem", "Cem Ak", false),
+    ] {
+        people::add(&home, id, name, owner, None).unwrap();
+        people::set_password(&home, id, &format!("{id} için parola")).unwrap();
+    }
+    let p = projects::create(&home, "Kar Masalı", "ada").unwrap();
+    projects::set_member(&home, &p.id, "ada", "baran", Some(projects::Role::Writer)).unwrap();
+    projects::set_member(&home, &p.id, "ada", "cem", Some(projects::Role::Reader)).unwrap();
+    let play = projects::folder(&home, &p.id).join("kar.tex");
+    let text = "Kar yağıyor.\nTaş durdu.\n";
+    std::fs::write(&play, text).unwrap();
+    let path = play.display().to_string();
+
+    let server = env!("CARGO_BIN_EXE_dactile-server").into();
+    let g = Arc::new(gate::Gate::new(home.clone(), server, false));
+    let app = gate::router(g.clone(), None);
+    let addr = serve(g.clone()).await;
+    let ada = sign_in(&app, "ada").await;
+    let baran = sign_in(&app, "baran").await;
+    let cem = sign_in(&app, "cem").await;
+    let mut a = Page::open(&addr, &ada, &path, None).await;
+    let mut b = Page::open(&addr, &baran, &path, None).await;
+    for who in [&ada, &cem] {
+        let (s, _) = call(&app, who, "open", json!({ "path": path })).await;
+        assert_eq!(s, StatusCode::OK);
+    }
+
+    // Ada's note is hers by the gate's name, whatever her window says;
+    // Baran's page hears of it, hers doesn't.
+    let (s, cards) = call(
+        &app,
+        &ada,
+        "note_add",
+        json!({ "text": text, "at": 0, "author": "Biri", "body": "“Kar” büyük harfle" }),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{cards}");
+    assert_eq!(cards[0]["author"], "Ada Yıldız");
+    let id = cards[0]["id"].as_str().unwrap().to_string();
+    assert!(!id.is_empty());
+    b.listen(SHORT).await;
+    a.listen(SHORT).await;
+    assert_eq!(b.notes, ["Ada Yıldız"]);
+    assert!(a.notes.is_empty());
+
+    // Cem only reads: he replies and adds a note, closes no one's, and
+    // deletes his own.
+    let (s, cards) = call(
+        &app,
+        &cem,
+        "note_reply",
+        json!({ "text": text, "id": id, "author": "", "reply": "olur" }),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{cards}");
+    assert_eq!(cards[0]["replies"][0], json!(["Cem Ak", "olur"]));
+    let (s, _) = call(
+        &app,
+        &cem,
+        "note_set",
+        json!({ "text": text, "id": id, "state": "done" }),
+    )
+    .await;
+    assert_ne!(s, StatusCode::OK);
+    let (s, _) = call(
+        &app,
+        &cem,
+        "notes_paste",
+        json!({ "reply": "1: x", "author": "Cem" }),
+    )
+    .await;
+    assert_eq!(s, StatusCode::FORBIDDEN);
+    let (s, cards) = call(
+        &app,
+        &cem,
+        "note_add",
+        json!({ "text": text, "at": 15, "author": "", "body": "“Taş” mı?" }),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{cards}");
+    let mine = cards[1]["id"].as_str().unwrap().to_string();
+    let (s, _) = call(
+        &app,
+        &cem,
+        "note_set",
+        json!({ "text": text, "id": id, "state": "delete" }),
+    )
+    .await;
+    assert_ne!(s, StatusCode::OK, "Ada's is not his to delete");
+    let (s, cards) = call(
+        &app,
+        &cem,
+        "note_set",
+        json!({ "text": text, "id": mine, "state": "delete" }),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{cards}");
+    assert_eq!(cards.as_array().unwrap().len(), 1);
+    a.listen(SHORT).await;
+    assert!(a.notes.iter().all(|n| n == "Cem Ak") && !a.notes.is_empty());
+
+    // Ada, who writes, closes it; by its id.
+    let (s, cards) = call(
+        &app,
+        &ada,
+        "note_set",
+        json!({ "text": text, "id": id, "state": "done" }),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{cards}");
+    assert_eq!(cards[0]["state"], "done");
+    let file = std::fs::read_to_string(play.with_file_name("kar.notlar.md")).unwrap();
+    assert!(file.contains(&format!("^{id}")), "{file}");
+
+    drop((a, b, app, g));
+    let _ = std::fs::remove_dir_all(&dir);
 }

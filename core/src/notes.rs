@@ -38,6 +38,11 @@ pub struct Reply {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Note {
+    /// Its name for good (`n7k2qa`), written at the end of its line as
+    /// `^n7k2qa`, which Obsidian reads as a block id and hides. A note with
+    /// none is given one from what it says, so the same note read twice has
+    /// the same one.
+    pub id: String,
     pub state: State,
     pub archived: bool,
     /// The play's line it is about (from 1), as last seen.
@@ -142,6 +147,7 @@ impl Notes {
                 let (line_no, rest) = number(rest);
                 let (author, rest) = author(rest);
                 list.push(Note {
+                    id: String::new(),
                     state,
                     archived,
                     line: line_no,
@@ -179,7 +185,91 @@ impl Notes {
                 }
             }
         }
-        Notes { list, unread }
+        for n in &mut list {
+            n.id = take_id(&mut n.text);
+        }
+        let mut notes = Notes { list, unread };
+        notes.name_all();
+        notes
+    }
+
+    /// Gives every note without an id one, from what it says; two that
+    /// say the same get different ones.
+    pub fn name_all(&mut self) {
+        let mut taken: Vec<String> = self.list.iter().map(|n| n.id.clone()).collect();
+        for i in 0..self.list.len() {
+            if !self.list[i].id.is_empty() {
+                continue;
+            }
+            let n = &self.list[i];
+            let mut seed = format!("{}\0{}", n.author, one_line(&n.text));
+            let id = loop {
+                let id = short_hash(&seed);
+                if !taken.contains(&id) {
+                    break id;
+                }
+                seed.push('+');
+            };
+            taken.push(id.clone());
+            self.list[i].id = id;
+        }
+    }
+
+    /// Where the note of this id is.
+    pub fn find(&self, id: &str) -> Option<usize> {
+        self.list.iter().position(|n| n.id == id)
+    }
+
+    /// Notes from elsewhere (a file loaded, a reply pasted) taken in: one
+    /// that is here already (by its id, or by who said what) only brings
+    /// the replies it has that this one hasn't.
+    pub fn merge(&mut self, new: Vec<Note>) -> Merged {
+        let mut m = Merged::default();
+        for n in new {
+            let here = (!n.id.is_empty())
+                .then(|| self.find(&n.id))
+                .flatten()
+                .or_else(|| {
+                    self.list.iter().position(|h| {
+                        h.author == n.author
+                            && one_line(&h.text) == one_line(&n.text)
+                            && (h.line.is_none() || n.line.is_none() || h.line == n.line)
+                    })
+                });
+            match here {
+                Some(i) => {
+                    m.same += 1;
+                    let h = &mut self.list[i];
+                    for r in n.replies {
+                        if !h.replies.contains(&r) {
+                            h.replies.push(r);
+                            m.replies += 1;
+                        }
+                    }
+                }
+                None => {
+                    // Its id stays only if no other note has it.
+                    let mut n = n;
+                    if self.find(&n.id).is_some() {
+                        n.id.clear();
+                    }
+                    m.added += 1;
+                    self.list.push(n);
+                }
+            }
+            self.name_all();
+        }
+        m
+    }
+
+    /// Reads the play's notes, changes them and writes them, with no one
+    /// else (another person's server on a site) doing so in between.
+    pub fn change<T>(play: &Path, f: impl FnOnce(&mut Notes) -> Result<T>) -> Result<(Notes, T)> {
+        let _held = Held::take(&path_for(play))?;
+        let mut notes = Notes::load(play)?;
+        let out = f(&mut notes)?;
+        notes.save(play)?;
+        Ok((notes, out))
     }
 
     pub fn to_markdown(&self, play_name: &str) -> String {
@@ -256,6 +346,9 @@ impl Note {
             s.push_str(&format!("**{}** · ", self.author));
         }
         s.push_str(&one_line(&self.text));
+        if !self.id.is_empty() {
+            s.push_str(&format!(" ^{}", self.id));
+        }
         s.push('\n');
         for r in &self.replies {
             if r.author.is_empty() {
@@ -275,6 +368,97 @@ impl Note {
     /// The corrections it suggests: `“Gaztesi” → Gazetesi`.
     pub fn fixes(&self) -> Vec<Fix> {
         fixes(&self.text)
+    }
+}
+
+/// What a merge did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize)]
+pub struct Merged {
+    pub added: usize,
+    pub replies: usize,
+    pub same: usize,
+}
+
+/// A note's `^id` at its end, taken off it.
+fn take_id(text: &mut String) -> String {
+    let t = text.trim_end();
+    let (before, last) = t.rsplit_once(' ').unwrap_or(("", t));
+    let Some(id) = last.strip_prefix('^') else {
+        return String::new();
+    };
+    let good =
+        (2..=24).contains(&id.len()) && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
+    if !good {
+        return String::new();
+    }
+    let id = id.to_string();
+    *text = before.trim_end().to_string();
+    id
+}
+
+/// Six letters and digits from a text (FNV-1a), the same everywhere.
+fn short_hash(s: &str) -> String {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in s.bytes() {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    }
+    const DIGITS: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyz";
+    (0..6)
+        .map(|_| {
+            let c = DIGITS[(h % 36) as usize] as char;
+            h /= 36;
+            c
+        })
+        .collect()
+}
+
+/// The notes file held for a change: a `.lock` file beside it, made only
+/// if there is none. One left by a process that died goes after a while.
+struct Held(PathBuf);
+
+impl Held {
+    fn take(notes: &Path) -> Result<Held> {
+        let mut name = notes.as_os_str().to_owned();
+        name.push(".lock");
+        let path = PathBuf::from(name);
+        for _ in 0..100 {
+            match std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&path)
+            {
+                Ok(_) => return Ok(Held(path)),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    let old = std::fs::metadata(&path)
+                        .and_then(|m| m.modified())
+                        .ok()
+                        .and_then(|t| t.elapsed().ok())
+                        .is_some_and(|d| d.as_secs() >= 10);
+                    if old {
+                        let _ = std::fs::remove_file(&path);
+                    } else {
+                        std::thread::sleep(std::time::Duration::from_millis(30));
+                    }
+                }
+                Err(e) => {
+                    return Err(e).with_context(|| format!("holding {}", path.display()));
+                }
+            }
+        }
+        anyhow::bail!(
+            "{}",
+            crate::lang::l(
+                "Notlar şu an başkası tarafından yazılıyor; biraz sonra yine dene.",
+                "Someone else is writing the notes; try again in a moment.",
+            )
+        )
+    }
+}
+
+impl Drop for Held {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
     }
 }
 

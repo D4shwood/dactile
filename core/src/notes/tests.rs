@@ -157,6 +157,7 @@ fn the_file_round_trips() {
         text: "“Ahır” yerine “Samanlık”?".into(),
         ..Note::default()
     });
+    notes.name_all();
     let md = notes.to_markdown("oyun.tex");
     let back = Notes::parse(&md);
     // The ungrouped note goes first, the archived last; each one the same.
@@ -321,6 +322,7 @@ fn corrections_go_in_together() {
     let text =
         "\\documentclass{tiyatro}\n\\begin{document}\nKar yağdı, taş durdu.\n\\end{document}\n";
     let note = |t: &str| Note {
+        id: String::new(),
         state: State::Open,
         archived: false,
         line: None,
@@ -513,4 +515,80 @@ fn copy_of_to() {
     let pdf = out.join(copy_path(&play).file_name().unwrap());
     let built = crate::build::build_aside(&play, &tex, &aux, &pdf).unwrap();
     println!("{}", built.pdf.display());
+}
+
+#[test]
+fn a_note_keeps_its_id() {
+    // One written by hand has none: it gets one from what it says, the
+    // same each time the file is read, and keeps it once written.
+    let hand = "- [ ] 12 · **Ada** · “kar” küçük harfle\n- [ ] 12 · **Ada** · “kar” küçük harfle\n";
+    let a = Notes::parse(hand);
+    let b = Notes::parse(hand);
+    assert_eq!(a.list[0].id, b.list[0].id);
+    assert_ne!(a.list[0].id, a.list[1].id, "two alike, two ids");
+    assert_eq!(a.list[0].text, "“kar” küçük harfle");
+    let md = a.to_markdown("oyun.tex");
+    assert!(
+        md.contains(&format!("küçük harfle ^{}\n", a.list[0].id)),
+        "{md}"
+    );
+    let back = Notes::parse(&md);
+    assert_eq!(back.list, a.list);
+    // An id as Obsidian writes it is read; a caret in the note's words is
+    // the note's.
+    let n = Notes::parse("- [ ] **Baran** · bak ^x-12\n- [ ] **Baran** · 2^ kere ^\n");
+    assert_eq!(
+        (n.list[0].id.as_str(), n.list[0].text.as_str()),
+        ("x-12", "bak")
+    );
+    assert_eq!(n.list[1].text, "2^ kere ^");
+}
+
+#[test]
+fn a_file_loaded_twice_brings_nothing_twice() {
+    let mut here = Notes::parse("- [ ] 3 · **Ada** · “Ahır” mı?\n");
+    let theirs = "- [ ] 3 · **Ada** · “Ahır” mı?\n  - **Cem**: samanlık olsun\n- [ ] 9 · **Cem** · sahne uzun\n";
+    let m = here.merge(from_reply(theirs, "?"));
+    assert_eq!((m.added, m.replies, m.same), (1, 1, 1));
+    let m = here.merge(from_reply(theirs, "?"));
+    assert_eq!((m.added, m.replies, m.same), (0, 0, 2));
+    assert_eq!(here.list.len(), 2);
+    assert_eq!(here.list[0].replies.len(), 1);
+    // A pasted reply's items, pasted again, are the same notes.
+    let reply = "12: “kar” büyük harfle\n";
+    assert_eq!(here.merge(from_reply(reply, "Claude")).added, 1);
+    assert_eq!(here.merge(from_reply(reply, "Claude")).added, 0);
+    let ids: Vec<&String> = here.list.iter().map(|n| &n.id).collect();
+    assert!(ids.iter().all(|i| !i.is_empty()));
+}
+
+#[test]
+fn two_writers_lose_nothing() {
+    let d = std::env::temp_dir().join(format!("dactile-notes-two-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    let play = d.join("oyun.tex");
+    std::fs::write(&play, "x").unwrap();
+    let run = |who: &'static str| {
+        let play = play.clone();
+        std::thread::spawn(move || {
+            for k in 0..15 {
+                Notes::change(&play, |n| {
+                    n.list.push(Note {
+                        author: who.into(),
+                        text: format!("not {k}"),
+                        ..Note::default()
+                    });
+                    n.name_all();
+                    Ok(())
+                })
+                .unwrap();
+            }
+        })
+    };
+    let (a, b) = (run("Ada"), run("Baran"));
+    a.join().unwrap();
+    b.join().unwrap();
+    assert_eq!(Notes::load(&play).unwrap().list.len(), 30);
+    let _ = std::fs::remove_dir_all(&d);
 }

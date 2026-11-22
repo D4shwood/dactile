@@ -1229,6 +1229,11 @@ async fn pass(
             if call {
                 // A play deleted or moved: its room closes.
                 g.rooms.check_gone();
+                // Notes written: the others with the play open see them.
+                g.rooms.check_notes(&room::Who {
+                    id: person.id.clone(),
+                    name: person.name.clone(),
+                });
             }
             answer.map(Body::new).into_response()
         }

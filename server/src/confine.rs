@@ -137,6 +137,11 @@ pub const WRITES: &[&str] = &[
     "play_unlearn",
 ];
 
+/// Of `WRITES`, those one who only reads a play still runs there: they
+/// write its notes (a note, a reply; deleting one's own, which the
+/// backend checks), never the play.
+pub const NOTE_WRITES: &[&str] = &["note_add", "note_reply", "note_set"];
+
 /// The commands that write nothing where they are pointed: they read, or
 /// write only in the person's own folder.
 pub const READS: &[&str] = &[
@@ -192,7 +197,7 @@ pub fn check(roots: &Roots, name: &str, args: &Value, open_reads: bool) -> Resul
         return Err(refused());
     }
     let writes = WRITES.contains(&name);
-    if writes && open_reads {
+    if writes && open_reads && !NOTE_WRITES.contains(&name) {
         return Err(only_reads());
     }
     let Some(args) = args.as_object() else {

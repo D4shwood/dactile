@@ -9,9 +9,9 @@
   import { Live, type Link, type RoomInfo } from "./live";
   import { redo, selectAll, undo } from "@codemirror/commands";
   import { openSearchPanel } from "@codemirror/search";
-  import { beforeClose, type Head, api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Files, type Look, type Made, type Memo, type Summary, type NoteCard, type Opened, type PlaySettings, type Preview, type Settings } from "./api";
+  import { beforeClose, type Head, api, type BuildResult, type Card, type CastEntry, type CharacterForm, type Files, type Look, type Made, type Memo, type Summary, type NoteCard, type NoteRef, type Merged, type Opened, type PlaySettings, type Preview, type Settings } from "./api";
   import { focus, setCards, setDim, setFocus } from "./focus";
-  import { blockAt, currentView, extensions, insertSnippet, typeBackslash, coverClicked, openCover, pickNote, setCoverLook, wrapSelection, unwrapSelection, setNotes, setNumbers, setSource, setView } from "./editor";
+  import { blockAt, currentView, extensions, insertSnippet, typeBackslash, coverClicked, openCover, pickNote, setNoteDots, setCoverLook, wrapSelection, unwrapSelection, setNotes, setNumbers, setSource, setView } from "./editor";
   import { BACKSTAGE, type Act } from "./ribbon";
   import { closeMenu, nextWord, recheck, showMenu, spelling } from "./spelling";
   import { completion, openMenu } from "./completion";
@@ -231,7 +231,10 @@
   let authors = $state<string[]>([]);
   let draft = $state<string | null>(null);
   let pasting = $state<string | null>(null);
-  let me = $state(first.author);
+  /// Who writes the notes: on a site, the person signed in.
+  let me = $state(untrack(() => opened.who) || first.author);
+  /// Notes come from the others since the panel was last open.
+  let notesNew = $state(0);
   let building = $state(false);
   let built = $state<BuildResult | null>(null);
   let board = $state(false);
@@ -610,13 +613,18 @@
           .filter((c) => c.from !== null && c.to !== null && !c.archived && c.state !== "hidden")
           .map((c) => ({ from: c.from!, to: c.to!, i: c.i, done: c.state === "done" }))
       : [];
-    view.dispatch({ effects: [setNotes.of(marks), pickNote.of(on ? picked : null)] });
+    // The margin's dots stay, panel or no panel.
+    const dots = noteCards
+      .filter((c) => c.from !== null && !c.archived && c.state !== "hidden")
+      .map((c) => ({ at: c.from!, i: c.i, title: `${c.author || "—"}: ${c.text.slice(0, 80)}`, done: c.state === "done" }));
+    view.dispatch({ effects: [setNotes.of(marks), setNoteDots.of(dots), pickNote.of(on ? picked : null)] });
   }
 
   async function openNotes(on = side !== "notes") {
     side = on ? "notes" : "";
     keepCursor();
     if (on) {
+      notesNew = 0;
       authors = await api.noteAuthors();
       await refreshNotes();
     } else showNotes();
@@ -656,8 +664,11 @@
     }
   }
 
+  /// The card `i` as the commands find it.
+  const noteRef = (i: number): NoteRef => ({ i, id: noteCards.find((n) => n.i === i)?.id ?? "" });
+
   async function noteSet(i: number, state: string) {
-    noteCards = await api.noteSet(view.state.doc.toString(), i, state).catch((e) => (say(String(e), true), api.notes(view.state.doc.toString())));
+    noteCards = await api.noteSet(view.state.doc.toString(), noteRef(i), state).catch((e) => (say(String(e), true), api.notes(view.state.doc.toString())));
     if (state === "delete") picked = null;
     showNotes();
   }
@@ -675,12 +686,12 @@
   }
 
   async function noteReply(i: number, author: string, text: string) {
-    noteCards = await api.noteReply(view.state.doc.toString(), i, author, text).catch((e) => (say(String(e), true), api.notes(view.state.doc.toString())));
+    noteCards = await api.noteReply(view.state.doc.toString(), noteRef(i), author, text).catch((e) => (say(String(e), true), api.notes(view.state.doc.toString())));
   }
 
   async function noteFix(i: number) {
     try {
-      const changes = await api.noteFix(view.state.doc.toString(), i);
+      const changes = await api.noteFix(view.state.doc.toString(), noteRef(i));
       // One step: one Ctrl+Z puts the words back.
       view.dispatch({ changes: changes.map((c) => ({ from: c.from, to: c.to, insert: c.insert })), userEvent: "input" });
       say(l("Düzeltildi; not yapıldı sayıldı. Ctrl+Z geri alır.", "Fixed; the note is done. Ctrl+Z undoes it."));
@@ -692,15 +703,26 @@
   }
 
   async function noteFixMany(which: number[]) {
-    await castCall(() => api.noteFixMany(view.state.doc.toString(), which));
+    await castCall(() => api.noteFixMany(view.state.doc.toString(), which.map(noteRef)));
     await refreshNotes();
+  }
+
+  /// "3 yeni not, 2 cevap eklendi; 5 not zaten vardı."
+  function mergedSaid(m: Merged) {
+    if (!m.added && !m.replies && !m.same) return l("Numaralı madde bulunamadı (“139: …”).", "No numbered items found (“139: …”).");
+    const came = [
+      m.added && l(`${m.added} yeni not`, `${m.added} new notes`),
+      m.replies && l(`${m.replies} cevap`, `${m.replies} replies`),
+    ].filter(Boolean);
+    const said = came.length ? came.join(", ") + l(" eklendi", " added") : l("Yeni bir şey yok", "Nothing new");
+    return m.same ? said + l(`; ${m.same} not zaten vardı.`, `; ${m.same} were there already.`) : said + ".";
   }
 
   async function notesPaste(text: string, author: string) {
     try {
-      const n = await api.notesPaste(text, author);
+      const m = await api.notesPaste(text, author);
       pasting = null;
-      say(n ? l(`${n} not eklendi.`, `${n} notes added.`) : l("Numaralı madde bulunamadı (“139: …”).", "No numbered items found (“139: …”)."), !n);
+      say(mergedSaid(m), !m.added && !m.replies && !m.same);
       authors = await api.noteAuthors();
       await refreshNotes();
     } catch (e) {
@@ -1241,6 +1263,14 @@
         if (text) lost = text;
         else close(opened.path);
       },
+      notes: async (by) => {
+        noteCards = await api.notes(view.state.doc.toString());
+        showNotes();
+        if (side !== "notes") {
+          notesNew++;
+          say(l(`${by || "Biri"} not düştü.`, `${by || "Someone"} added a note.`));
+        }
+      },
     });
     // Its name and colour are the gate's; the room fills them in.
     live.awareness.setLocalStateField("user", { name: "", color: "#888888", colorLight: "#88888833" });
@@ -1334,7 +1364,11 @@
       }),
     });
     if (!numbers) view.dispatch({ effects: setNumbers.of(false) });
-    if (opened.live) void joinRoom();
+    // The notes' dots in the margin, from the start (a live play's once
+    // the room's text is in).
+    const dots = () => refreshNotes().catch(() => {});
+    if (opened.live) void joinRoom().then(dots);
+    else void dots();
     window.addEventListener("beforeunload", unsentWarning);
     refresh(true);
     void getVersion().then((v) => (version = v));
@@ -1379,6 +1413,7 @@
     {folded}
     {slim}
     {dirty}
+    counts={{ notes: notesNew }}
     title={`${opened.name}${locked ? l(" (salt okunur)", " (read only)") : ""} — Dactile`}
     {run}
     file={() => openBackstage("info")}
@@ -1426,7 +1461,13 @@
           <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
           <div
             bind:this={host}
-            onclick={(e) => {
+            onclick={async (e) => {
+              const dot = (e.target as HTMLElement).closest("[data-note-dot]") as HTMLElement | null;
+              if (dot) {
+                if (side !== "notes") await openNotes(true);
+                pickCard(Number(dot.dataset.noteDot));
+                return;
+              }
               const n = (e.target as HTMLElement).closest("[data-note]") as HTMLElement | null;
               if (n && side === "notes") picked = Number(n.dataset.note);
               if (n && side === "notes") view.dispatch({ effects: pickNote.of(picked) });
@@ -1522,6 +1563,8 @@
         bind:draft
         bind:pasting
         bind:me
+        signedIn={!!opened.who}
+        reader={opened.reader}
         pick={pickCard}
         set={noteSet}
         add={noteAdd}
@@ -2095,6 +2138,28 @@
     text-decoration: underline wavy color-mix(in srgb, var(--claret) 70%, transparent);
     text-underline-offset: 3px;
     cursor: pointer;
+  }
+  .page :global(.cm-note-dot) {
+    position: relative;
+    display: inline-block;
+    width: 0;
+    height: 1em;
+    vertical-align: top;
+  }
+  .page :global(.cm-note-dot)::before {
+    content: "";
+    position: absolute;
+    top: 0.55em;
+    left: -1.3em;
+    width: 0.55em;
+    height: 0.55em;
+    border-radius: 50%;
+    background: var(--claret);
+    cursor: pointer;
+  }
+  .page :global(.cm-note-dot.done)::before {
+    background: var(--faint);
+    opacity: 0.6;
   }
   .page :global(.cm-note-done) {
     text-decoration-style: dotted;

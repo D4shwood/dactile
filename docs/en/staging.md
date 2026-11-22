@@ -54,13 +54,30 @@ a Markdown task list that editors such as Obsidian read too:
 ```text
 ## Spelling
 
-- [ ] 139 · **Workshop** · “Gaztesi” → Gazetesi
+- [ ] 139 · **Workshop** · “Gaztesi” → Gazetesi ^k2m9qa
   - **Deniz**: the same in act two
-- [x] 20 · **Reader** · “loş bir bir ışığın”: “bir” twice
+- [x] 20 · **Reader** · “loş bir bir ışığın”: “bir” twice ^7d0xre
 ```
 
 `[ ]` is open, `[x]` done, `[-]` hidden. A note finds its place by what it quotes, so
-lines added above it don't lose it.
+lines added above it don't lose it. The `^k2m9qa` at the end is the note's id:
+Obsidian hides it, Dactile knows the note by it, and gives one to a note written by hand.
+
+A small dot sits in the margin of a line with notes. Hover it to read the note, click
+it to open the panel at that note.
+
+### Together on a site
+
+On a project's play the notes are everyone's, with no file to pass around:
+
+- Notes and replies go in under the name of whoever is signed in.
+- A note shows up at once for everyone with the play open. With the panel closed, the
+  Notes button counts the new ones.
+- **Readers** add notes and reply too, and delete their own. Closing, hiding and
+  archiving notes, and applying corrections, are for those who write the play.
+
+Loading a notes file from elsewhere (⇲) **merges** it: a note already here doesn't
+come twice, only its new replies do. Loading the same file twice breaks nothing.
 
 **Ctrl+N** opens the panel. In Dactile Light:
 

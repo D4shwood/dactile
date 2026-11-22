@@ -66,14 +66,6 @@ pub struct App {
 }
 
 impl App {
-    /// The notes changed: written beside the play.
-    fn keep_notes(&mut self) -> Res<()> {
-        let open = self.open.as_ref().ok_or("no play open")?;
-        self.notes.save(&open.path).map_err(err)?;
-        self.notes_time = dactile::file::modified(&dactile::notes::path_for(&open.path));
-        Ok(())
-    }
-
     /// The notes as the file has them now.
     fn read_notes(&mut self) {
         let Some(path) = self.open.as_ref().map(|o| o.path.clone()) else {
@@ -103,17 +95,21 @@ impl App {
         true
     }
 
-    /// Before a change to the note at an index: the notes as the panel shows
-    /// them, or a word that they changed and the panel is to be read again.
-    fn same_notes(&mut self) -> Res<()> {
-        if self.fresh_notes() {
-            return Err(dactile::lang::l(
-                "Not dosyası dışarıda değişti ve yeniden okundu; listeye bir daha bakıp tekrar deneyin.",
-                "The notes file changed elsewhere and was read again; look at the list and try again.",
-            )
-            .into());
-        }
-        Ok(())
+    /// Whether the open play is one this person only reads.
+    fn open_reads_only(&self) -> bool {
+        self.open
+            .as_ref()
+            .is_some_and(|o| self.reads_only.iter().any(|d| o.path.starts_with(d)))
+    }
+
+    /// The notes read, changed and written back, with no one else's
+    /// server writing them in between; the panel's copy is the new one.
+    fn change_notes<T>(&mut self, f: impl FnOnce(&mut Notes) -> anyhow::Result<T>) -> Res<T> {
+        let path = self.open.as_ref().ok_or("no play open")?.path.clone();
+        let (notes, out) = Notes::change(&path, f).map_err(err)?;
+        self.notes = notes;
+        self.notes_time = dactile::file::modified(&dactile::notes::path_for(&path));
+        Ok(out)
     }
 }
 
@@ -246,58 +242,93 @@ pub fn note_add(
     body: String,
 ) -> Res<Vec<NoteCard>> {
     let mut a = app.lock();
-    a.fresh_notes();
-    notes::add(&mut a.notes, &text, at, &author, &body).map_err(err)?;
-    a.keep_notes()?;
+    let author = notes::author(&author);
+    a.change_notes(|n| notes::add(n, &text, at, &author, &body))?;
     Ok(notes::cards(&text, &a.notes))
 }
 
-/// "open", "done", "hidden", "archive", "unarchive" or "delete".
-pub fn note_set(app: &Shared, text: String, i: usize, state: String) -> Res<Vec<NoteCard>> {
+/// "open", "done", "hidden", "archive", "unarchive" or "delete", of the
+/// note `id` (or, from an older window, the `i`th).
+pub fn note_set(
+    app: &Shared,
+    text: String,
+    id: Option<String>,
+    i: Option<usize>,
+    state: String,
+) -> Res<Vec<NoteCard>> {
     let mut a = app.lock();
-    a.same_notes()?;
-    notes::set_state(&mut a.notes, i, &state).map_err(err)?;
-    a.keep_notes()?;
+    let reads_only = a.open_reads_only();
+    a.change_notes(|n| {
+        let i = notes::which(n, id.as_deref(), i)?;
+        // One who only reads a play deletes their own notes, and changes
+        // no one's.
+        if reads_only {
+            let mine = n.list[i].author == notes::author("");
+            anyhow::ensure!(
+                state == "delete" && mine,
+                "{}",
+                dactile::lang::l(
+                    "Bu oyunu yalnızca okuyabiliyorsun: not düşüp yanıt yazabilir, kendi notunu silebilirsin.",
+                    "You may only read this play: you can add notes, reply, and delete your own.",
+                )
+            );
+        }
+        notes::set_state(n, i, &state)
+    })?;
     Ok(notes::cards(&text, &a.notes))
 }
 
 pub fn note_reply(
     app: &Shared,
     text: String,
-    i: usize,
+    id: Option<String>,
+    i: Option<usize>,
     author: String,
     reply: String,
 ) -> Res<Vec<NoteCard>> {
     let mut a = app.lock();
-    a.same_notes()?;
-    notes::reply(&mut a.notes, i, &author, &reply).map_err(err)?;
-    a.keep_notes()?;
+    let author = notes::author(&author);
+    a.change_notes(|n| {
+        let i = notes::which(n, id.as_deref(), i)?;
+        notes::reply(n, i, &author, &reply)
+    })?;
     Ok(notes::cards(&text, &a.notes))
 }
 
-/// A pasted reply's numbered items as notes: how many came.
-pub fn notes_paste(app: &Shared, reply: String, author: String) -> Res<usize> {
+/// A pasted reply's numbered items, or a notes file, taken in: what was
+/// added and what was there already.
+pub fn notes_paste(app: &Shared, reply: String, author: String) -> Res<dactile::notes::Merged> {
     let mut a = app.lock();
-    a.fresh_notes();
-    let n = notes::paste(&mut a.notes, &reply, &author);
-    a.keep_notes()?;
-    Ok(n)
+    a.change_notes(|n| Ok(notes::paste(n, &reply, &author)))
 }
 
-pub fn note_fix(app: &Shared, text: String, i: usize) -> Res<Vec<Change>> {
+pub fn note_fix(
+    app: &Shared,
+    text: String,
+    id: Option<String>,
+    i: Option<usize>,
+) -> Res<Vec<Change>> {
     let mut a = app.lock();
-    a.same_notes()?;
-    let changes = notes::fix(&mut a.notes, &text, i)?;
-    a.keep_notes()?;
-    Ok(changes)
+    a.change_notes(|n| {
+        let i = notes::which(n, id.as_deref(), i)?;
+        notes::fix(n, &text, i).map_err(|e| anyhow::anyhow!(e))
+    })
 }
 
-pub fn note_fix_many(app: &Shared, text: String, which: Vec<usize>) -> Res<people::Made> {
+pub fn note_fix_many(
+    app: &Shared,
+    text: String,
+    which: Vec<usize>,
+    ids: Option<Vec<String>>,
+) -> Res<people::Made> {
     let mut a = app.lock();
-    a.same_notes()?;
-    let made = notes::fix_many(&mut a.notes, &text, &which);
-    a.keep_notes()?;
-    Ok(made)
+    a.change_notes(|n| {
+        let which = match &ids {
+            Some(ids) => ids.iter().filter_map(|id| n.find(id)).collect(),
+            None => which,
+        };
+        Ok(notes::fix_many(n, &text, &which))
+    })
 }
 
 pub fn note_authors(app: &Shared) -> Vec<String> {
@@ -968,11 +999,11 @@ commands! {
         build();
         notes_list(text: String);
         note_add(text: String, at: usize, author: String, body: String);
-        note_set(text: String, i: usize, state: String);
-        note_reply(text: String, i: usize, author: String, reply: String);
+        note_set(text: String, id: Option<String>, i: Option<usize>, state: String);
+        note_reply(text: String, id: Option<String>, i: Option<usize>, author: String, reply: String);
         notes_paste(reply: String, author: String);
-        note_fix(text: String, i: usize);
-        note_fix_many(text: String, which: Vec<usize>);
+        note_fix(text: String, id: Option<String>, i: Option<usize>);
+        note_fix_many(text: String, which: Vec<usize>, ids: Option<Vec<String>>);
         note_authors();
         misspelt(text: String, from: usize, to: usize);
         suggest(word: String);

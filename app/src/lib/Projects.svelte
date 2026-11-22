@@ -82,8 +82,8 @@
   <h1>{l("Projeler", "Projects")}</h1>
   <p class="muted">
     {l(
-      "Bir projenin oyunlarını üyeleri görür: yazarlar yazar, okurlar okur. Projeyi açan yöneticisidir; üyeleri ve rollerini o belirler.",
-      "A project's plays are its members': writers write them, readers read them. Whoever starts it is its admin, who says who is in and as what.",
+      "Bir projenin oyunlarını üyeleri görür: yazarlar yazar, okurlar okur ve not düşer. Projeyi açan yöneticisidir; üyeleri ve rollerini o belirler.",
+      "A project's plays are its members': writers write them, readers read them and add notes. Whoever starts it is its admin, who says who is in and as what.",
     )}
   </p>
 

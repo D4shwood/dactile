@@ -427,6 +427,63 @@ const noteMarks = StateField.define<{ deco: DecorationSet; picked: number | null
   provide: (f) => EditorView.decorations.from(f, (v) => v.deco),
 });
 
+/// The lines with notes, marked in the margin whether the panel is open or
+/// not: a dot that names the first note and opens it.
+export type NoteDot = { at: number; i: number; title: string; done: boolean };
+export const setNoteDots = StateEffect.define<NoteDot[]>();
+
+class Dot extends WidgetType {
+  constructor(
+    readonly i: number,
+    readonly title: string,
+    readonly done: boolean,
+  ) {
+    super();
+  }
+  eq(o: Dot) {
+    return o.i === this.i && o.title === this.title && o.done === this.done;
+  }
+  toDOM() {
+    const d = document.createElement("span");
+    d.className = "cm-note-dot" + (this.done ? " done" : "");
+    d.dataset.noteDot = String(this.i);
+    d.title = this.title;
+    d.setAttribute("aria-label", this.title);
+    return d;
+  }
+  ignoreEvent() {
+    return false;
+  }
+}
+
+const noteDots = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    for (const e of tr.effects) {
+      if (!e.is(setNoteDots)) continue;
+      const doc = tr.state.doc;
+      // One dot a line: its first note's, open ones first.
+      const lines = new Map<number, NoteDot[]>();
+      for (const d of e.value) {
+        if (d.at < 0 || d.at > doc.length) continue;
+        const from = doc.lineAt(d.at).from;
+        lines.set(from, [...(lines.get(from) ?? []), d]);
+      }
+      return Decoration.set(
+        [...lines].map(([from, ds]) => {
+          const open = ds.filter((d) => !d.done);
+          const first = open[0] ?? ds[0];
+          const more = ds.length > 1 ? ` (+${ds.length - 1})` : "";
+          return Decoration.widget({ widget: new Dot(first.i, first.title + more, !open.length), side: -1 }).range(from);
+        }),
+        true,
+      );
+    }
+    return tr.docChanged ? deco.map(tr.changes) : deco;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
 // ------------------------------------------------------------------ typing
 
 function rendered(state: EditorState, pos: number) {
@@ -621,6 +678,7 @@ export function extensions(hooks: Hooks): Extension {
     numberMarks,
     numberGutter,
     noteMarks,
+    noteDots,
     // Our own caret: WebKit's blinks only if the desktop says so.
     drawSelection({ cursorBlinkRate: 1100 }),
     hooks.shared ?? history(),

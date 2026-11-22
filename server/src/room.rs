@@ -47,6 +47,9 @@ pub const BYE: u8 = 103;
 /// What the page wrote was not taken: its copy is no longer the room's,
 /// and it loads the play again.
 pub const REFUSED: u8 = 104;
+/// The play's notes changed: `{"by": "Ada"}`; the page reads them again.
+/// Not said to whoever changed them.
+pub const NOTES: u8 = 105;
 
 /// The play is written this long after the writing stops.
 const QUIET: Duration = Duration::from_secs(2);
@@ -85,6 +88,8 @@ enum Out {
     Info,
     /// The room closes on `who`, or on everyone.
     Bye { who: Option<String>, why: String },
+    /// The notes changed, by the person `id`, named `name`.
+    Notes { id: String, name: String },
 }
 
 struct Inner {
@@ -115,6 +120,8 @@ pub struct Room {
     pub project: String,
     inner: Mutex<Inner>,
     tx: broadcast::Sender<Out>,
+    /// When the play's notes file was last seen changed.
+    notes_seen: Mutex<Option<std::time::SystemTime>>,
 }
 
 /// The rooms open now, by their play.
@@ -126,6 +133,10 @@ pub struct Rooms {
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+fn notes_time(play: &Path) -> Option<std::time::SystemTime> {
+    dactile::file::modified(&dactile::notes::path_for(play))
 }
 
 /// `.<name>.dactile-y` beside the play.
@@ -657,6 +668,11 @@ impl Room {
                         open = false;
                     }
                     Ok(Out::Bye { .. }) => {}
+                    Ok(Out::Notes { id, name }) if me.as_ref() != Some(&id) => {
+                        let by = json!({ "by": name });
+                        open = ws.send(Ws::Binary(said(NOTES, by).into())).await.is_ok();
+                    }
+                    Ok(Out::Notes { .. }) => {}
                     // Fell behind: what it missed is lost to it. It comes
                     // back and catches up.
                     Err(broadcast::error::RecvError::Lagged(_)) => {
@@ -739,6 +755,7 @@ impl Rooms {
                     project: project.id.clone(),
                     inner: Mutex::new(inner),
                     tx: broadcast::channel(1024).0,
+                    notes_seen: Mutex::new(notes_time(&play)),
                 });
                 all.insert(play.clone(), room.clone());
                 let (rooms, r) = (self.clone(), room.clone());
@@ -810,6 +827,22 @@ impl Rooms {
         for r in self.of(None) {
             let p = projects::find(&self.home, &r.project);
             r.project_is(p.as_ref(), None);
+        }
+    }
+
+    /// Someone's call may have changed a play's notes: the others in its
+    /// room hear of it.
+    pub fn check_notes(&self, who: &Who) {
+        for r in self.of(None) {
+            let now = notes_time(&r.path);
+            let mut seen = lock(&r.notes_seen);
+            if *seen != now {
+                *seen = now;
+                r.tell(Out::Notes {
+                    id: who.id.clone(),
+                    name: who.name.clone(),
+                });
+            }
         }
     }
 

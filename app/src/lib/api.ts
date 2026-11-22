@@ -235,6 +235,8 @@ export interface Opened {
   reader: boolean;
   /// A shared project's play, written live through its room (`live.ts`).
   live?: boolean;
+  /// On a site, the person signed in: the author of their notes.
+  who?: string | null;
 }
 
 export type Saved =
@@ -312,8 +314,19 @@ export interface Change {
   at: number;
 }
 
+export type NoteRef = { i: number; id: string };
+
+/// What taking in a file or a pasted reply did.
+export interface Merged {
+  added: number;
+  replies: number;
+  same: number;
+}
+
 export interface NoteCard {
   i: number;
+  /// Its name for good: what the commands find it by.
+  id: string;
   state: "open" | "done" | "hidden";
   archived: boolean;
   author: string;
@@ -451,13 +464,15 @@ export const api = {
   notes: (text: string) => invoke<NoteCard[]>("notes_list", { text }),
   noteAdd: (text: string, at: number, author: string, body: string) =>
     invoke<NoteCard[]>("note_add", { text, at, author, body }),
-  noteSet: (text: string, i: number, state: string) => invoke<NoteCard[]>("note_set", { text, i, state }),
-  noteReply: (text: string, i: number, author: string, reply: string) =>
-    invoke<NoteCard[]>("note_reply", { text, i, author, reply }),
-  notesPaste: (reply: string, author: string) => invoke<number>("notes_paste", { reply, author }),
+  // A note by its id, and where it is for a site older than ids.
+  noteSet: (text: string, n: NoteRef, state: string) => invoke<NoteCard[]>("note_set", { text, ...n, state }),
+  noteReply: (text: string, n: NoteRef, author: string, reply: string) =>
+    invoke<NoteCard[]>("note_reply", { text, ...n, author, reply }),
+  notesPaste: (reply: string, author: string) => invoke<Merged>("notes_paste", { reply, author }),
   pickText: () => invoke<string | null>("pick_text"),
-  noteFix: (text: string, i: number) => invoke<Change[]>("note_fix", { text, i }),
-  noteFixMany: (text: string, which: number[]) => invoke<Made>("note_fix_many", { text, which }),
+  noteFix: (text: string, n: NoteRef) => invoke<Change[]>("note_fix", { text, ...n }),
+  noteFixMany: (text: string, which: NoteRef[]) =>
+    invoke<Made>("note_fix_many", { text, which: which.map((n) => n.i), ids: which.map((n) => n.id) }),
   noteAuthors: () => invoke<string[]>("note_authors"),
   startup: () => invoke<string | null>("startup"),
   pick: () => invoke<string | null>("pick"),

@@ -10,6 +10,7 @@ use serde::Serialize;
 #[derive(Debug, Clone, Serialize)]
 pub struct NoteCard {
     pub i: usize,
+    pub id: String,
     /// "open", "done" or "hidden".
     pub state: &'static str,
     pub archived: bool,
@@ -45,6 +46,7 @@ pub fn cards(text: &str, notes: &Notes) -> Vec<NoteCard> {
             let anchor = index.anchor(n);
             NoteCard {
                 i,
+                id: n.id.clone(),
                 state: state_name(n.state),
                 archived: n.archived,
                 author: n.author.clone(),
@@ -86,7 +88,38 @@ pub fn add(
         text: body.to_string(),
         ..Note::default()
     });
+    notes.name_all();
     Ok(())
+}
+
+/// The note a command means: by its id, or (from a window older than ids)
+/// by where it is in the list.
+pub fn which(notes: &Notes, id: Option<&str>, i: Option<usize>) -> anyhow::Result<usize> {
+    let found = match id {
+        Some(id) => notes.find(id),
+        None => i.filter(|&i| i < notes.list.len()),
+    };
+    found.ok_or_else(|| {
+        anyhow::anyhow!(
+            "{}",
+            lang::l(
+                "Bu not artık yok: başkası silmiş ya da arşivden kaldırmış olabilir.",
+                "This note is gone: someone else may have deleted it.",
+            )
+        )
+    })
+}
+
+/// Who writes a note: on a site, the person signed in (the gate names
+/// them); elsewhere, whoever the window says.
+pub fn author(said: &str) -> String {
+    let site = std::env::var("DACTILE_WHO").unwrap_or_default();
+    let name = if site.trim().is_empty() { said } else { &site };
+    name.chars()
+        .filter(|c| !c.is_control() && *c != '*')
+        .collect::<String>()
+        .trim()
+        .to_string()
 }
 
 pub fn set_state(notes: &mut Notes, i: usize, state: &str) -> anyhow::Result<()> {
@@ -125,12 +158,10 @@ pub fn reply(notes: &mut Notes, i: usize, author: &str, text: &str) -> anyhow::R
     Ok(())
 }
 
-/// Notes out of a pasted reply (`139: …` lines): how many came.
-pub fn paste(notes: &mut Notes, reply: &str, author: &str) -> usize {
-    let new = notes::from_reply(reply, author.trim());
-    let n = new.len();
-    notes.list.extend(new);
-    n
+/// Notes out of a pasted reply (`139: …` lines) or a notes file, taken in:
+/// those already here bring only their new replies.
+pub fn paste(notes: &mut Notes, reply: &str, author: &str) -> notes::Merged {
+    notes.merge(notes::from_reply(reply, author.trim()))
 }
 
 /// A note's “wrong” → right change, as changes to make in the editor, and
@@ -218,5 +249,30 @@ mod tests {
         assert_eq!(changes.len(), 1);
         assert_eq!(changes[0].insert, "Ayaz");
         assert_eq!(n.list[0].state, State::Done);
+    }
+
+    #[test]
+    fn a_note_is_found_by_its_id_whatever_came_before() {
+        let mut n = Notes::default();
+        add(&mut n, PLAY, 0, "Ada", "birinci").unwrap();
+        add(&mut n, PLAY, 0, "Baran", "ikinci").unwrap();
+        let id = cards(PLAY, &n)[1].id.clone();
+        // Someone else's note comes in before it, and one goes.
+        n.list.insert(
+            0,
+            Note {
+                author: "Cem".into(),
+                text: "araya".into(),
+                ..Note::default()
+            },
+        );
+        n.name_all();
+        n.list.remove(1);
+        let i = which(&n, Some(&id), None).unwrap();
+        assert_eq!(n.list[i].text, "ikinci");
+        assert!(which(&n, Some("yok"), None).is_err());
+        // A window older than ids says where it is.
+        assert_eq!(which(&n, None, Some(0)).unwrap(), 0);
+        assert!(which(&n, None, Some(9)).is_err());
     }
 }

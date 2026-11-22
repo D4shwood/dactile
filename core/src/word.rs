@@ -734,6 +734,7 @@ mod tests {
 
     fn note(line: usize, author: &str, text: &str) -> crate::notes::Note {
         crate::notes::Note {
+            id: String::new(),
             state: State::Open,
             archived: false,
             line: Some(line),

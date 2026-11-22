@@ -319,6 +319,8 @@ pub struct Opened {
     /// A shared project's play: written live, through its room, by
     /// everyone who has it open; never saved from here.
     pub live: bool,
+    /// On a site, the person signed in: their notes are theirs by name.
+    pub who: Option<String>,
 }
 
 /// How a play is opened.
@@ -369,6 +371,7 @@ fn open_at(
         writer,
         reader: how == Opening::Read,
         live: how != Opening::Own,
+        who: Some(crate::notes::author("")).filter(|w| !w.is_empty()),
         text,
     };
     let open = Open {
