@@ -5,7 +5,7 @@
   // warmer at the edge. What changes shows at once on the whole app; it is
   // kept when the handle is let go.
   import type { Look } from "./api";
-  import { HARMONIES, PRESETS, WHO, fit, harmony, hex, palette, parseSeed, randomSeed, ratio, seedText, type Seed } from "./color";
+  import { DEEPEST, HARMONIES, MOST_WARMTH, PRESETS, WHO, depthIn, fit, harmony, hex, palette, parseSeed, randomSeed, ratio, seedText, type Seed } from "./color";
   import { lookSeed } from "./look";
   import { drag } from "./pointer";
 
@@ -39,7 +39,10 @@
     set("surprise", seedText(s));
     set("theme", "surprise");
   }
-  const change = (part: Partial<Seed>) => keep({ ...seed, ...part });
+  const change = (part: Partial<Seed>) => {
+    const s = { ...seed, ...part };
+    keep({ ...s, depth: depthIn(s.mode, s.depth) });
+  };
 
   function wearPreset(name: string) {
     open = false;
@@ -68,7 +71,6 @@
   const RING_OUT = 106;
   const RING_IN = 84;
   const DISC = 70;
-  const MOST_WARMTH = 0.08;
   const at = (h: number, r: number) => {
     const a = ((h - 90) * Math.PI) / 180;
     return [C + r * Math.cos(a), C + r * Math.sin(a)];
@@ -115,7 +117,7 @@
   // -------------------------------------------------------------- sliders
 
   /// A slider's value shown while it moves, kept when it stops.
-  function slide(key: "vivid" | "depth") {
+  function slide(key: "vivid" | "depth" | "warmth") {
     return {
       oninput: (e: Event) => show({ ...seed, [key]: Number((e.currentTarget as HTMLInputElement).value) }),
       onchange: (e: Event) => keep({ ...seed, [key]: Number((e.currentTarget as HTMLInputElement).value) }),
@@ -233,8 +235,12 @@
           <input type="range" min="0.04" max="0.2" step="0.005" value={seed.vivid} {...slide("vivid")} />
         </label>
         <label class="slider">
-          <span>{l("Derinlik", "Depth")}</span>
-          <input type="range" min="0" max="0.1" step="0.005" value={seed.depth} {...slide("depth")} />
+          <span title={l("Zeminin rengi: solda nötr gri, sağda tonlu", "How tinted the base is: neutral grey at the left")}>{l("Sıcaklık", "Warmth")}</span>
+          <input type="range" min="0" max={MOST_WARMTH} step="0.002" value={seed.warmth} {...slide("warmth")} />
+        </label>
+        <label class="slider">
+          <span title={seed.mode === "dark" ? l("Solda siyah, sağda daha açık", "Black at the left, lighter to the right") : l("Solda beyaz, sağda daha koyu", "White at the left, deeper to the right")}>{l("Derinlik", "Depth")}</span>
+          <input type="range" min={seed.mode === "dark" ? DEEPEST : 0} max="0.1" step="0.005" value={seed.depth} {...slide("depth")} />
         </label>
         <div class="row">
           <button class="ui-btn small" title={l("Uyumlu, rastgele bir tema", "A random theme in harmony")} onclick={() => keep(randomSeed(seed))}>🎲 {l("Zar at", "Roll")}</button>

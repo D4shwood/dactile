@@ -48,6 +48,17 @@ test("seeds made by chance read", () => {
   }
 });
 
+test("dark themes read down to black, and a light one stops at white", () => {
+  for (const [, , , seed] of PRESETS) {
+    if (seed.mode !== "dark") continue;
+    for (const depth of [-0.15, -0.08, 0.1]) for (const warmth of [0, 0.08]) reads({ ...seed, depth, warmth });
+  }
+  const black = palette({ ...PRESETS[0][3], mode: "dark", warmth: 0, depth: -0.15 });
+  assert.equal(black["--desk"], "#000000");
+  assert.equal(parseSeed("light 75 0.014 20 0.130 analogous normal -0.15")?.depth, 0);
+  assert.equal(parseSeed("dark 75 0.014 20 0.130 analogous normal -0.15")?.depth, -0.15);
+});
+
 test("a seed comes back as it was kept", () => {
   for (const [, , , seed] of PRESETS) assert.deepEqual(parseSeed(seedText(seed)), seed);
   assert.equal(parseSeed("123 dark")?.mode, "dark");

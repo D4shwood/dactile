@@ -31,7 +31,8 @@ export interface Seed {
   vivid: number;
   harmony: Harmony;
   contrast: Contrast;
-  /// How far the surfaces sit from white or black: 0 to 0.1.
+  /// How far the surfaces sit from white or black: 0 to 0.1; a dark
+  /// theme goes below 0 too, down to black (`DEEPEST`).
   depth: number;
 }
 
@@ -152,6 +153,14 @@ export function harmony(seed: Seed): number[] {
 
 // -------------------------------------------------------------- palette
 
+/// The lowest depth a dark theme takes: its desk at black.
+export const DEEPEST = -0.15;
+/// The most a theme's neutrals are tinted.
+export const MOST_WARMTH = 0.08;
+
+/// A depth as a theme of this mode takes it.
+export const depthIn = (mode: Mode, depth: number) => Math.min(0.1, Math.max(mode === "dark" ? DEEPEST : 0, depth));
+
 /// Every colour variable of theme.css, made from a seed.
 export function palette(seed: Seed): Record<string, string> {
   const dark = seed.mode === "dark";
@@ -161,7 +170,7 @@ export function palette(seed: Seed): Record<string, string> {
   // Neutrals: high contrast takes the tint down, so nothing competes.
   const w = high ? seed.warmth / 3 : seed.warmth;
   // Depth takes a light theme's surfaces down, a dark one's up.
-  const d = (dark ? 1 : -1) * Math.min(0.1, Math.max(0, seed.depth));
+  const d = (dark ? 1 : -1) * depthIn(seed.mode, seed.depth);
   const n = (l: number, c = w) => fit(l + d, c, hue);
 
   // Lightnesses, from the back to the front.
@@ -252,6 +261,7 @@ export const PRESETS: [string, string, string, Seed][] = [
   ["night", "Gece", "Night", { mode: "dark", base: 70, warmth: 0.003, accent: 18, vivid: 0.09, harmony: "analogous", contrast: "normal", depth: 0 }],
   ["dark", "Koyu", "Dark", { mode: "dark", base: 90, warmth: 0.009, accent: 22, vivid: 0.11, harmony: "analogous", contrast: "normal", depth: 0.05 }],
   ["lavender", "Lavanta", "Lavender", { mode: "dark", base: 295, warmth: 0.02, accent: 305, vivid: 0.11, harmony: "triadic", contrast: "normal", depth: 0.03 }],
+  ["black", "Siyah", "Black", { mode: "dark", base: 0, warmth: 0, accent: 22, vivid: 0.12, harmony: "analogous", contrast: "normal", depth: -0.15 }],
   ["contrast", "Yüksek kontrast", "High contrast", { mode: "light", base: 0, warmth: 0, accent: 25, vivid: 0.18, harmony: "mono", contrast: "high", depth: 0 }],
 ];
 
@@ -281,15 +291,16 @@ export function parseSeed(text: string): Seed | null {
   const [mode, base, warmth, accent, vivid, harm, contrast, depth] = p;
   const num = [base, warmth, accent, vivid, depth].map(Number);
   if (num.some(Number.isNaN) || !HARMONY_NAMES.includes(harm as Harmony)) return null;
+  const m: Mode = mode === "dark" ? "dark" : "light";
   return {
-    mode: mode === "dark" ? "dark" : "light",
+    mode: m,
     base: turn(num[0], 0),
-    warmth: Math.min(0.08, Math.max(0, num[1])),
+    warmth: Math.min(MOST_WARMTH, Math.max(0, num[1])),
     accent: turn(num[2], 0),
     vivid: Math.min(0.22, Math.max(0.03, num[3])),
     harmony: harm as Harmony,
     contrast: contrast === "high" ? "high" : "normal",
-    depth: Math.min(0.1, Math.max(0, num[4])),
+    depth: depthIn(m, num[4]),
   };
 }
 
